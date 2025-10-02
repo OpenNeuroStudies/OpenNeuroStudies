@@ -1,0 +1,5 @@
+[submodule "sourcedata/proto1"]
+	path = sourcedata/proto1
+	url = https://github.com/OpenNeuroStudies/OpenNeuroStudies-proto1
+	datalad-id = fb28cfda-dca0-4a32-86c9-d848f011eee1
+	datalad-url = https://github.com/OpenNeuroStudies/OpenNeuroStudies-proto1
