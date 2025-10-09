@@ -1,18 +1,17 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version Change: Initial (template) → 1.0.0
+Version Change: 1.0.0 → 1.20251008.0
 Principle Changes:
-  - Added: I. Data Integrity & Traceability
-  - Added: II. Automation & Reproducibility
-  - Added: III. Standard Formats
-  - Added: IV. Git/DataLad-First Workflow
-  - Added: V. Observability & Monitoring
-Added Sections:
-  - Data Management Standards
-  - Development Workflow
-  - Governance
-Removed Sections: None
+  - Modified: II. Automation & Reproducibility - added retry policy for API calls
+  - Modified: III. Standard Formats - added JSON schema for TSV columns
+  - Modified: IV. Git/DataLad-First Workflow - refined dirty tree guidance, added commit statistics
+  - Modified: V. Observability & Monitoring - no changes
+Amended Sections:
+  - Derivative Versioning - added UUID disambiguation for same-version tools, expanded metrics
+  - Metadata Completeness - added HED Version, Subject/Session counts, datatypes list
+  - Dependencies - added Python preference, shellcheck, con-duct/duct, removed "Python for JSON"
+  - Amendment Process - changed to calendar-based MINOR versioning (YYYYMMDD format)
 Templates Status:
   ✅ plan-template.md - Constitution Check section aligned
   ✅ spec-template.md - Requirements sections aligned with data integrity principles
@@ -43,8 +42,8 @@ All data operations MUST be scripted and reproducible from a clean repository st
 
 - Manual dataset manipulation is FORBIDDEN - all changes go through versioned scripts
 - Scripts MUST be idempotent (running multiple times produces same result)
-- Scripts MUST handle partial completion and resume capability
 - All external API calls MUST implement caching to avoid rate limits and ensure reproducibility
+- External API calls which makes sense to retry, should be retried on a wide range of remote service abnormal behavior or connection problems
 
 **Rationale**: With 1000+ datasets, manual operations are error-prone and unscalable. Automation ensures consistency and allows independent verification of all data transformations.
 
@@ -53,7 +52,7 @@ All data operations MUST be scripted and reproducible from a clean repository st
 Use text-based, human-readable formats for all configuration and metadata.
 
 - TSV files for tabular data (studies.tsv, derivatives.tsv) to enable command-line tools like visidata
-- JSON for structured metadata following BIDS specification standards
+- JSON for structured metadata following BIDS specification standards, in particular to provide description for TSV files columns
 - YAML for configuration where hierarchical structure is required
 - AVOID binary formats or databases that require special tools to inspect
 
@@ -64,11 +63,12 @@ Use text-based, human-readable formats for all configuration and metadata.
 All state changes MUST be committed through git/DataLad with descriptive messages.
 
 - Use `datalad run` for scripts that modify the repository state
-- Dirty trees are acceptable only with explicit `--input` and `--output` flags
-- Commit messages MUST reference issue numbers or describe the batch operation
+- Dirty trees are acceptable only with explicit `--input` and `--output` flags and then using `run` with `--explicit` flag, but generally such operations should be avoided
+- Commit messages MUST reference issue numbers or briefly describe the batch operation
+- If feasible, commit messages MIGHT provide descriptive statistics on the changes (e.g. how many subdatasets were affected)
 - Git submodules MUST be updated with `git submodule update --init` when needed
 
-**Rationale**: DataLad extends git to handle large datasets while maintaining complete provenance. This provides scientific audit trails and enables distributed collaboration.
+**Rationale**: DataLad extends git and git-annex to ease handling collections of large datasets while maintaining complete provenance. This provides scientific audit trails and enables distributed collaboration.
 
 ### V. Observability & Monitoring
 
@@ -97,12 +97,12 @@ All study datasets MUST follow BIDS 1.10.1+ specification for study datasets:
 Derivative datasets MUST include version information:
 
 - Folder naming: `toolname-version` (e.g., `fmriprep-21.0.1`)
-- Support multiple versions of same tool simultaneously
-- derivatives.tsv MUST list all available derivatives with versions
+- Support multiple versions of same tool simultaneously by adding first 8 letters of DataLad UUID (under `.datalad/config`)
+- derivatives.tsv MUST list all available derivatives with versions, extracted statistics of size (from `git annex info`), over execution if were collected using `con-duct` and potentially other metrics such as successfull completion etc
 
 ### Metadata Completeness
 
-- studies.tsv MUST include: Study ID, Name, BIDS version, License, Authors, derivatives list
+- studies.tsv MUST include: Study ID, Name, BIDS version, HED Version, License, Authors, Number of Subjects, Min/Max number of sessions per subject (or "n/a" if single session), list of datatypes (`anat`, `func`, ...), derivatives list
 - Missing or unknown values MUST be explicitly marked "n/a" rather than omitted
 - GitHub repository information MUST be preserved in submodule configuration
 
@@ -112,7 +112,7 @@ Derivative datasets MUST include version information:
 
 When creating or modifying automation scripts:
 
-1. Test on a small subset of datasets first (e.g., ds000001-ds000010)
+1. Test on a small subset of datasets first (e.g., sample of ds000001, ds000010, ds006190, ds005256)
 2. Implement robust error handling for non-conformant datasets
 3. Use caching for all external API calls (GitHub, etc.)
 4. Provide progress indicators for long-running operations
@@ -122,12 +122,13 @@ When creating or modifying automation scripts:
 
 Scripts may assume the following environment:
 
-- Bash shell with standard Unix tools
+- Python overall is preferable; should be linted and accompanied with tests (unit and integration)
+- Bash shell with standard Unix tools; should be checked using shellcheck
 - Git with submodule support
+- DataLad for dataset operations and provenance capture using `datalad run`
+- duct (from `con-duct` if some long running processes desire capture of run time statistics and stdout/stderr)
 - curl for HTTP requests
 - jq for JSON processing
-- Python for complex JSON manipulation
-- DataLad for dataset operations
 - Environment variable: `GITHUB_TOKEN` for API access
 
 ### Testing Approach
@@ -149,8 +150,8 @@ This constitution defines the core principles for the OpenNeuroStudies project. 
 
 1. Proposed changes MUST be documented with rationale
 2. Breaking changes to data structure require MAJOR version bump
-3. New principles or substantial additions require MINOR version bump
-4. Clarifications and refinements require PATCH version bump
+3. MINOR version will be calendar based, such as 20251008
+4. Clarifications and refinements require PATCH version bump for the same date
 5. Changes MUST be propagated to dependent templates (plan, spec, tasks)
 
 ### Compliance Verification
@@ -172,4 +173,4 @@ Deviations from simplicity MUST be justified:
 - Manual operations → explain why automation not possible
 - Database introduction → explain why file-based approach insufficient
 
-**Version**: 1.0.0 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-10-08
+**Version**: 1.20251008.0 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-10-09
