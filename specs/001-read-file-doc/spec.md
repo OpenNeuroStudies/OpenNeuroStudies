@@ -36,7 +36,7 @@ As a dataset curator, I need automatically generated and synchronized metadata f
 **Acceptance Scenarios**:
 
 1. **Given** a study folder with sourcedata/raw/, **When** metadata generation runs, **Then** dataset_description.json is created with DatasetType="study", Authors from git shortlog of the study dataset, Title prefixed with "Study dataset for ", and SourceDatasets referencing all sourcedata entries
-2. **Given** multiple studies with varying metadata, **When** studies.tsv generation runs, **Then** the file contains study_id (e.g. study-ds000001), name, bids_version, hed_version, license, authors, subject_count, session_min, session_max, datatypes, derivative_ids (list of derivative identifiers), and raw_version (version/tag of raw dataset if single source and released, "n/a" if multiple sources or no release)
+2. **Given** multiple studies with varying metadata, **When** studies.tsv generation runs, **Then** the file contains study_id (e.g. study-ds000001), name, bids_version, hed_version, license, authors, num_subjects, num_sessions, session_min, session_max, num_bold, num_t1w, num_t2w, datatypes, derivative_ids (list of derivative identifiers), and raw_version (version/tag of raw dataset if single source and released, "n/a" if multiple sources or no release)
 3. **Given** a study with 3 derivatives (e.g., fmriprep-21.0.1, mriqc-23.0.0, bids-validator), **When** studies_derivatives.tsv generation runs, **Then** 3 rows are created with study_id, derivative_id pairs, each listing tool name, version, size statistics from git annex info, execution metrics if available, and outdatedness (number of commits the processed raw dataset is behind current raw dataset version)
 4. **Given** a raw dataset with version 1.0.5 and a derivative processed from version 1.0.3, **When** outdatedness calculation runs for studies_derivatives.tsv, **Then** the derivative's outdatedness column shows the commit count between 1.0.3 and 1.0.5 in the raw dataset
 5. **Given** updates to source datasets or derivatives, **When** metadata sync runs, **Then** only affected studies are updated (incremental updates supported)
@@ -84,7 +84,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-006**: System MUST populate SourceDatasets field referencing all sourcedata entries
 - **FR-007**: System MUST generate GeneratedBy field with code provenance information
 - **FR-008**: System MUST copy or collate ReferencesAndLinks, License, Keywords, Acknowledgements, and Funding from source datasets
-- **FR-009**: System MUST generate studies.tsv with study_id, name, bids_version, hed_version, license, authors, subject_count, session_min, session_max, datatypes, derivative_ids, and raw_version columns
+- **FR-009**: System MUST generate studies.tsv with study_id, name, bids_version, hed_version, license, authors, num_subjects, num_sessions, session_min, session_max, num_bold, num_t1w, num_t2w, datatypes, derivative_ids, and raw_version columns
 - **FR-010**: System MUST generate studies_derivatives.tsv (tall format) at top level with study_id, derivative_id as lead columns, followed by tool name, version, UUID disambiguation, size statistics, execution metrics, outdatedness, and other status columns
 - **FR-011**: System MUST generate studies.json and studies_derivatives.json describing TSV column purposes following BIDS sidecar conventions
 - **FR-012**: System MUST support incremental updates (process specific studies, not all at once)
@@ -106,6 +106,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-028**: System MUST calculate derivative outdatedness as commit count between processed raw version and current raw version
 - **FR-029**: System MUST populate studies_derivatives.tsv with outdatedness metric for each study-derivative pair
 - **FR-030**: System MUST perform outdatedness calculations as a separate batch operation with caching to minimize cloning requirements
+- **FR-031**: System MUST extract imaging modality file counts from raw datasets (num_bold, num_t1w, num_t2w) and populate studies.tsv
 
 ### Key Entities
 

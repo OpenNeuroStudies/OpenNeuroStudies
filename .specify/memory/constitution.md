@@ -99,7 +99,7 @@ Derivative datasets MUST include version information:
 
 ### Metadata Completeness
 
-- studies.tsv MUST include: study_id, name, bids_version, hed_version, license, authors, subject_count, session_min, session_max (or "n/a" if single session), datatypes (`anat`, `func`, ...), derivatives
+- studies.tsv MUST include: study_id, name, bids_version, hed_version, license, authors, num_subjects, num_sessions, session_min, session_max (or "n/a" if single session), num_bold, num_t1w, num_t2w, datatypes (`anat`, `func`, ...), derivative_ids
 - Missing or unknown values MUST be explicitly marked "n/a" rather than omitted
 - GitHub repository information MUST be preserved in submodule configuration
 
