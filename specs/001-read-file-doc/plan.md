@@ -1,106 +1,91 @@
 # Implementation Plan: OpenNeuroStudies Infrastructure Refactoring
 
-**Branch**: `001-read-file-doc` | **Date**: 2025-10-09 | **Spec**: [spec.md](spec.md)
+**Branch**: `001-read-file-doc` | **Date**: 2025-10-09 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/001-read-file-doc/spec.md`
 
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
+**Note**: This document outlines the implementation plan for organizing 1000+ OpenNeuro datasets into BIDS study structures with automated metadata generation.
 
 ## Summary
 
-The OpenNeuroStudies infrastructure refactoring organizes 1000+ OpenNeuro raw and derivative datasets into BIDS study structures with automated metadata generation and validation. The system discovers datasets from configured sources (OpenNeuroDatasets, OpenNeuroDerivatives, openfmri), creates study-{id} folders as DataLad datasets with git submodule links, generates comprehensive metadata files (dataset_description.json, studies.tsv, studies_derivatives.tsv), and integrates BIDS validation results - all without requiring full dataset clones through strategic use of GitHub APIs, sparse data access, and cached operations.
+This feature implements infrastructure to discover, organize, and maintain OpenNeuro datasets as BIDS study structures. The system will:
+
+1. Discover raw and derivative datasets from GitHub organizations (OpenNeuroDatasets, OpenNeuroDerivatives) without cloning
+2. Create study-{id} folders as DataLad datasets with sourcedata/ and derivatives/ linked as git submodules
+3. Generate comprehensive metadata (dataset_description.json, studies.tsv, studies_derivatives.tsv)
+4. Validate BIDS compliance and track dataset status
+
+**Primary Technical Approach**: Python CLI using DataLad API, GitHub REST API for discovery, git submodules for linking, TSV/JSON for metadata following BIDS conventions.
 
 ## Technical Context
 
-**Language/Version**: Python 3.10+ (for compatibility with DataLad ecosystem)
+**Language/Version**: Python 3.10+
 **Primary Dependencies**:
-- DataLad (git-annex dataset management and provenance)
-- datalad-fuse (sparse data access without fetching annexed content)
-- fsspec (alternative sparse data access)
-- Click (CLI framework)
-- Pydantic (configuration and data validation)
-- PyGithub (GitHub API interactions)
-- PyYAML (configuration file parsing)
-- bids-validator-deno 2.1.0+ (BIDS compliance validation)
+- DataLad (`datalad.api`) for dataset operations and provenance
+- Click for CLI framework
+- Pydantic for configuration and data validation
+- requests with caching for GitHub API
+- bids-validator-deno 2.1.0+ for BIDS validation
 
-**Concurrency**: NEEDS CLARIFICATION - evaluate joblib, concurrent.futures, or multiprocessing.Pool for processing study subdatasets in parallel while synchronizing top-level dataset operations
-
-**Storage**: File-based (TSV, JSON, YAML) with git/git-annex version control - no database
-**Testing**: pytest with unit and integration tests, GitHub CI via act-compatible workflows
-**Target Platform**: Linux server (primary), macOS (development compatibility)
-**Project Type**: Single project (CLI automation tool)
+**Storage**: File-based (TSV, JSON, git submodules); no database required
+**Testing**: pytest with tox for test environments; marks: unit, integration, ai_generated
+**Target Platform**: Linux server (primary), macOS (development)
+**Project Type**: Single Python project with CLI entry point
 **Performance Goals**:
-- Process 1000+ datasets in <2 hours using cached API responses
-- Incremental updates complete in <30 seconds per study
-- Zero full clones for basic metadata extraction
+- Discover 1000+ datasets in <30 minutes with API caching
+- Organize individual study in <30 seconds
+- Metadata generation for all studies in <2 hours
 
 **Constraints**:
-- GitHub API rate limits (5000 req/hour authenticated)
-- Must avoid cloning 1000+ datasets (disk space and performance)
-- Must operate on dirty git trees when using explicit DataLad run inputs/outputs
-- Idempotent operations (running multiple times produces same result)
+- GitHub API rate limit: 5000 requests/hour (authenticated)
+- No dataset cloning during discovery/organization (except for outdatedness/imaging metrics)
+- Idempotent operations (safe to re-run)
+- Must work with existing git-annex annexed datasets
 
 **Scale/Scope**:
-- 1000+ OpenNeuro datasets across multiple source repositories
-- Study metadata files (studies.tsv) with 20+ columns per study
-- Derivative tracking (studies_derivatives.tsv) with potentially thousands of rows
-- GitHub organization (OpenNeuroStudies) with 1000+ study repositories
+- 1000+ OpenNeuro datasets
+- Studies with 1-200+ subjects
+- Derivatives with 10GB-1TB annexed content
+- Multi-source derivatives (e.g., meta-analysis studies)
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
 ### ✅ I. Data Integrity & Traceability
-- **Requirement**: All datasets linked via git submodules with version references
-- **Status**: PASS - Design uses git submodules for all dataset links with explicit commit SHAs (FR-004, FR-022)
-- **Requirement**: All transformations recorded in DataLad run records or git history
-- **Status**: PASS - Using `datalad run` for all state-changing operations (FR-016, Constitution Principle IV)
-- **Requirement**: Metadata files accurately reflect current state
-- **Status**: PASS - Metadata generation is scripted and reproducible (FR-009, FR-010, FR-011)
+- **Compliance**: All datasets linked via git submodules with explicit commit SHAs
+- **Evidence**: FR-004 requires git submodule linking; data-model.md includes commit_sha fields
+- **No violations**
 
 ### ✅ II. Automation & Reproducibility
-- **Requirement**: All operations must be scripted
-- **Status**: PASS - Python scripts with Click CLI, no manual operations (user input confirms)
-- **Requirement**: Scripts must be idempotent
-- **Status**: PASS - Explicit requirement FR-016
-- **Requirement**: External API calls must implement caching and retry logic
-- **Status**: PASS - FR-017 requires caching; Constitution v1.20251008.0 added retry policy
+- **Compliance**: All operations scripted in Python CLI; idempotency required (FR-016)
+- **Evidence**: FR-017 requires API caching; quickstart.md documents reproducible workflow
+- **No violations**
 
 ### ✅ III. Standard Formats
-- **Requirement**: TSV for tabular data, JSON for structured metadata, YAML for configuration
-- **Status**: PASS - studies.tsv, studies_derivatives.tsv (FR-009, FR-010), dataset_description.json (FR-005), Pydantic+YAML config (user input)
-- **Requirement**: TSV column names follow BIDS tabular file conventions (snake_case)
-- **Status**: PASS - Constitution v1.20251009.0 requires snake_case, spec uses study_id, subjects_num, etc.
-- **Requirement**: JSON sidecars describe TSV columns
-- **Status**: PASS - FR-011 requires studies.json and studies_derivatives.json
+- **Compliance**: TSV for tabular data, JSON for structured metadata, YAML for config
+- **Evidence**: FR-009/FR-010 specify TSV outputs; FR-078 requires snake_case; data-model.md shows Pydantic models
+- **No violations**
 
 ### ✅ IV. Git/DataLad-First Workflow
-- **Requirement**: All state changes committed through git/DataLad with descriptive messages
-- **Status**: PASS - FR-016 requires idempotent operations implying proper git commits
-- **Requirement**: Use `datalad run` for state-modifying scripts
-- **Status**: PASS - Constitution Principle IV, FR-021 uses `datalad create --no-annex`
-- **Requirement**: Dirty trees acceptable only with explicit --input/--output flags
-- **Status**: PASS - Constitution allows dirty trees with explicit flags
+- **Compliance**: DataLad operations for all state changes; git submodules for linking
+- **Evidence**: FR-021 requires `datalad create --no-annex`; FR-022 requires git submodule tracking
+- **No violations**
 
 ### ✅ V. Observability & Monitoring
-- **Requirement**: Summary files provide complete overview
-- **Status**: PASS - studies.tsv, studies_derivatives.tsv with comprehensive columns (FR-009, FR-010)
-- **Requirement**: Incomplete datasets clearly marked
-- **Status**: PASS - "n/a" entries for missing data (Constitution Metadata Completeness)
-- **Requirement**: Dashboard generation supported
-- **Status**: PASS - Tall table (studies_derivatives.tsv) enables per-study/per-derivative/per-subject dashboards
+- **Compliance**: studies.tsv provides queryable overview; status command tracks progress
+- **Evidence**: FR-009 specifies studies.tsv schema; cli.yaml includes status command
+- **No violations**
 
-### ⚠️ Additional Dependencies Check
-- **New Dependencies**: datalad-fuse, fsspec, Click, Pydantic, PyGithub, PyYAML
-- **Justification**:
-  - datalad-fuse/fsspec: Required for sparse NIfTI header access without full clones (FR-033)
-  - Click: Standard Python CLI framework, minimal complexity
-  - Pydantic: Type-safe configuration validation from YAML (FR-020)
-  - PyGithub: GitHub API interactions without shell curl/jq (FR-002, FR-017)
-  - PyYAML: Configuration file parsing (FR-020)
-- **Status**: PASS - All justified by specific functional requirements
+### Data Management Standards
+- ✅ **BIDS Compliance**: FR-005 requires BIDS 1.10.1 study dataset specification
+- ✅ **Derivative Versioning**: FR-010 requires version tracking; data-model.md includes disambiguation logic
+- ✅ **Metadata Completeness**: FR-009 lists all required columns; "n/a" for missing values
 
-### Constitution Compliance: ✅ PASS
-No violations detected. All requirements align with constitution principles.
+### Development Workflow
+- ✅ **Dependencies**: Python preferred (constitution compliant); pytest, tox specified
+- ✅ **Testing**: Quickstart.md lists test datasets (ds000001, ds000010, ds005256, etc.)
+
+**GATE STATUS**: ✅ PASS - No violations. All requirements align with constitution principles.
 
 ## Project Structure
 
@@ -108,21 +93,16 @@ No violations detected. All requirements align with constitution principles.
 
 ```
 specs/001-read-file-doc/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output - concurrency library evaluation
-├── data-model.md        # Phase 1 output - Study/Source/Derivative entities
-├── quickstart.md        # Phase 1 output - setup and first run
-├── contracts/           # Phase 1 output - CLI commands and data schemas
-│   ├── cli.yaml         # Click command specifications
-│   └── schemas.json     # Pydantic model schemas
-├── checklists/
-│   └── requirements.md  # Quality validation (already complete)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+├── plan.md              # This file (implementation plan)
+├── research.md          # [TO BE CREATED] Technology decisions and patterns
+├── data-model.md        # ✅ COMPLETE - Entity schemas and relationships
+├── quickstart.md        # ✅ COMPLETE - User guide and setup instructions
+├── spec.md              # ✅ COMPLETE - Feature requirements
+└── contracts/
+    └── cli.yaml         # ✅ COMPLETE - CLI command specifications
 ```
 
-### Source Code (code/ subdirectory)
-
-**Note**: All code resides in `code/` subdirectory. The repository root contains study-{id}/ datasets, studies.tsv, and other generated data.
+### Source Code (repository root)
 
 ```
 code/
@@ -131,336 +111,357 @@ code/
 │       ├── __init__.py
 │       ├── cli/
 │       │   ├── __init__.py
-│       │   ├── main.py              # Click CLI entry point
-│       │   ├── discover.py          # Dataset discovery commands
-│       │   ├── organize.py          # Study organization commands
-│       │   ├── metadata.py          # Metadata generation commands
-│       │   └── validate.py          # BIDS validation commands
-│       ├── config/
-│       │   ├── __init__.py
-│       │   ├── models.py            # Pydantic configuration models
-│       │   └── sources.yaml         # Default source specifications
-│       ├── discovery/
-│       │   ├── __init__.py
-│       │   ├── github_api.py        # GitHub/Forgejo tree API client
-│       │   ├── dataset_finder.py    # Dataset discovery from sources
-│       │   └── cache.py             # API response caching
-│       ├── organization/
-│       │   ├── __init__.py
-│       │   ├── study_creator.py     # DataLad study dataset creation
-│       │   ├── submodule_linker.py  # Git submodule operations
-│       │   └── derivative_mapper.py # Derivative-to-source mapping
-│       ├── metadata/
-│       │   ├── __init__.py
-│       │   ├── dataset_description.py  # dataset_description.json generation
-│       │   ├── studies_tsv.py          # studies.tsv generation
-│       │   ├── derivatives_tsv.py      # studies_derivatives.tsv generation
-│       │   ├── imaging_metrics.py      # Sparse NIfTI header access
-│       │   └── outdatedness.py         # Derivative version tracking
-│       ├── validation/
-│       │   ├── __init__.py
-│       │   └── bids_validator.py    # bids-validator-deno integration
+│       │   ├── main.py           # Click CLI entry point
+│       │   ├── discover.py       # Discovery command
+│       │   ├── organize.py       # Organization command
+│       │   ├── metadata.py       # Metadata commands (group)
+│       │   ├── validate.py       # Validation command
+│       │   ├── status.py         # Status command
+│       │   └── clean.py          # Cleanup command
 │       ├── models/
 │       │   ├── __init__.py
-│       │   ├── study.py             # Study dataset entity
-│       │   ├── source.py            # Source dataset entity
-│       │   └── derivative.py        # Derivative dataset entity
-│       └── lib/
+│       │   ├── study.py          # StudyDataset model
+│       │   ├── source.py         # SourceDataset model
+│       │   └── derivative.py     # DerivativeDataset model
+│       ├── config/
+│       │   ├── __init__.py
+│       │   └── models.py         # OpenNeuroStudiesConfig, SourceSpecification
+│       ├── discovery/
+│       │   ├── __init__.py
+│       │   ├── dataset_finder.py # GitHub API discovery
+│       │   └── api_client.py     # Cached GitHub client
+│       ├── organization/
+│       │   ├── __init__.py
+│       │   ├── study_creator.py  # DataLad dataset creation
+│       │   └── submodule_linker.py # Git submodule operations
+│       ├── metadata/
+│       │   ├── __init__.py
+│       │   ├── dataset_description.py  # study dataset_description.json
+│       │   ├── studies_tsv.py    # studies.tsv generation
+│       │   └── derivatives_tsv.py # studies_derivatives.tsv generation
+│       ├── validation/
+│       │   ├── __init__.py
+│       │   └── bids_validator.py # bids-validator-deno integration
+│       └── utils/
 │           ├── __init__.py
-│           ├── datalad_ops.py       # DataLad API wrappers (import datalad.api as dl)
-│           ├── git_ops.py           # Git operations (git config, update-index)
-│           ├── parallel.py          # Concurrency utilities (TBD in research)
-│           └── retry.py             # API retry logic with backoff
-│
+│           ├── cache.py          # API response caching
+│           └── git_ops.py        # Git helper functions
 ├── tests/
 │   ├── unit/
+│   │   ├── test_models.py
 │   │   ├── test_discovery.py
 │   │   ├── test_organization.py
-│   │   ├── test_metadata.py
-│   │   └── test_models.py
+│   │   └── test_metadata.py
 │   ├── integration/
-│   │   ├── test_full_workflow.py   # End-to-end dataset organization
-│   │   ├── test_incremental.py     # Incremental update scenarios
-│   │   └── fixtures/               # Sample dataset structures
-│   └── conftest.py                  # Shared pytest fixtures
-│
-├── pyproject.toml               # Project metadata, dependencies
-├── setup.py or setup.cfg        # Distribution configuration
-├── tox.ini                      # tox-uv test runner configuration
-└── README.md                    # Code package overview
+│   │   ├── test_discover_organize.py
+│   │   ├── test_metadata_generation.py
+│   │   └── test_validation.py
+│   └── fixtures/
+│       ├── mock_datasets/
+│       └── api_responses/
+├── pyproject.toml          # uv-compatible package definition
+├── tox.ini                 # Test environments with tox-uv
+└── README.md               # Development setup
 
-# Repository root structure (generated data):
-.                                # Repository root
-├── code/                        # All source code (above)
-├── .openneuro-studies/
-│   ├── config.yaml              # Source specifications (user config)
-│   └── cache/                   # API response cache
-├── study-ds000001/              # Study datasets (created by organize)
-├── study-ds000010/
-├── study-ds006190/
-├── ...                          # More study-{id} directories
-├── dataset_description.json     # BIDS dataset description (BEP035 mega-analysis)
-├── CHANGES                      # Version history (CPAN Changelog format)
-├── .bidsignore                  # Exclude study-* from top-level BIDS validation
-├── studies.tsv                  # Study metadata (wide format)
-├── studies.json                 # Column descriptions
-├── studies_derivatives.tsv      # Derivative metadata (tall format)
-├── studies_derivatives.json     # Column descriptions
-├── logs/
-│   └── errors.tsv               # Error log across all operations
-├── .github/
-│   └── workflows/               # CI/CD workflows
-│       ├── tests.yml            # pytest on push/PR (act-compatible)
-│       └── update-studies.yml   # Cron-triggered metadata updates
-├── specs/                       # Feature specifications
-├── .specify/                    # SpecKit framework files
-├── .gitmodules                  # Git submodules for all studies
-└── README.md                    # Project overview
 ```
 
-**Structure Decision**: Single project structure with code separated in `code/` subdirectory. This separates the automation tool from the generated study datasets, which reside in the repository root. The repository root becomes the data directory containing 1000+ study-{id}/ folders, while all Python code, tests, and packaging configuration lives under `code/`. This enables:
-- Clean separation of code vs. data
-- Easy navigation to study datasets from root
-- Top-level metadata files (studies.tsv) accessible without entering code/
-- DataLad operations at root level for managing study subdatasets
+**Structure Decision**: Single Python project structure chosen because:
+- CLI tool with single entry point (`openneuro-studies`)
+- No frontend/backend split needed
+- All operations are command-line driven
+- Code organization follows domain boundaries (discovery, organization, metadata, validation)
 
 ## Complexity Tracking
 
-*No violations to justify - Constitution Check passed without exceptions.*
+*Fill ONLY if Constitution Check has violations that must be justified*
 
-## Phase 0: Research
+**No violations identified** - All requirements align with constitution principles.
 
-### Research Tasks
+## Phase 0: Research (TO BE COMPLETED)
 
-The following unknowns from Technical Context require investigation:
+### Research Topics Identified
 
-1. **Concurrency Library Selection**
-   - **Question**: Which Python concurrency library best fits parallel study processing with synchronized top-level operations?
-   - **Options to evaluate**:
-     - `concurrent.futures.ThreadPoolExecutor` (standard library, simple)
-     - `concurrent.futures.ProcessPoolExecutor` (standard library, CPU-bound)
-     - `joblib.Parallel` (popular in data science, good for embarrassingly parallel tasks)
-     - `multiprocessing.Pool` (standard library, lower-level control)
-   - **Criteria**: Ease of use, DataLad compatibility, ability to synchronize top-level git operations, error handling
-   - **Output**: Decision in research.md with code examples
+Based on Technical Context analysis, the following areas require research:
 
-2. **GitHub API Rate Limit Strategy**
-   - **Question**: How to efficiently cache and batch GitHub API calls to stay within 5000 req/hour limit for 1000+ datasets?
-   - **Investigation**:
-     - PyGithub rate limit handling
-     - Cache invalidation strategies (time-based vs. commit-based)
-     - Conditional requests (ETags, If-Modified-Since)
-   - **Output**: Caching architecture pattern in research.md
+1. **DataLad Python API Patterns**
+   - How to use `datalad.api.create()` for --no-annex datasets
+   - Best practices for git submodule manipulation via DataLad vs direct git
+   - Error handling patterns for DataLad operations
 
-3. **Sparse Data Access Implementation**
-   - **Question**: datalad-fuse vs. fsspec for sparse data access (e.g., reading file headers without fetching full annexed content) - which is more reliable and performant?
-   - **Investigation**:
-     - datalad-fuse setup and API (sparse access with cloned datasets)
-     - fsspec with git/git-annex backends
-     - Performance characteristics for reading file headers (NIfTI, JSON, etc.)
-     - Error handling for missing annexed content
-   - **Output**: Recommended approach with fallback strategy in research.md
+2. **GitHub API Discovery Without Cloning**
+   - Using GitHub tree API to read dataset_description.json
+   - Efficient pagination for organizations with 1000+ repositories
+   - ETag-based caching to respect rate limits
 
-4. **DataLad API Patterns**
-   - **Question**: Best practices for using `datalad.api` vs. `datalad.support.annexrepo` for git-annex operations
-   - **Investigation**:
-     - When to use high-level `datalad.api.create`, `datalad.api.run`
-     - When to use lower-level `datalad.support.annexrepo` for git operations
-     - Error handling and state management
-   - **Output**: Design pattern guide in research.md
+3. **Git Submodule Linking Without Cloning**
+   - Using `git config` and `git update-index` to link submodules
+   - .gitmodules format for study repositories
+   - Publishing study repositories to GitHub organization
 
-5. **GitHub Actions + act Compatibility**
-   - **Question**: What GitHub Actions features work locally with act, what requires workarounds?
-   - **Investigation**:
-     - act limitations (Docker-based execution)
-     - Secrets management locally
-     - Cron scheduling testing
-   - **Output**: CI/CD workflow design constraints in research.md
+4. **Imaging Metrics Sparse Access**
+   - datalad-fuse vs fsspec for NIfTI header reading
+   - Performance characteristics of sparse access methods
+   - Integration with git-annex special remotes
 
-6. **Outdatedness Calculation Without Cloning**
-   - **Question**: Can we calculate commit counts between versions using GitHub API without cloning?
-   - **Investigation**:
-     - GitHub Compare API (`GET /repos/{owner}/{repo}/compare/{base}...{head}`)
-     - Tag/release API for version identification
-     - Fallback strategies when API insufficient
-   - **Output**: Implementation strategy in research.md
+5. **BIDS Study Dataset Conventions**
+   - BIDS 1.10.1 study dataset specification details
+   - BEP035 (Mega-analysis) compliance requirements
+   - Appropriate use of .bidsignore for subdirectories
 
-### Research Output
+**Output**: `research.md` documenting decisions, rationale, and code examples for each topic.
 
-Research findings will be consolidated in `specs/001-read-file-doc/research.md` with the structure:
+**Status**: ⏳ PENDING - To be generated in Phase 0
 
-```markdown
-# Research: OpenNeuroStudies Infrastructure Refactoring
+## Phase 1: Design & Contracts (MOSTLY COMPLETE)
 
-## 1. Concurrency Library Selection
-**Decision**: [chosen library]
-**Rationale**: [why chosen based on criteria]
-**Alternatives considered**: [other options and why rejected]
-**Code example**: [minimal proof of concept]
+### 1.1 Data Model ✅
 
-## 2. GitHub API Rate Limit Strategy
-[same structure]
+**Status**: ✅ COMPLETE
 
-[... for all 6 research tasks]
-```
+**File**: `data-model.md`
 
-## Phase 1: Design Artifacts
+**Contents**:
+- Entity definitions: StudyDataset, SourceDataset, DerivativeDataset, SourceSpecification
+- Pydantic models with validation
+- TSV schema for studies.tsv and studies_derivatives.tsv
+- State transitions and data flows
+- Validation rules
 
-### Phase 1a: Data Model
+### 1.2 API Contracts ✅
 
-**Output**: `specs/001-read-file-doc/data-model.md`
+**Status**: ✅ COMPLETE
 
-Extract entities from spec.md Key Entities section (lines 115-126):
+**File**: `contracts/cli.yaml`
 
-1. **Study Dataset** (study.py)
-   - Fields: study_id, title, authors, bids_version, source_datasets, derivative_datasets, github_url, raw_version, version
-   - Relationships: 1-to-many with SourceDataset, 1-to-many with DerivativeDataset
-   - State: discovered → organized → metadata_generated → validated
+**Contents**:
+- CLI structure with Click commands
+- Command specifications: discover, organize, metadata, validate, status, clean
+- Arguments, options, and return values
+- Exit codes and error handling
+- Environment variable requirements
 
-2. **Source Dataset** (source.py)
-   - Fields: dataset_id, url, commit_sha, bids_version, license, authors
-   - Relationships: Many-to-1 with StudyDataset
-   - Validation: URL must be valid git repository
+### 1.3 Quickstart Guide ✅
 
-3. **Derivative Dataset** (derivative.py)
-   - Fields: tool_name, version, datalad_uuid, size_stats, execution_metrics, source_datasets, processed_raw_version, outdatedness
-   - Relationships: Many-to-many with StudyDataset (via studies_derivatives.tsv)
-   - Validation: version must be semantic version or date-based
+**Status**: ✅ COMPLETE
 
-4. **Source Specification** (config/models.py)
-   - Fields: organization_url, inclusion_patterns, access_credentials
-   - Validation: Pydantic model loaded from YAML
+**File**: `quickstart.md`
 
-5. **Metadata Index** (studies.tsv, studies_derivatives.tsv)
-   - Wide format (studies.tsv): study-centric with derivative_ids column
-   - Tall format (studies_derivatives.tsv): study_id + derivative_id lead columns with detailed metrics
+**Contents**:
+- Installation instructions (uv, pip, tox)
+- Configuration setup
+- First-run workflow with test datasets
+- Troubleshooting guide
+- Common operations reference
 
-### Phase 1b: Contracts
+### 1.4 Agent Context Update ⏳
 
-**Output**: `specs/001-read-file-doc/contracts/`
+**Status**: ⏳ PENDING
 
-#### CLI Commands (cli.yaml)
+**Action**: Run `.specify/scripts/bash/update-agent-context.sh claude` to add:
+- DataLad API usage patterns
+- GitHub API integration
+- Click CLI framework
+- Pydantic validation models
 
-Based on functional requirements, define Click commands:
+## Phase 2: Implementation Tasks (NOT PART OF THIS COMMAND)
 
-```yaml
-commands:
-  discover:
-    description: Discover datasets from configured sources
-    options:
-      --source: Source specification YAML file
-      --cache-dir: API response cache directory
-      --update: Update existing cache
+**Note**: Task generation is handled by `/speckit.tasks` command, not `/speckit.plan`.
 
-  organize:
-    description: Organize datasets into study structures
-    arguments:
-      targets: Study IDs, URLs, or paths (positional, supports globs)
-    options:
-      --github-org: GitHub organization for study repositories
-      --dry-run: Show what would be done without executing
+The tasks.md file will break down implementation into:
+- Core infrastructure (models, config loading)
+- Discovery module (GitHub API client, dataset finder)
+- Organization module (DataLad operations, submodule linking)
+- Metadata module (TSV generation, dataset_description.json)
+- Validation module (bids-validator integration)
+- CLI layer (Click commands, argument parsing)
+- Testing (unit tests, integration tests, fixtures)
 
-  metadata:
-    subcommands:
-      generate:
-        description: Generate metadata files
-        arguments:
-          targets: Study IDs or globs (positional)
-        options:
-          --stage: Metadata generation stage (basic|imaging|outdatedness)
+## Implementation Phases
 
-      sync:
-        description: Incrementally sync metadata for updated studies
-        arguments:
-          targets: Study IDs or globs (positional)
-        options:
-          --check-sources: Check source datasets for updates
+### Phase 1: Core Infrastructure (Week 1)
 
-  validate:
-    description: Run BIDS validation on study datasets
-    arguments:
-      targets: Study IDs or globs (positional)
-    options:
-      --validator-version: bids-validator-deno version
-```
+**Goal**: Establish project structure, models, and configuration loading.
 
-#### Data Schemas (schemas.json)
+**Deliverables**:
+1. Project scaffold with pyproject.toml, tox.ini
+2. Pydantic models (StudyDataset, SourceDataset, DerivativeDataset)
+3. Configuration loading from .openneuro-studies/config.yaml
+4. CLI skeleton with Click
+5. Unit tests for models and config
 
-Pydantic models exported as JSON Schema:
+**Dependencies**: None (foundational work)
 
-- `StudyDataset`: Corresponds to data-model.md Study entity
-- `SourceDataset`: Corresponds to Source entity
-- `DerivativeDataset`: Corresponds to Derivative entity
-- `SourceSpecification`: Configuration model
-- `StudiesRow`: Row schema for studies.tsv
-- `DerivativesRow`: Row schema for studies_derivatives.tsv
+**Success Criteria**:
+- `openneuro-studies --version` works
+- Config file loads correctly
+- Models validate test data
+- Tests pass with pytest
 
-### Phase 1c: Quickstart
+### Phase 2: Discovery Module (Week 1-2)
 
-**Output**: `specs/001-read-file-doc/quickstart.md`
+**Goal**: Implement dataset discovery using GitHub API without cloning.
 
-Structure:
+**Deliverables**:
+1. GitHub API client with caching (requests-cache or custom)
+2. Dataset discovery from organization repositories
+3. Metadata extraction (dataset_description.json via tree API)
+4. `discover` CLI command
+5. Integration tests with mock API responses
 
-```markdown
-# Quickstart: OpenNeuroStudies
+**Dependencies**: Phase 1 (models, config)
 
-## Prerequisites
-- Python 3.10+
-- DataLad installed
-- Git, git-annex
-- GITHUB_TOKEN environment variable
+**Success Criteria**:
+- Discover 10 datasets in <10 seconds
+- Cache prevents redundant API calls
+- Handles API errors gracefully
+- Outputs discovered-datasets.json
 
-## Installation
-[pip install or uv commands]
+### Phase 3: Organization Module (Week 2-3)
 
-## Configuration
-1. Copy default sources.yaml
-2. Configure GitHub organization
-3. Set API credentials
+**Goal**: Create study datasets and link submodules without cloning.
 
-## First Run
-1. Discover datasets: `openneuro-studies discover --source sources.yaml`
-2. Organize into studies: `openneuro-studies organize --github-org OpenNeuroStudies`
-3. Generate metadata: `openneuro-studies metadata generate --stage basic`
-4. Validate: `openneuro-studies validate`
+**Deliverables**:
+1. DataLad dataset creation (datalad.api.create)
+2. Git submodule linking (git config + git update-index)
+3. Study repository initialization
+4. `organize` CLI command
+5. Integration tests with temporary git repos
 
-## Verify Installation
-[Commands to check that setup worked]
-```
+**Dependencies**: Phase 2 (discovery output)
 
-### Phase 1d: Agent Context Update
+**Success Criteria**:
+- Creates study-{id} DataLad datasets
+- Links sourcedata and derivatives as submodules
+- No dataset cloning occurs
+- Idempotent (safe to re-run)
 
-**Output**: Updated `.specify/agent-files/claude.md` (or appropriate agent file)
+### Phase 4: Metadata Generation (Week 3-4)
 
-Run:
-```bash
-.specify/scripts/bash/update-agent-context.sh claude
-```
+**Goal**: Generate studies.tsv, studies_derivatives.tsv, and dataset_description.json.
 
-This will add technology from this plan (DataLad, Click, Pydantic, PyGithub, datalad-fuse, fsspec) to the agent-specific context file, preserving any manual additions.
+**Deliverables**:
+1. dataset_description.json generation for studies
+2. studies.tsv generation (wide format)
+3. studies_derivatives.tsv generation (tall format)
+4. JSON sidecar generation
+5. `metadata generate` and `metadata sync` commands
+6. Unit and integration tests
 
-## Constitution Re-Check (Post-Design)
+**Dependencies**: Phase 3 (organized studies)
 
-*To be performed after Phase 1 artifacts are generated*
+**Success Criteria**:
+- All required columns populated or "n/a"
+- TSV follows BIDS tabular conventions (snake_case)
+- JSON sidecars describe columns
+- Incremental updates work correctly
 
-Verify that:
-- [ ] Data model uses text-based formats (TSV, JSON) ✓ (anticipated pass)
-- [ ] CLI commands support idempotent operations ✓ (anticipated pass)
-- [ ] All external APIs have caching and retry logic ✓ (anticipated pass)
-- [ ] DataLad operations use `datalad.api` package ✓ (anticipated pass)
-- [ ] No binary formats or databases introduced ✓ (anticipated pass)
+### Phase 5: Validation Integration (Week 4)
+
+**Goal**: Integrate bids-validator-deno and track validation results.
+
+**Deliverables**:
+1. bids-validator-deno subprocess execution
+2. Validation result parsing and storage
+3. studies.tsv bids_valid column updates
+4. `validate` CLI command
+5. Integration tests with sample datasets
+
+**Dependencies**: Phase 4 (metadata complete)
+
+**Success Criteria**:
+- Validation runs on study datasets
+- Results stored in derivatives/bids-validator.{json,txt}
+- bids_valid column reflects status
+- Handles validation failures gracefully
+
+### Phase 6: Status & Utilities (Week 4-5)
+
+**Goal**: Implement status reporting and cleanup commands.
+
+**Deliverables**:
+1. Status command showing processing progress
+2. Clean command for cache/temp files
+3. Error logging to logs/errors.tsv
+4. Progress indicators for long operations
+5. Full integration test suite
+
+**Dependencies**: All previous phases
+
+**Success Criteria**:
+- `status` shows accurate counts
+- `clean` removes cached data
+- Error logs track failures
+- All tests pass in tox environments
+
+### Phase 7: Documentation & Polish (Week 5)
+
+**Goal**: Finalize documentation, handle edge cases, prepare for release.
+
+**Deliverables**:
+1. README with installation instructions
+2. Troubleshooting documentation
+3. GitHub Actions workflow examples
+4. Handle edge cases (multi-source derivatives, missing metadata)
+5. Performance optimization (parallelization, batch operations)
+
+**Dependencies**: Phase 6 (complete feature set)
+
+**Success Criteria**:
+- Quickstart guide verified with clean environment
+- All edge cases from spec.md handled
+- Performance meets goals (30min discovery, 2hr metadata)
+- Ready for 0.20251009.0 release
+
+## Risk Assessment
+
+### High Risk
+- **GitHub API Rate Limits**: Mitigated by aggressive caching and conditional requests (ETags)
+- **DataLad API Stability**: Mitigated by extensive error handling and fallback to git commands
+- **Git Submodule Complexity**: Mitigated by thorough testing with various repository states
+
+### Medium Risk
+- **Non-BIDS Datasets**: Handled gracefully with "n/a" markers and error logging
+- **Multi-Source Derivatives**: Tested with ds006190 which has 3 source datasets
+- **Network Failures**: Retry logic with exponential backoff for transient errors
+
+### Low Risk
+- **Disk Space**: No cloning except for specific operations (outdatedness, imaging metrics)
+- **Python Version Compatibility**: Target 3.10+ with clear version requirement
+- **Test Dataset Availability**: Use known stable datasets (ds000001, ds000010, etc.)
+
+## Success Metrics
+
+**Phase 1 Complete When**:
+- All models defined and tested
+- Config loading functional
+- CLI skeleton works
+
+**Phase 2 Complete When**:
+- Discovers 1000+ datasets in <30 minutes
+- API caching reduces redundant calls
+- Integration tests pass
+
+**Phase 3 Complete When**:
+- Organizes study datasets without cloning
+- Submodules linked correctly
+- Idempotency verified
+
+**Phase 4 Complete When**:
+- Metadata generation <2 hours for all studies
+- All TSV columns populated or "n/a"
+- Incremental updates functional
+
+**Phase 5-7 Complete When**:
+- Full workflow tested end-to-end
+- Documentation complete
+- Ready for production use
 
 ## Next Steps
 
-1. **Complete Phase 0**: Generate research.md with all decisions documented
-2. **Complete Phase 1**: Generate data-model.md, contracts/, quickstart.md
-3. **Run `/speckit.tasks`**: Generate tasks.md for implementation
-4. **Run `/speckit.implement`**: Execute tasks.md to build the system
+1. ✅ **Complete Plan** (this document)
+2. ⏳ **Phase 0: Create research.md** - Document technology decisions and patterns
+3. ⏳ **Update Agent Context** - Run update-agent-context.sh with new technologies
+4. 📋 **Phase 2: Generate tasks.md** - Use `/speckit.tasks` command (separate from this workflow)
+5. 🚀 **Begin Implementation** - Follow tasks.md for step-by-step execution
 
-## Notes
-
-- This plan follows Constitution v1.20251009.1 requirements
-- All TSV column names use snake_case with _num, _min, _max, _size suffix patterns
-- Study repositories will be created as DataLad datasets without annex (`datalad create --no-annex`)
-- Three-stage metadata extraction: basic (no clone) → imaging (sparse) → outdatedness (selective clone)
-- Concurrency decision deferred to Phase 0 research to evaluate joblib vs concurrent.futures
+**Current Status**: Plan complete, ready for Phase 0 research documentation.

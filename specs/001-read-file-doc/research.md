@@ -1,1452 +1,1476 @@
-# Research: OpenNeuroStudies Infrastructure Refactoring
+# Research: DataLad Python API, Git Submodules, and GitHub API Patterns
 
-**Feature**: [specs/001-read-file-doc](./spec.md)
-**Date**: 2025-10-09
+**Research Date**: 2025-10-09
+**Project**: OpenNeuroStudies Infrastructure Refactoring
+**Purpose**: Document best practices for DataLad Python API, git submodule operations, and GitHub API usage for discovering and organizing 1000+ OpenNeuro datasets
 
-## 1. Concurrency Library Selection
+---
 
-**Decision**: `concurrent.futures.ThreadPoolExecutor`
+## 1. DataLad Python API (`datalad.api`)
 
-**Rationale**:
+### 1.1 Creating Datasets Without Annex
 
-For the OpenNeuroStudies infrastructure, which involves I/O-bound workloads (GitHub API calls, file reading, git operations), `ThreadPoolExecutor` is the optimal choice. The workload characteristics align perfectly with thread-based concurrency: DataLad operations involve git/git-annex commands that spend significant time waiting for disk I/O, network requests, and subprocess execution. Python's Global Interpreter Lock (GIL) does not negatively impact I/O-bound tasks because threads waiting on I/O release the GIL, allowing other threads to proceed.
+#### Decision
+Use `datalad.api.create()` with `annex=False` parameter to create plain Git repositories for study datasets, as they only contain metadata and submodule links (no large files requiring git-annex).
 
-ThreadPoolExecutor provides a simple, standard library solution with excellent error handling through futures and easy state synchronization using standard `threading.Lock()` objects. For synchronizing top-level operations (like updating `studies.tsv`), we can pass a shared lock to worker functions and use it to protect critical sections. The default max_workers calculation (`min(32, os.cpu_count() + 4)`) is well-suited for I/O workloads, providing reasonable parallelism without overwhelming the system.
+#### Rationale
+- Study datasets contain only metadata files (JSON, TSV) and git submodule references, not large data files
+- Plain Git repositories are simpler to manage and publish to GitHub
+- No git-annex overhead for datasets that don't need large file management
+- According to DataLad docs: "Plain Git repositories can be created via `annex=False`"
+- Study datasets are organizational structures, not data storage; derivatives and raw data remain in their own annexes
 
-DataLad compatibility is strong since DataLad operations are synchronous subprocess calls - ThreadPoolExecutor naturally handles this by running each DataLad operation in a separate thread without serialization complexity. Error collection is straightforward using `concurrent.futures.as_completed()` or by capturing exceptions from futures.
-
-**Alternatives Considered**:
-
-- **ProcessPoolExecutor**: Rejected because it's designed for CPU-bound tasks and introduces significant overhead. Each process requires separate memory space, making shared state synchronization complex. Passing DataLad dataset objects between processes requires pickling, which is problematic for git repositories with file handles and internal state. The IPC overhead would slow down our I/O-bound workload rather than speed it up.
-
-- **joblib.Parallel**: Rejected despite being popular in data science. While it provides nice features like progress bars and efficient NumPy array sharing, these benefits don't apply to our use case. We're not working with NumPy arrays, and the added dependency isn't justified when ThreadPoolExecutor provides equivalent functionality for our needs. Joblib's batching heuristics could actually cause issues with our variable-duration tasks (some studies process quickly, others require extensive API calls).
-
-- **multiprocessing.Pool**: Rejected for the same reasons as ProcessPoolExecutor - unnecessary complexity for I/O-bound work, state sharing difficulties, and no advantage over the higher-level ThreadPoolExecutor API.
-
-**Code Example**:
+#### Code Example
 
 ```python
-import concurrent.futures
-import threading
-from pathlib import Path
-from typing import List, Dict, Any
 import datalad.api as dl
 
-class StudyProcessor:
-    def __init__(self, output_dir: Path):
-        self.output_dir = output_dir
-        self.studies_lock = threading.Lock()
-        self.errors: List[Dict[str, Any]] = []
-        self.errors_lock = threading.Lock()
+# Create a study dataset without git-annex
+study_path = 'study-ds000001'
+result = dl.create(path=study_path, annex=False)
 
-    def process_study(self, study_id: str, dataset_info: Dict[str, Any]) -> Dict[str, Any]:
-        """Process a single study dataset - runs in worker thread."""
-        try:
-            # Perform I/O-bound operations without locking
-            study_dir = self.output_dir / f"study-{study_id}"
+# Create within a superdataset (automatically registers as submodule)
+result = dl.create(
+    path='study-ds000002',
+    dataset='.',  # Current directory as superdataset
+    annex=False,
+    description='Study dataset for ds000002'
+)
 
-            # Create DataLad dataset without annex
-            if not study_dir.exists():
-                dl.create(path=str(study_dir), annex=False, dataset=str(self.output_dir))
+# Using Dataset object for more control
+from datalad.api import Dataset
 
-            # Link source datasets as git submodules (I/O-bound, no locking needed)
-            # ... git operations here ...
+superdataset = Dataset('.')
+result = superdataset.create(path='study-ds000003', annex=False)
+```
 
-            # Generate metadata
-            metadata = self._generate_study_metadata(study_id, dataset_info)
+#### Function Signature
+```python
+datalad.api.create(
+    path=None,
+    initopts=None,
+    *,
+    force=False,
+    description=None,
+    dataset=None,
+    annex=True,  # Set to False for plain Git
+    fake_dates=False,
+    cfg_proc=None
+)
+```
 
-            # Update shared studies.tsv - requires synchronization
-            with self.studies_lock:
-                self._update_studies_tsv(study_id, metadata)
+#### Key Parameters
+- **`path`**: Where the dataset should be created; directories created as necessary
+- **`annex`**: If `False`, creates plain Git repository without git-annex
+- **`dataset`**: Path to parent dataset for automatic submodule registration
+- **`force`**: Enforce creation in non-empty directory
+- **`description`**: Brief label for the dataset's nature and location
 
-            return {"study_id": study_id, "status": "success", "metadata": metadata}
+#### Alternatives Considered
+1. **Using git-annex for all datasets**: Rejected due to unnecessary complexity for metadata-only repos
+2. **Command-line `datalad create`**: Rejected due to startup overhead when processing 1000+ datasets
+3. **Plain git init**: Rejected as it loses DataLad metadata and integration benefits
 
-        except Exception as e:
-            # Record error with synchronization
-            with self.errors_lock:
-                self.errors.append({
-                    "study_id": study_id,
-                    "error_type": type(e).__name__,
-                    "message": str(e)
-                })
-            raise
+---
 
-    def _generate_study_metadata(self, study_id: str, dataset_info: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate metadata for a study - I/O-bound, no locking needed."""
-        # Fetch dataset_description.json from GitHub API
-        # Parse source datasets
-        # Count imaging files
-        return {}
+### 1.2 Error Handling Patterns
 
-    def _update_studies_tsv(self, study_id: str, metadata: Dict[str, Any]) -> None:
-        """Update studies.tsv file - MUST be called with studies_lock held."""
-        studies_file = self.output_dir / "studies.tsv"
-        # Read, update, write - protected by lock
-        pass
+#### Decision
+Use structured exception handling with the `on_failure` parameter set to `'continue'` for batch operations, allowing collection of all errors before raising `IncompleteResultsError`.
 
-    def process_studies_parallel(self, studies: Dict[str, Dict[str, Any]], max_workers: int = None) -> List[Dict[str, Any]]:
-        """Process multiple studies in parallel with error handling."""
-        results = []
+#### Rationale
+- Processing 1000+ datasets requires resilience; one failure shouldn't stop all processing
+- `IncompleteResultsError.failed` attribute provides detailed failure information for logging
+- `on_failure='continue'` allows capturing all failures in a single batch run
+- Structured error handling enables systematic error reporting in `logs/errors.tsv`
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks
-            future_to_study = {
-                executor.submit(self.process_study, study_id, info): study_id
-                for study_id, info in studies.items()
-            }
+#### Code Example
 
-            # Collect results as they complete
-            for future in concurrent.futures.as_completed(future_to_study):
-                study_id = future_to_study[future]
-                try:
-                    result = future.result()
-                    results.append(result)
-                    print(f"✓ Completed {study_id}")
-                except Exception as e:
-                    print(f"✗ Failed {study_id}: {e}")
+```python
+import datalad.api as dl
+from datalad.support.exceptions import IncompleteResultsError, CommandError
 
-        return results
+def create_study_dataset(study_id: str, base_path: str) -> dict:
+    """
+    Create a study dataset with proper error handling.
 
-# Usage example
-if __name__ == "__main__":
-    processor = StudyProcessor(Path("/path/to/OpenNeuroStudies"))
+    Returns result dict with status information.
+    """
+    try:
+        result = dl.create(
+            path=f'{base_path}/study-{study_id}',
+            dataset=base_path,
+            annex=False,
+            on_failure='continue'  # Collect errors, don't stop immediately
+        )
+        return {'status': 'ok', 'study_id': study_id, 'result': result}
 
-    studies_to_process = {
-        "ds000001": {"url": "https://github.com/OpenNeuroDatasets/ds000001", "commit": "abc123"},
-        "ds000002": {"url": "https://github.com/OpenNeuroDatasets/ds000002", "commit": "def456"},
-        # ... more studies
+    except IncompleteResultsError as e:
+        # Access detailed failure information
+        failed_results = e.failed
+        return {
+            'status': 'error',
+            'study_id': study_id,
+            'error_type': 'IncompleteResultsError',
+            'failures': failed_results,
+            'message': str(e)
+        }
+
+    except CommandError as e:
+        # Handle direct command failures
+        return {
+            'status': 'error',
+            'study_id': study_id,
+            'error_type': 'CommandError',
+            'message': str(e),
+            'stdout': getattr(e, 'stdout', None),
+            'stderr': getattr(e, 'stderr', None)
+        }
+
+    except Exception as e:
+        # Catch-all for unexpected errors
+        return {
+            'status': 'error',
+            'study_id': study_id,
+            'error_type': type(e).__name__,
+            'message': str(e)
+        }
+
+# Batch processing with error collection
+def process_multiple_studies(study_ids: list, base_path: str) -> tuple[list, list]:
+    """Process multiple studies, collecting successes and failures."""
+    successes = []
+    failures = []
+
+    for study_id in study_ids:
+        result = create_study_dataset(study_id, base_path)
+        if result['status'] == 'ok':
+            successes.append(result)
+        else:
+            failures.append(result)
+
+    return successes, failures
+```
+
+#### Exception Types
+
+**`IncompleteResultsError`**:
+- Raised when `on_failure='continue'` or `on_failure='stop'` and operations fail
+- Contains `failed` attribute with list of result dictionaries
+- Result records have status 'impossible' or 'error'
+
+**`CommandError`**:
+- Raised by underlying git/git-annex commands on non-zero exit
+- Contains `stdout_json` with captured JSON records (if available)
+- Original exception preserved in `IncompleteResultsError.failed[n]['exception']`
+
+#### on_failure Parameter Options
+- `'ignore'`: Report failures but don't raise exception (silent continuation)
+- `'continue'`: Raise `IncompleteResultsError` at end, but process all items (default for batch operations)
+- `'stop'`: Stop on first failure and raise exception immediately
+
+#### Alternatives Considered
+1. **`on_failure='ignore'`**: Rejected as it silently swallows errors, making debugging difficult
+2. **`on_failure='stop'`**: Rejected for batch operations as it prevents processing remaining datasets
+3. **Try-except around each command**: Too verbose; DataLad's built-in error handling is more robust
+
+---
+
+### 1.3 Saving Changes and Commit Messages
+
+#### Decision
+Use `Dataset.save()` method or `dl.save()` with explicit `message` parameter for all commits, following BIDS provenance standards.
+
+#### Rationale
+- Provides structured commit messages for provenance tracking
+- Integrates with DataLad's metadata system
+- More efficient than command-line for batch operations (no startup overhead)
+- Enables programmatic commit message generation from templates
+
+#### Code Example
+
+```python
+import datalad.api as dl
+from datalad.api import Dataset
+
+# Using datalad.api directly
+dl.save(
+    path='dataset_description.json',
+    message='Generate study dataset metadata for ds000001',
+    dataset='study-ds000001'
+)
+
+# Using Dataset object (preferred for multiple operations)
+ds = Dataset('study-ds000001')
+
+# Save specific file
+ds.save(
+    path='dataset_description.json',
+    message='Add BIDS study metadata'
+)
+
+# Save multiple files
+ds.save(
+    path=['dataset_description.json', '.gitmodules'],
+    message='Add study metadata and sourcedata submodules'
+)
+
+# Save all changes in dataset
+ds.save(message='Configure study dataset structure')
+
+# Save with multi-line commit message
+commit_msg = """Add derivative submodules for fmriprep and mriqc
+
+Links to OpenNeuroDerivatives repositories:
+- fmriprep-21.0.1 (eb586851-1a79-4671-aded-31384b3d5d7f)
+- mriqc-0.16.1 (3a3af661-2cf7-4eec-8e31-38d0c75652b5)
+
+Generated automatically by OpenNeuroStudies infrastructure."""
+
+ds.save(
+    path='sourcedata/',
+    message=commit_msg,
+    recursive=True  # Recurse into subdatasets if needed
+)
+```
+
+#### Structured Commit Message Template
+
+```python
+def generate_commit_message(
+    action: str,
+    study_id: str,
+    details: dict = None
+) -> str:
+    """Generate standardized commit messages."""
+
+    templates = {
+        'create_study': 'Initialize study dataset for {study_id}',
+        'add_sourcedata': 'Link sourcedata for {study_id}: {datasets}',
+        'add_derivatives': 'Link derivative datasets: {tools}',
+        'update_metadata': 'Update study metadata for {study_id}',
     }
 
-    # Process up to 10 studies concurrently (I/O-bound, can exceed CPU count)
-    results = processor.process_studies_parallel(studies_to_process, max_workers=10)
+    msg = templates[action].format(study_id=study_id, **(details or {}))
 
-    print(f"Processed {len(results)} studies with {len(processor.errors)} errors")
+    # Add provenance footer
+    msg += '\n\nGenerated by OpenNeuroStudies infrastructure'
+
+    return msg
+
+# Usage
+ds = Dataset('study-ds000001')
+ds.save(
+    message=generate_commit_message(
+        'add_derivatives',
+        'ds000001',
+        {'tools': 'fmriprep-21.0.1, mriqc-0.16.1'}
+    )
+)
 ```
 
-## 2. GitHub API Rate Limit Strategy
+#### Alternatives Considered
+1. **Automatic commit messages**: Rejected as they lack context for provenance tracking
+2. **Command-line `datalad save`**: Rejected due to startup overhead for batch operations
+3. **Direct git commands**: Rejected as they bypass DataLad's metadata tracking
 
-**Decision**: Use `requests-cache` with conditional requests and time-based expiration, combined with batch optimization patterns.
+---
 
-**Rationale**:
+### 1.4 Import Convention
 
-GitHub API provides 5000 requests per hour for authenticated users. For 1000+ datasets, we need intelligent caching to avoid exhausting this limit. The key insight is that GitHub's `304 Not Modified` responses from conditional requests do NOT count against the rate limit, making caching with conditional requests extremely effective.
+#### Decision
+**Always** import DataLad API as: `import datalad.api as dl`
 
-The `requests-cache` library integrates cleanly with PyGithub using `install_cache()`, which monkey-patches the underlying requests library. While PyGithub doesn't natively support conditional requests (Issue #536), requests-cache automatically handles ETags and If-None-Match headers transparently. GitHub API responses include Cache-Control headers, which requests-cache can respect with `cache_control=True`.
+#### Rationale
+- Official convention from DataLad Handbook and documentation
+- Provides consistent, recognizable pattern across codebase
+- Shorter than `datalad.api` for repeated use
+- All user-oriented commands exposed via `datalad.api`
+- Clear distinction from Dataset class: `from datalad.api import Dataset`
 
-For cache invalidation, we'll use a hybrid strategy: time-based expiration (24 hours for dataset metadata, 1 hour for releases/tags) combined with explicit cache clearing when we know data has changed (e.g., after creating a new study repository). This balances freshness with API efficiency.
-
-Batch optimization involves batching multiple API calls into single requests where possible (e.g., using GraphQL for multiple datasets, though this requires more complex queries) and prioritizing cached data over real-time accuracy for non-critical operations.
-
-**Caching Architecture Pattern**:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Application Layer                                            │
-│  - Study processor requests dataset metadata                │
-│  - Release version checker requests tags                    │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ requests-cache Layer                                         │
-│  - SQLite cache backend (persistent across runs)            │
-│  - Automatic ETag handling (If-None-Match headers)          │
-│  - Cache-Control header respect                             │
-│  - Per-URL expiration policies                              │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ PyGithub → requests → GitHub API                            │
-│  - Returns 304 Not Modified when content unchanged          │
-│  - 304 responses don't count against rate limit             │
-│  - Full responses cached with ETags for next request        │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Cache Invalidation Strategy**:
-
-1. **Time-based expiration**: Different TTLs for different resource types
-   - Dataset metadata (dataset_description.json): 24 hours
-   - Release/tag information: 1 hour
-   - Repository tree listings: 6 hours
-   - Commit information: 24 hours (immutable)
-
-2. **Event-based invalidation**: Explicit cache clearing for known changes
-   - After creating study repositories
-   - After manual refresh commands
-   - After batch processing completion
-
-3. **Conditional requests**: Always send ETags for cache hits
-   - Let GitHub tell us if content changed (304 = use cache, 200 = update cache)
-   - Counts as cache hit for rate limit purposes even if sending request
-
-**Code Example**:
+#### Code Example
 
 ```python
-import requests_cache
-from github import Github
-from pathlib import Path
-from typing import Dict, Any, Optional
-import os
-from datetime import timedelta
-
-class GitHubAPIClient:
-    """GitHub API client with intelligent caching to avoid rate limits."""
-
-    def __init__(self, cache_dir: Path):
-        self.cache_dir = cache_dir
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-
-        # Install global cache for all requests
-        requests_cache.install_cache(
-            cache_name=str(cache_dir / "github_cache"),
-            backend='sqlite',
-            expire_after=timedelta(hours=6),  # Default expiration
-            cache_control=True,  # Respect Cache-Control headers from GitHub
-            allowable_methods=['GET', 'HEAD'],  # Only cache safe methods
-            urls_expire_after={
-                # Fine-grained expiration by URL pattern
-                '*/repos/*/git/commits/*': timedelta(days=7),  # Commits are immutable
-                '*/repos/*/git/tags/*': timedelta(hours=1),     # Tags change rarely
-                '*/repos/*/releases*': timedelta(hours=1),      # Releases need freshness
-                '*/repos/*/contents/*': timedelta(hours=24),    # Dataset files change daily
-                '*/repos/*/compare/*': timedelta(hours=6),      # Comparison results
-            }
-        )
-
-        # Initialize PyGithub with token
-        token = os.getenv('GITHUB_TOKEN')
-        if not token:
-            raise ValueError("GITHUB_TOKEN environment variable required")
-        self.github = Github(token)
-
-    def get_rate_limit_status(self) -> Dict[str, Any]:
-        """Check current rate limit status."""
-        rate_limit = self.github.get_rate_limit()
-        return {
-            "remaining": rate_limit.core.remaining,
-            "limit": rate_limit.core.limit,
-            "reset": rate_limit.core.reset,
-        }
-
-    def get_dataset_description(self, repo_name: str, ref: str = "HEAD") -> Optional[Dict[str, Any]]:
-        """
-        Fetch dataset_description.json from a repository.
-        Uses cache automatically - 304 responses don't count against rate limit.
-        """
-        try:
-            repo = self.github.get_repo(repo_name)
-            # This API call is automatically cached by requests-cache
-            content = repo.get_contents("dataset_description.json", ref=ref)
-
-            import json
-            return json.loads(content.decoded_content)
-        except Exception as e:
-            print(f"Error fetching dataset_description.json from {repo_name}: {e}")
-            return None
-
-    def get_latest_release_tag(self, repo_name: str) -> Optional[str]:
-        """
-        Get the latest release tag for a repository.
-        Cached for 1 hour to balance freshness with rate limits.
-        """
-        try:
-            repo = self.github.get_repo(repo_name)
-            releases = repo.get_releases()
-
-            # Get first release (most recent)
-            latest_release = releases[0]
-            return latest_release.tag_name
-        except IndexError:
-            # No releases
-            return None
-        except Exception as e:
-            print(f"Error fetching releases from {repo_name}: {e}")
-            return None
-
-    def get_commit_count_between_tags(self, repo_name: str, base_tag: str, head_tag: str) -> Optional[int]:
-        """
-        Calculate number of commits between two tags using GitHub Compare API.
-        Returns commit count without cloning repository.
-        """
-        try:
-            repo = self.github.get_repo(repo_name)
-            # Use compare API - automatically cached
-            comparison = repo.compare(base_tag, head_tag)
-            return comparison.ahead_by  # Number of commits ahead
-        except Exception as e:
-            print(f"Error comparing tags in {repo_name}: {e}")
-            return None
-
-    def clear_cache(self, pattern: Optional[str] = None) -> int:
-        """
-        Clear cache entries, optionally matching a pattern.
-        Returns number of entries removed.
-        """
-        cache = requests_cache.get_cache()
-        if pattern:
-            # Clear specific URLs matching pattern
-            removed = 0
-            for key in list(cache.responses.keys()):
-                if pattern in key:
-                    del cache.responses[key]
-                    removed += 1
-            return removed
-        else:
-            # Clear entire cache
-            count = len(cache.responses)
-            cache.clear()
-            return count
-
-    def get_cache_info(self) -> Dict[str, Any]:
-        """Get cache statistics."""
-        cache = requests_cache.get_cache()
-        return {
-            "backend": cache.cache_name,
-            "size": len(cache.responses),
-        }
-
-# Usage example
-if __name__ == "__main__":
-    client = GitHubAPIClient(Path.home() / ".cache" / "openneuro_studies")
-
-    # Check rate limit before starting
-    rate_info = client.get_rate_limit_status()
-    print(f"Rate limit: {rate_info['remaining']}/{rate_info['limit']}")
-
-    # Fetch dataset metadata - first call hits API, subsequent calls use cache
-    for i in range(3):
-        desc = client.get_dataset_description("OpenNeuroDatasets/ds000001")
-        print(f"Call {i+1}: Got {desc.get('Name') if desc else 'None'}")
-
-    # Cache info
-    cache_info = client.get_cache_info()
-    print(f"Cache: {cache_info['size']} entries")
-
-    # Check rate limit after - should show minimal usage due to caching
-    rate_info_after = client.get_rate_limit_status()
-    requests_used = rate_info['remaining'] - rate_info_after['remaining']
-    print(f"Requests used: {requests_used}")
-```
-
-## 3. Sparse Data Access Implementation
-
-**Decision**: Use git-annex's HTTP range request capabilities with fsspec-git-annex as primary approach, with fallback to direct git-annex commands.
-
-**Rationale**:
-
-For accessing NIfTI headers without downloading full files, we need sparse read capabilities. After investigating datalad-fuse and fsspec options, the most reliable approach combines existing git-annex functionality with Python fsspec adapters.
-
-The `fsspec-git-annex` package provides a filesystem interface to git-annex repositories that supports partial reads through HTTP range requests when the git-annex special remote supports it. This works well with OpenNeuro datasets since they typically use web-accessible special remotes. The datalad-fuse project has implemented fsspec integration with a `fsspec-head` command that includes a `--bytes` option for retrieving partial file content.
-
-However, sparse access has limitations: not all git-annex remotes support range requests, and network reliability issues can cause failures. Therefore, we need a three-tier fallback strategy:
-
-1. **Primary**: fsspec with range requests for NIfTI headers (first ~352 bytes for NIfTI-1, ~540 bytes for NIfTI-2)
-2. **Secondary**: git-annex's built-in partial transfer support using `git annex get --bytes`
-3. **Tertiary**: Cache results and mark datasets where sparse access failed for batch processing
-
-NIfTI headers are fixed-size at the beginning of files, making them ideal for range requests. We only need the first ~1KB of each file to extract dimensions, voxel sizes, and data types.
-
-**Recommended Approach**:
-
-```
-Sparse Access Strategy:
-┌──────────────────────────────────────────────────────────┐
-│ 1. Try fsspec-git-annex with HTTP range request         │
-│    - Fast, no git-annex commands needed                 │
-│    - Works with web special remotes                     │
-│    - Read first 1KB of NIfTI file                       │
-└────────┬─────────────────────────────────────────────────┘
-         │ ✓ Success → Parse header → Done
-         │ ✗ Fail
-         ▼
-┌──────────────────────────────────────────────────────────┐
-│ 2. Try git-annex get --bytes=1024                       │
-│    - Use DataLad/git-annex CLI                          │
-│    - Download partial content                           │
-│    - Slower but more reliable                           │
-└────────┬─────────────────────────────────────────────────┘
-         │ ✓ Success → Parse header → Done
-         │ ✗ Fail
-         ▼
-┌──────────────────────────────────────────────────────────┐
-│ 3. Mark for batch processing / Skip metrics            │
-│    - Log dataset for later full-clone processing        │
-│    - Mark imaging metrics as "unavailable"              │
-│    - Continue without sparse data                       │
-└──────────────────────────────────────────────────────────┘
-```
-
-**Fallback Strategy**:
-
-- For datasets where sparse access consistently fails, maintain a "sparse_access_failed.txt" file
-- These datasets can be processed in batch during off-hours with actual clones
-- Populate imaging metrics incrementally as batch jobs complete
-- Never block main workflow on sparse data access failures
-
-**Code Example**:
-
-```python
-from pathlib import Path
-from typing import Optional, Dict, Any, Tuple
-import struct
-import subprocess
-import logging
-
-logger = logging.getLogger(__name__)
-
-class NIfTIHeaderReader:
-    """
-    Read NIfTI headers without downloading full files using sparse access.
-    Implements fallback strategy for reliability.
-    """
-
-    NIFTI1_HEADER_SIZE = 348
-    NIFTI2_HEADER_SIZE = 540
-
-    def __init__(self, cache_dir: Path):
-        self.cache_dir = cache_dir
-        self.failed_cache = cache_dir / "sparse_access_failed.txt"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-
-    def is_known_failure(self, file_path: str) -> bool:
-        """Check if this file previously failed sparse access."""
-        if not self.failed_cache.exists():
-            return False
-        with open(self.failed_cache) as f:
-            return file_path in f.read()
-
-    def mark_failure(self, file_path: str) -> None:
-        """Mark file as failed for sparse access."""
-        with open(self.failed_cache, 'a') as f:
-            f.write(f"{file_path}\n")
-
-    def read_nifti_header_fsspec(self, file_path: str) -> Optional[bytes]:
-        """
-        Method 1: Try fsspec-git-annex with HTTP range request.
-        This is the fastest method when it works.
-        """
-        try:
-            # Attempt to import fsspec-git-annex
-            # This is a conceptual example - actual API may differ
-            import fsspec
-
-            # Open with git-annex fsspec backend
-            # The actual URL/path format depends on fsspec-git-annex implementation
-            with fsspec.open(f"annexgit://{file_path}", mode='rb') as f:
-                # Read first 1KB (enough for NIfTI-2 header)
-                header = f.read(1024)
-                return header if len(header) >= self.NIFTI1_HEADER_SIZE else None
-
-        except ImportError:
-            logger.debug("fsspec-git-annex not available")
-            return None
-        except Exception as e:
-            logger.debug(f"fsspec read failed for {file_path}: {e}")
-            return None
-
-    def read_nifti_header_gitannex(self, dataset_path: Path, file_path: str) -> Optional[bytes]:
-        """
-        Method 2: Use git-annex get --bytes for partial download.
-        More reliable but slower than fsspec.
-        """
-        try:
-            # Use git-annex to download first 1KB
-            result = subprocess.run(
-                ['git', 'annex', 'get', '--bytes=1024', file_path],
-                cwd=dataset_path,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-
-            if result.returncode != 0:
-                logger.debug(f"git-annex get failed: {result.stderr}")
-                return None
-
-            # Read the partial file
-            full_path = dataset_path / file_path
-            if full_path.exists():
-                with open(full_path, 'rb') as f:
-                    return f.read(1024)
-
-            return None
-
-        except subprocess.TimeoutExpired:
-            logger.warning(f"git-annex get timed out for {file_path}")
-            return None
-        except Exception as e:
-            logger.debug(f"git-annex read failed for {file_path}: {e}")
-            return None
-
-    def parse_nifti_header(self, header_bytes: bytes) -> Optional[Dict[str, Any]]:
-        """
-        Parse NIfTI header bytes to extract metadata.
-        Returns dimensions, voxel sizes, and data type.
-        """
-        try:
-            # Check magic number to determine NIfTI version
-            # NIfTI-1: 'n+1\0' or 'ni1\0' at offset 344
-            # Simplified parsing - production code should be more robust
-
-            # Read header size (first 4 bytes, little-endian int)
-            sizeof_hdr = struct.unpack('<i', header_bytes[0:4])[0]
-
-            if sizeof_hdr == 348:
-                # NIfTI-1 format
-                dim = struct.unpack('<8h', header_bytes[40:56])  # Dimensions
-                pixdim = struct.unpack('<8f', header_bytes[76:108])  # Voxel sizes
-                datatype = struct.unpack('<h', header_bytes[70:72])[0]
-
-                return {
-                    "format": "NIfTI-1",
-                    "dimensions": dim[1:dim[0]+1],  # First value is number of dimensions
-                    "voxel_sizes": pixdim[1:dim[0]+1],
-                    "datatype": datatype,
-                }
-            elif sizeof_hdr == 540:
-                # NIfTI-2 format
-                dim = struct.unpack('<8q', header_bytes[16:80])  # Dimensions (64-bit)
-                pixdim = struct.unpack('<8d', header_bytes[104:168])  # Voxel sizes (double)
-                datatype = struct.unpack('<h', header_bytes[12:14])[0]
-
-                return {
-                    "format": "NIfTI-2",
-                    "dimensions": dim[1:dim[0]+1],
-                    "voxel_sizes": pixdim[1:dim[0]+1],
-                    "datatype": datatype,
-                }
-            else:
-                logger.error(f"Unknown NIfTI format, sizeof_hdr={sizeof_hdr}")
-                return None
-
-        except Exception as e:
-            logger.error(f"Failed to parse NIfTI header: {e}")
-            return None
-
-    def get_nifti_metadata(self, dataset_path: Path, file_path: str) -> Optional[Dict[str, Any]]:
-        """
-        Get NIfTI metadata using sparse access with fallback strategy.
-
-        Args:
-            dataset_path: Path to DataLad dataset root
-            file_path: Relative path to NIfTI file within dataset
-
-        Returns:
-            Dictionary with NIfTI metadata or None if all methods fail
-        """
-        # Skip if previously failed
-        if self.is_known_failure(file_path):
-            logger.debug(f"Skipping {file_path} (known failure)")
-            return None
-
-        # Try method 1: fsspec with range request
-        header_bytes = self.read_nifti_header_fsspec(file_path)
-
-        # Try method 2: git-annex get --bytes
-        if header_bytes is None:
-            header_bytes = self.read_nifti_header_gitannex(dataset_path, file_path)
-
-        # Both methods failed
-        if header_bytes is None:
-            logger.warning(f"All sparse access methods failed for {file_path}")
-            self.mark_failure(file_path)
-            return None
-
-        # Parse the header
-        return self.parse_nifti_header(header_bytes)
-
-# Usage example
-if __name__ == "__main__":
-    reader = NIfTIHeaderReader(Path.home() / ".cache" / "nifti_headers")
-
-    # Example: Extract metadata from a NIfTI file in a DataLad dataset
-    dataset_path = Path("/path/to/dataset")
-    nifti_file = "sub-01/func/sub-01_task-rest_bold.nii.gz"
-
-    metadata = reader.get_nifti_metadata(dataset_path, nifti_file)
-
-    if metadata:
-        print(f"Format: {metadata['format']}")
-        print(f"Dimensions: {metadata['dimensions']}")
-        print(f"Voxel sizes: {metadata['voxel_sizes']}")
-        print(f"Data type: {metadata['datatype']}")
-    else:
-        print("Failed to extract metadata - will process in batch later")
-```
-
-## 4. DataLad API Patterns
-
-**Decision**: Use `datalad.api` for all standard operations; use `datalad.support.annexrepo` only for low-level git operations not exposed in the high-level API.
-
-**Rationale**:
-
-DataLad's architecture clearly separates concerns: `datalad.api` provides user-facing, high-level operations with consistent error handling, provenance tracking, and state management. The `datalad.support.annexrepo` and `datalad.support.gitrepo` modules are internal, low-level interfaces to git and git-annex that lack the safety guarantees of the high-level API.
-
-The DataLad documentation shows deprecation warnings for several `annexrepo` methods, explicitly recommending high-level alternatives. This indicates the project's direction: users should rely on `datalad.api`. The high-level API provides better abstraction, automatic result reporting, and integration with DataLad's configuration system.
-
-For our use case, we need:
-1. Creating datasets without annex: `datalad.api.create(annex=False)`
-2. Adding git submodules: Use `datalad.api.install()` or direct git commands
-3. Running commands with provenance: `datalad.api.run()`
-4. State queries: `datalad.api.status()`, `datalad.api.diff()`
-
-The pattern is: use `datalad.api` by default, drop to lower-level `Dataset.repo` methods only when the high-level API doesn't expose needed functionality (e.g., directly manipulating `.gitmodules` without cloning).
-
-**Design Pattern Guide**:
-
-```
-Decision Tree for DataLad Operations:
-
-┌─────────────────────────────────────────────────────────────┐
-│ Is this a standard dataset operation?                       │
-│ (create, save, get, push, install, run, status, diff)      │
-└────┬─────────────────────────────────────────────────────┬──┘
-     │ YES                                               NO│
-     ▼                                                      ▼
-┌─────────────────────────────────────┐  ┌────────────────────────────────────┐
-│ Use datalad.api                     │  │ Is it a git operation?             │
-│                                     │  │ (config, update-index, checkout)   │
-│ import datalad.api as dl            │  └────┬────────────────────────────┬──┘
-│ dl.create(...)                      │       │ YES                    NO  │
-│ dl.save(...)                        │       ▼                            ▼
-│ dl.run(...)                         │  ┌──────────────────────┐  ┌──────────────┐
-│                                     │  │ Use subprocess       │  │ Use standard │
-│ Benefits:                           │  │ with git commands    │  │ Python libs  │
-│ - Provenance tracking               │  │                      │  │ (json, etc)  │
-│ - Consistent error handling         │  │ subprocess.run([     │  └──────────────┘
-│ - Result reporting                  │  │   'git', 'config',   │
-│ - State management                  │  │   ...                │
-└─────────────────────────────────────┘  │ ])                   │
-                                          │                      │
-                                          │ Avoid:               │
-                                          │ - annexrepo methods  │
-                                          │ - gitrepo methods    │
-                                          │ (internal APIs)      │
-                                          └──────────────────────┘
-```
-
-**Code Examples**:
-
-```python
+# Standard import convention
 import datalad.api as dl
-from pathlib import Path
+from datalad.api import Dataset
+
+# Create dataset using module
+result = dl.create(path='my_dataset', annex=False)
+
+# Get dataset info
+info = dl.status(dataset='my_dataset')
+
+# Using Dataset class for persistent operations
+ds = Dataset('my_dataset')
+ds.save(message='Initial commit')
+ds.create(path='subdataset', annex=False)
+
+# All datalad.api commands available via dl.* pattern
+dl.get(path='data.txt', dataset='my_dataset')
+dl.clone(source='https://example.com/repo.git', path='cloned')
+```
+
+#### Benefits of Python API vs CLI
+1. **No startup overhead**: Significant speedup for 1000+ operations
+2. **Persistent Dataset objects**: Reuse instances across multiple operations
+3. **Structured results**: Native Python dictionaries instead of parsing output
+4. **Exception handling**: Proper Python exceptions vs exit codes
+5. **Integration**: Easy to use in analysis scripts and Jupyter notebooks
+
+---
+
+## 2. Git Submodule Operations
+
+### 2.1 Adding Submodules Without Cloning
+
+#### Decision
+Use manual `.gitmodules` configuration plus `git update-index --cacheinfo 160000` to link submodules without cloning, avoiding unnecessary disk I/O and network traffic for 1000+ datasets.
+
+#### Rationale
+- Dramatically reduces time and disk space for creating 1000+ submodule links
+- Only metadata (URL, path, commit SHA) needed for structural organization
+- Actual data retrieval deferred until needed (lazy loading principle)
+- Standard git mechanism; documented in git-submodule sources
+- OpenNeuroStudies organizes datasets, doesn't require their content immediately
+
+#### Code Example
+
+```python
 import subprocess
-import json
-from typing import Optional, Dict, Any
+import os
+from pathlib import Path
 
-class DatasetManager:
-    """Manages DataLad dataset operations using recommended patterns."""
+def add_submodule_without_cloning(
+    repo_path: str,
+    submodule_url: str,
+    submodule_path: str,
+    commit_sha: str,
+    submodule_name: str = None,
+    datalad_id: str = None
+) -> None:
+    """
+    Add a git submodule without cloning it.
 
-    def __init__(self, root_path: Path):
-        self.root_path = root_path
+    Args:
+        repo_path: Path to parent repository
+        submodule_url: URL of submodule repository
+        submodule_path: Relative path where submodule should appear
+        commit_sha: Specific commit SHA to reference
+        submodule_name: Name for submodule (defaults to path)
+        datalad_id: DataLad UUID (optional, for DataLad datasets)
+    """
+    if submodule_name is None:
+        # Use path as name, removing slashes
+        submodule_name = submodule_path.replace('/', '-')
 
-    # Pattern 1: Creating DataLad dataset without annex
-    def create_study_dataset(self, study_id: str) -> Path:
-        """
-        Create a study dataset without git-annex.
-        Uses high-level API with annex=False parameter.
-        """
-        study_path = self.root_path / f"study-{study_id}"
+    os.chdir(repo_path)
 
-        # Use datalad.api.create - high level, handles errors properly
-        result = dl.create(
-            path=str(study_path),
-            annex=False,  # Plain git repository, no annex
-            dataset=str(self.root_path),  # Register in parent dataset
-            cfg_proc='text2git',  # All files to git (not annex)
-            description=f"Study dataset for {study_id}"
-        )
+    # 1. Create directory structure (git expects it for update-index)
+    submodule_dir = Path(submodule_path)
+    submodule_dir.mkdir(parents=True, exist_ok=True)
 
-        return study_path
+    # 2. Configure .gitmodules
+    subprocess.run([
+        'git', 'config', '-f', '.gitmodules',
+        f'submodule.{submodule_name}.path',
+        submodule_path
+    ], check=True)
 
-    # Pattern 2: Adding git submodules without cloning
-    def add_submodule_without_clone(self,
-                                     study_path: Path,
-                                     submodule_url: str,
-                                     submodule_path: str,
-                                     commit_sha: str) -> bool:
-        """
-        Add git submodule without cloning - uses direct git commands.
+    subprocess.run([
+        'git', 'config', '-f', '.gitmodules',
+        f'submodule.{submodule_name}.url',
+        submodule_url
+    ], check=True)
 
-        This is a case where datalad.api doesn't provide the needed functionality,
-        so we use subprocess with git directly. We avoid datalad.support.annexrepo
-        because it's an internal API.
-        """
-        try:
-            # Create directory
-            (study_path / submodule_path).mkdir(parents=True, exist_ok=True)
+    # Add DataLad-specific fields if provided
+    if datalad_id:
+        subprocess.run([
+            'git', 'config', '-f', '.gitmodules',
+            f'submodule.{submodule_name}.datalad-id',
+            datalad_id
+        ], check=True)
 
-            # Configure submodule in .gitmodules
-            submodule_name = submodule_path.replace('/', '-')
-            subprocess.run(
-                ['git', 'config', '-f', '.gitmodules',
-                 f'submodule.{submodule_name}.path', submodule_path],
-                cwd=study_path,
-                check=True
-            )
-            subprocess.run(
-                ['git', 'config', '-f', '.gitmodules',
-                 f'submodule.{submodule_name}.url', submodule_url],
-                cwd=study_path,
-                check=True
-            )
+        subprocess.run([
+            'git', 'config', '-f', '.gitmodules',
+            f'submodule.{submodule_name}.datalad-url',
+            submodule_url
+        ], check=True)
 
-            # Add .gitmodules to git
-            subprocess.run(
-                ['git', 'add', '.gitmodules'],
-                cwd=study_path,
-                check=True
-            )
+    # 3. Stage .gitmodules
+    subprocess.run(['git', 'add', '.gitmodules'], check=True)
 
-            # Add gitlink pointing to specific commit
-            subprocess.run(
-                ['git', 'update-index', '--add', '--cacheinfo',
-                 f'160000,{commit_sha},{submodule_path}'],
-                cwd=study_path,
-                check=True
-            )
+    # 4. Add gitlink with specific commit SHA
+    # Mode 160000 = gitlink (submodule reference)
+    subprocess.run([
+        'git', 'update-index', '--add', '--cacheinfo',
+        f'160000,{commit_sha},{submodule_path}'
+    ], check=True)
 
-            # Commit using datalad.api.save for provenance
-            dl.save(
-                dataset=str(study_path),
-                message=f"Add submodule {submodule_path} at {commit_sha[:8]}"
-            )
+    print(f"Added submodule {submodule_name} at {submodule_path} -> {commit_sha}")
 
-            return True
+# Example usage for OpenNeuro datasets
+add_submodule_without_cloning(
+    repo_path='study-ds000001',
+    submodule_url='https://github.com/OpenNeuroDatasets/ds000001',
+    submodule_path='sourcedata/raw',
+    commit_sha='f8e27ac909e50b5b5e311f6be271f0b1757ebb7b',
+    submodule_name='ds000001-raw',
+    datalad_id='9850e7d6-100e-11e5-96f6-002590c1b0b6'
+)
 
-        except subprocess.CalledProcessError as e:
-            print(f"Failed to add submodule: {e}")
-            return False
-
-    # Pattern 3: Running commands with provenance capture
-    def run_with_provenance(self,
-                           dataset_path: Path,
-                           command: str,
-                           message: str,
-                           inputs: Optional[list] = None,
-                           outputs: Optional[list] = None) -> bool:
-        """
-        Run command with DataLad provenance tracking.
-        Uses datalad.api.run - the recommended high-level API.
-        """
-        try:
-            result = dl.run(
-                cmd=command,
-                dataset=str(dataset_path),
-                message=message,
-                inputs=inputs,  # Files that are inputs (will be retrieved if needed)
-                outputs=outputs,  # Files that will be produced/modified
-                explicit=True,  # Only track specified inputs/outputs
-            )
-            return result[0]['status'] == 'ok'
-
-        except Exception as e:
-            print(f"Command failed: {e}")
-            return False
-
-    # Pattern 4: Checking dataset status
-    def get_dataset_status(self, dataset_path: Path) -> Dict[str, Any]:
-        """
-        Get dataset status using high-level API.
-        Returns information about modified, untracked files.
-        """
-        try:
-            # Use datalad.api.status - high level
-            results = dl.status(
-                dataset=str(dataset_path),
-                annex='availability',  # Include annex availability info
-                return_type='generator'
-            )
-
-            status = {
-                'modified': [],
-                'untracked': [],
-                'deleted': [],
-            }
-
-            for result in results:
-                if result['status'] == 'ok':
-                    state = result.get('state', '')
-                    path = result.get('path', '')
-
-                    if state == 'modified':
-                        status['modified'].append(path)
-                    elif state == 'untracked':
-                        status['untracked'].append(path)
-                    elif state == 'deleted':
-                        status['deleted'].append(path)
-
-            return status
-
-        except Exception as e:
-            print(f"Status check failed: {e}")
-            return {}
-
-    # Pattern 5: Error handling with DataLad results
-    def save_with_error_handling(self, dataset_path: Path, message: str, paths: Optional[list] = None) -> tuple[bool, str]:
-        """
-        Save changes with proper error handling.
-        DataLad returns structured results - we should check them.
-        """
-        try:
-            results = dl.save(
-                dataset=str(dataset_path),
-                path=paths,
-                message=message,
-                return_type='item-or-list',  # Get list of results
-                on_failure='ignore',  # Don't raise, we'll check results
-            )
-
-            # Check if operation succeeded
-            if isinstance(results, dict):
-                results = [results]
-
-            for result in results:
-                if result['status'] != 'ok':
-                    error_msg = result.get('message', 'Unknown error')
-                    return False, error_msg
-
-            return True, "Success"
-
-        except Exception as e:
-            return False, str(e)
-
-    # Anti-pattern: Don't access Dataset.repo directly unless necessary
-    def update_dataset_config_WRONG(self, dataset_path: Path):
-        """
-        WRONG: Using internal annexrepo methods.
-        This is discouraged and may break in future DataLad versions.
-        """
-        # DON'T DO THIS:
-        # from datalad.support.annexrepo import AnnexRepo
-        # repo = AnnexRepo(dataset_path)
-        # repo.set_metadata(...)  # Internal API, may change
-        pass
-
-    def update_dataset_config_RIGHT(self, dataset_path: Path, key: str, value: str):
-        """
-        RIGHT: Using subprocess with git config for configuration.
-        """
-        subprocess.run(
-            ['git', 'config', key, value],
-            cwd=dataset_path,
-            check=True
-        )
-
-# Usage examples
-if __name__ == "__main__":
-    manager = DatasetManager(Path("/path/to/OpenNeuroStudies"))
-
-    # Create study dataset
-    study_path = manager.create_study_dataset("ds000001")
-    print(f"Created study at {study_path}")
-
-    # Add source dataset as submodule without cloning
-    success = manager.add_submodule_without_clone(
-        study_path=study_path,
-        submodule_url="https://github.com/OpenNeuroDatasets/ds000001",
-        submodule_path="sourcedata/raw",
-        commit_sha="abc123def456..."
-    )
-    print(f"Submodule added: {success}")
-
-    # Run validation with provenance
-    success = manager.run_with_provenance(
-        dataset_path=study_path,
-        command="bids-validator-deno .",
-        message="Run BIDS validation",
-        outputs=["derivatives/bids-validator.json"]
-    )
-    print(f"Validation completed: {success}")
-
-    # Check status
-    status = manager.get_dataset_status(study_path)
-    print(f"Modified files: {len(status['modified'])}")
+add_submodule_without_cloning(
+    repo_path='study-ds000001',
+    submodule_url='https://github.com/OpenNeuroDerivatives/ds000001-fmriprep',
+    submodule_path='derivatives/fmriprep-21.0.1',
+    commit_sha='a1b2c3d4e5f6789012345678901234567890abcd',
+    submodule_name='ds000001-fmriprep',
+    datalad_id='eb586851-1a79-4671-aded-31384b3d5d7f'
+)
 ```
 
-## 5. GitHub Actions + act Compatibility
+#### Understanding Mode 160000
 
-**Decision**: Design workflows for GitHub Actions first, add act-specific workarounds using conditional logic with `$ACT` environment variable.
+**What is 160000?**
+- Git file mode indicating a "gitlink" (submodule reference)
+- Not a regular file (100644), directory (040000), or executable (100755)
+- Records a commit SHA as a directory entry
+- Special handling by git to recognize submodule
 
-**Rationale**:
+**Git Object Types:**
+- `100644` = regular file
+- `100755` = executable file
+- `040000` = directory/tree
+- `120000` = symbolic link
+- `160000` = gitlink (submodule)
 
-The `act` tool provides valuable local testing capabilities for GitHub Actions workflows, but it has several limitations due to its Docker-based execution model. Rather than restricting our workflows to act's capabilities, we should design for full GitHub Actions functionality and add fallbacks for local testing.
-
-Key compatibility insights: act supports basic workflow features like jobs, steps, strategy matrices (with limitations), and conditional execution. However, it lacks full support for: scheduled cron triggers (must be manually triggered), some GitHub context variables, the `vars` context, workflow concurrency controls, and services like databases.
-
-The most practical approach is to use act's special `$ACT` environment variable (set to "true" when running in act) to conditionally skip or modify steps that won't work locally. For secrets, act supports loading from `.secrets` files or passing via `-s` flag. For testing scheduled workflows, we manually trigger them with `act -j job_name`.
-
-Matrix strategies work in act but have limitations around dynamic matrices and exit code handling (fail-fast behavior). Our workflows should use simple, static matrices when possible.
-
-**Compatible vs Incompatible Features**:
-
-| Feature | GitHub Actions | act Support | Workaround |
-|---------|---------------|-------------|------------|
-| Basic jobs/steps | ✓ Full | ✓ Full | None needed |
-| Matrix strategy (static) | ✓ Full | ✓ Full | None needed |
-| Matrix strategy (dynamic) | ✓ Full | ✗ Limited | Use static matrices or test only on GitHub |
-| Secrets | ✓ Automatic | ✓ Manual | Use `.secrets` file or `-s` flag |
-| Scheduled cron | ✓ Automatic | ✗ Manual trigger | Use `act -j job_name` |
-| GitHub context | ✓ Full | ⚠ Partial | Check `$ACT` and provide defaults |
-| `vars` context | ✓ Full | ✗ None | Use env vars or skip with `if: !env.ACT` |
-| Artifacts | ✓ Full | ⚠ Limited | Works but stays local |
-| Services | ✓ Full | ✗ None | Skip tests requiring services in act |
-| Concurrency control | ✓ Full | ✗ Ignored | Not testable locally |
-| Workflow dispatch | ✓ Full | ⚠ Limited | Basic support only |
-| Docker containers | ✓ Full | ✓ Full | Fully supported |
-| Default images | Optimized | ⚠ Large | Use `act -P ubuntu-latest=catthehacker/ubuntu:act-latest` |
-
-**Workarounds for Common Limitations**:
-
-1. **Secrets Management**: Create `.secrets` file in project root (gitignored):
-   ```
-   GITHUB_TOKEN=ghp_your_token_here
-   ```
-
-2. **Cron Schedule Testing**: Can't test actual scheduling, but can test job logic:
-   ```bash
-   act schedule -j update-datasets
-   ```
-
-3. **Missing GitHub Context**: Provide defaults in workflow:
-   ```yaml
-   env:
-     GITHUB_REPOSITORY: ${{ github.repository || 'OpenNeuroStudies/OpenNeuroStudies' }}
-   ```
-
-4. **Skip Incompatible Steps**: Use conditional execution:
-   ```yaml
-   - name: Upload artifacts
-     if: ${{ !env.ACT }}  # Skip when running in act
-     uses: actions/upload-artifact@v3
-   ```
-
-**Example Workflow YAML**:
-
-```yaml
-name: Update Studies Metadata
-
-# Scheduled to run daily, but can be manually triggered
-on:
-  schedule:
-    - cron: '0 2 * * *'  # 2 AM UTC daily
-  workflow_dispatch:  # Allow manual trigger (works in act)
-  push:
-    branches: [master]  # Also run on push for testing
-
-env:
-  # Provide defaults for act compatibility
-  GITHUB_REPOSITORY: ${{ github.repository || 'OpenNeuroStudies/OpenNeuroStudies' }}
-
-jobs:
-  update-metadata:
-    runs-on: ubuntu-latest
-
-    strategy:
-      # Static matrix works in act; dynamic matrices may not
-      matrix:
-        batch: [1, 2, 3, 4]  # Process studies in batches
-      fail-fast: false  # Continue even if one batch fails
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          # act may not populate github.token automatically
-          token: ${{ secrets.GITHUB_TOKEN }}
-          submodules: false  # Don't clone submodules
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-
-      - name: Install DataLad (act-compatible)
-        run: |
-          if [ -n "$ACT" ]; then
-            echo "Running in act - using simplified DataLad install"
-            pip install datalad
-          else
-            echo "Running in GitHub Actions - full DataLad setup"
-            pip install datalad
-            git config --global user.name "GitHub Actions"
-            git config --global user.email "actions@github.com"
-          fi
-
-      - name: Update metadata for batch ${{ matrix.batch }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python -m openneuro_studies.update_metadata \
-            --batch ${{ matrix.batch }} \
-            --total-batches 4 \
-            --cache-dir .cache
-
-      - name: Run tests on updated metadata
-        run: |
-          pytest tests/test_metadata.py -v
-
-      - name: Commit changes (skip in act)
-        if: ${{ !env.ACT }}  # Only commit in real GitHub Actions
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add studies.tsv studies_derivatives.tsv
-          git commit -m "Update metadata [skip ci]" || echo "No changes"
-          git push
-
-      - name: Upload artifacts (GitHub only)
-        if: ${{ !env.ACT }}  # Artifacts don't work well in act
-        uses: actions/upload-artifact@v3
-        with:
-          name: metadata-batch-${{ matrix.batch }}
-          path: |
-            studies.tsv
-            studies_derivatives.tsv
-            logs/*.log
-
-      - name: Display results (act-compatible)
-        run: |
-          if [ -n "$ACT" ]; then
-            echo "Running in act - results in local files"
-            ls -lh studies*.tsv
-          else
-            echo "Running in GitHub Actions - results uploaded as artifacts"
-          fi
-
-  # Job to test scheduled workflow logic locally with act
-  validate-datasets:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Run validation
-        run: |
-          python -m openneuro_studies.validate --sample 10
-
-      - name: Check rate limit (requires real GitHub token)
-        if: ${{ !env.ACT }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python -m openneuro_studies.check_rate_limit
-```
-
-**Testing Workflow Locally with act**:
+#### Workflow Steps
 
 ```bash
-# Install act (if not already installed)
-# brew install act  # macOS
-# or download from https://github.com/nektos/act/releases
+# Manual equivalent (what the Python code does):
 
-# Create .secrets file with GitHub token
-echo "GITHUB_TOKEN=ghp_your_token" > .secrets
+# 1. Configure .gitmodules
+git config -f .gitmodules submodule."name".path "path/to/submodule"
+git config -f .gitmodules submodule."name".url "https://example.com/repo.git"
+git config -f .gitmodules submodule."name".datalad-id "uuid-here"
 
-# Test specific job
-act -j update-metadata
+# 2. Stage .gitmodules
+git add .gitmodules
 
-# Test scheduled workflow (cron can't be tested, but job can)
-act schedule -j update-metadata
+# 3. Add gitlink pointing to specific commit
+mkdir -p path/to/submodule
+git update-index --add --cacheinfo 160000,<commit-sha>,path/to/submodule
 
-# Test with specific matrix value
-act -j update-metadata --matrix batch:1
+# 4. Commit
+git commit -m "Add submodule without cloning"
 
-# Use smaller Docker image for faster testing
-act -j update-metadata -P ubuntu-latest=catthehacker/ubuntu:act-latest
-
-# Verbose output for debugging
-act -j update-metadata -v
-
-# Dry run to see what would happen
-act -j update-metadata -n
+# Later, if you need to actually use the submodule:
+git submodule update --init path/to/submodule
 ```
 
-**Summary**: Design workflows for full GitHub Actions capabilities, use `$ACT` environment variable for conditional logic, keep matrices simple for act compatibility, and test critical paths locally while accepting that some features (scheduled triggers, full artifacts, services) only work in GitHub's environment.
+#### Alternatives Considered
 
-## 6. Outdatedness Calculation Without Cloning
+1. **`git submodule add <url> <path>`**: Rejected as it requires full clone
+   - Pros: Official command, automatic setup
+   - Cons: Clones entire repository, slow for 1000+ datasets, requires ~TB disk space
 
-**Decision**: Use GitHub Compare API (`/repos/{owner}/{repo}/compare/{base}...{head}`) with PyGithub's `repo.compare()` method to calculate commit counts between versions without cloning.
+2. **`datalad clone -d . <url> <path>`**: Rejected due to cloning overhead
+   - Pros: DataLad-native, preserves metadata
+   - Cons: Same cloning issue, even slower startup
 
-**Rationale**:
+3. **Sparse checkout**: Rejected as still requires clone operation
+   - Pros: Reduces disk usage after clone
+   - Cons: Still needs initial clone, complex setup
 
-The GitHub Compare API provides exactly what we need: given two commit SHAs, tags, or branch names, it returns comparison metadata including `ahead_by` and `behind_by` counts. PyGithub exposes this via `repo.compare(base, head)`, which returns a `Comparison` object with these attributes.
+4. **GitHub API only (no submodules)**: Rejected as loses git benefits
+   - Pros: No git overhead
+   - Cons: Loses version tracking, submodule structure benefits, git-based workflows
 
-For calculating derivative outdatedness, we need to determine how many commits the raw dataset has received since the derivative was processed. This requires:
-1. Identifying the raw dataset version used for derivative processing (from SourceDatasets)
-2. Getting the current raw dataset version (latest tag or HEAD)
-3. Comparing these two refs using the Compare API
+---
 
-The Compare API works with any two refs (tags, branches, commits), making it flexible. It returns the commit count without transferring file contents, making it efficient. The API response is cacheable (request counts against rate limit but can be cached with requests-cache).
+### 2.2 .gitmodules Format and DataLad Conventions
 
-When the API is insufficient (e.g., non-GitHub repositories like forgejo instances), we fall back to shallow cloning with depth limiting or marking the calculation as unavailable.
+#### Decision
+Follow DataLad's extended `.gitmodules` format with `datalad-id` and `datalad-url` fields in addition to standard git `path` and `url` fields.
 
-**Implementation Strategy**:
+#### Rationale
+- Preserves DataLad dataset identity across locations and renames
+- `datalad-id` enables dataset tracking across entire history
+- `datalad-url` supports special URL schemes (ria+http, ria+ssh)
+- Compatible with standard git (extra fields ignored by git)
+- Maintains provenance for BIDS dataset requirements
 
-```
-Outdatedness Calculation Flow:
-┌────────────────────────────────────────────────────────────┐
-│ 1. Extract derivative metadata                             │
-│    - SourceDatasets from dataset_description.json          │
-│    - Parse raw dataset ID (e.g., ds000001)                 │
-│    - Parse version processed (e.g., "1.0.3" from DOI/URL)  │
-└────────┬───────────────────────────────────────────────────┘
-         ▼
-┌────────────────────────────────────────────────────────────┐
-│ 2. Get current raw dataset version                         │
-│    - Fetch latest tag via GitHub API                       │
-│    - Or use HEAD commit if no tags                         │
-└────────┬───────────────────────────────────────────────────┘
-         ▼
-┌────────────────────────────────────────────────────────────┐
-│ 3. Calculate commit count using Compare API                │
-│    - repo.compare(base=processed_version, head=current)    │
-│    - Extract ahead_by count from Comparison object         │
-│    - Cache result for 6 hours                              │
-└────────┬───────────────────────────────────────────────────┘
-         │ ✓ Success → Return commit count
-         │ ✗ Fail (non-GitHub, API error, etc.)
-         ▼
-┌────────────────────────────────────────────────────────────┐
-│ 4. Fallback strategies                                     │
-│    A. Try forgejo/gitea API if known instance             │
-│    B. Shallow clone with depth limit (git clone --depth)  │
-│    C. Mark as "unknown" and schedule for batch processing │
-└────────────────────────────────────────────────────────────┘
+#### Format Specification
+
+```ini
+[submodule "descriptive-name"]
+    path = relative/path/in/parent
+    url = https://github.com/org/repo.git
+    datalad-id = uuid-v4-here
+    datalad-url = https://github.com/org/repo.git
 ```
 
-**Fallback Approach**:
-
-When GitHub API is unavailable or insufficient:
-
-1. **Forgejo/Gitea instances**: Check if repository is on known forgejo instance (e.g., cerebra.fz-juelich.de), use their compare API (similar to GitHub)
-
-2. **Shallow clone**: Use `git clone --depth=1` to get HEAD, then fetch specific tag and calculate:
-   ```bash
-   git clone --depth=1 --branch current_tag https://...
-   git fetch --depth=50 origin old_tag
-   git rev-list --count old_tag..current_tag
-   ```
-
-3. **Mark as unknown**: For difficult cases, store `outdatedness: "unknown"` in metadata and schedule for batch processing during off-hours
-
-**Code Example**:
+#### Code Example
 
 ```python
-from github import Github
-from pathlib import Path
-from typing import Optional, Dict, Any, Tuple
-import re
-import subprocess
-import logging
-from datetime import timedelta
-import requests_cache
-
-logger = logging.getLogger(__name__)
-
-class OutdatednessCalculator:
+def format_gitmodules_entry(
+    name: str,
+    path: str,
+    url: str,
+    datalad_id: str = None,
+    extra_fields: dict = None
+) -> str:
     """
-    Calculate how outdated derivatives are without cloning repositories.
-    Uses GitHub Compare API as primary method.
+    Generate .gitmodules entry in DataLad format.
+
+    Args:
+        name: Submodule name
+        path: Relative path in parent repo
+        url: Clone URL for submodule
+        datalad_id: DataLad UUID (optional)
+        extra_fields: Additional key-value pairs
+
+    Returns:
+        Formatted .gitmodules section
     """
+    lines = [f'[submodule "{name}"]']
+    lines.append(f'\tpath = {path}')
+    lines.append(f'\turl = {url}')
 
-    def __init__(self, github_client: Github, cache_dir: Path):
-        self.github = github_client
-        self.cache_dir = cache_dir
+    if datalad_id:
+        lines.append(f'\tdatalad-id = {datalad_id}')
+        lines.append(f'\tdatalad-url = {url}')
 
-        # Cache comparison results for 6 hours
-        requests_cache.install_cache(
-            cache_name=str(cache_dir / "outdatedness_cache"),
-            expire_after=timedelta(hours=6),
-        )
+    if extra_fields:
+        for key, value in extra_fields.items():
+            lines.append(f'\t{key} = {value}')
 
-    def parse_openneuro_dataset_id(self, source_dataset: Dict[str, Any]) -> Optional[str]:
-        """
-        Extract OpenNeuro dataset ID from SourceDatasets entry.
+    return '\n'.join(lines)
 
-        Examples:
-            - URL: "https://openneuro.org/datasets/ds000001" → "ds000001"
-            - DOI: "doi:10.18112/openneuro.ds000001.v1.0.3" → "ds000001"
-            - DOI: "10.18112/openneuro.ds000001.v1.0.3" → "ds000001"
-        """
-        url = source_dataset.get('URL', '')
-        doi = source_dataset.get('DOI', '')
+# Example: OpenNeuro raw dataset
+raw_entry = format_gitmodules_entry(
+    name='ds000001-raw',
+    path='sourcedata/raw',
+    url='https://github.com/OpenNeuroDatasets/ds000001',
+    datalad_id='9850e7d6-100e-11e5-96f6-002590c1b0b6'
+)
 
-        # Try to extract from URL
-        url_match = re.search(r'datasets/(ds\d+)', url)
-        if url_match:
-            return url_match.group(1)
+# Example: Derivative dataset
+derivative_entry = format_gitmodules_entry(
+    name='ds000001-fmriprep',
+    path='derivatives/fmriprep-21.0.1',
+    url='https://github.com/OpenNeuroDerivatives/ds000001-fmriprep',
+    datalad_id='eb586851-1a79-4671-aded-31384b3d5d7f'
+)
 
-        # Try to extract from DOI
-        doi_match = re.search(r'openneuro\.(ds\d+)', doi)
-        if doi_match:
-            return doi_match.group(1)
-
-        return None
-
-    def parse_version_from_source(self, source_dataset: Dict[str, Any]) -> Optional[str]:
-        """
-        Extract version from SourceDatasets entry.
-
-        Examples:
-            - Version: "1.0.3" → "1.0.3"
-            - DOI: "doi:10.18112/openneuro.ds000001.v1.0.3" → "1.0.3"
-            - URL: "https://openneuro.org/datasets/ds000001/versions/1.0.3" → "1.0.3"
-        """
-        version = source_dataset.get('Version', '')
-        url = source_dataset.get('URL', '')
-        doi = source_dataset.get('DOI', '')
-
-        # Try explicit Version field first
-        if version and re.match(r'\d+\.\d+\.\d+', version):
-            return version
-
-        # Try to extract from URL
-        url_match = re.search(r'versions?/(\d+\.\d+\.\d+)', url)
-        if url_match:
-            return url_match.group(1)
-
-        # Try to extract from DOI
-        doi_match = re.search(r'\.v?(\d+\.\d+\.\d+)', doi)
-        if doi_match:
-            return doi_match.group(1)
-
-        return None
-
-    def get_latest_version(self, repo_name: str) -> Optional[str]:
-        """
-        Get latest version tag for a repository.
-        Returns tag name or None if no tags exist.
-        """
-        try:
-            repo = self.github.get_repo(repo_name)
-            tags = repo.get_tags()
-
-            # Get first tag (most recent)
-            latest_tag = tags[0]
-            return latest_tag.name
-
-        except IndexError:
-            # No tags
-            logger.debug(f"No tags found for {repo_name}")
-            return None
-        except Exception as e:
-            logger.error(f"Error fetching tags for {repo_name}: {e}")
-            return None
-
-    def calculate_commits_between(self, repo_name: str, base_ref: str, head_ref: str) -> Optional[int]:
-        """
-        Calculate number of commits between two refs using GitHub Compare API.
-
-        Args:
-            repo_name: Repository in format "owner/repo"
-            base_ref: Base reference (tag, branch, commit)
-            head_ref: Head reference (tag, branch, commit)
-
-        Returns:
-            Number of commits head is ahead of base, or None if comparison fails
-        """
-        try:
-            repo = self.github.get_repo(repo_name)
-
-            # Use GitHub Compare API
-            # Returns Comparison object with ahead_by, behind_by attributes
-            comparison = repo.compare(base_ref, head_ref)
-
-            logger.info(f"Comparison {repo_name} {base_ref}...{head_ref}: "
-                       f"ahead_by={comparison.ahead_by}, behind_by={comparison.behind_by}")
-
-            # ahead_by is the number of commits head is ahead of base
-            return comparison.ahead_by
-
-        except Exception as e:
-            logger.error(f"Comparison failed for {repo_name} {base_ref}...{head_ref}: {e}")
-            return None
-
-    def calculate_derivative_outdatedness(self,
-                                          derivative_id: str,
-                                          source_datasets: list,
-                                          org_prefix: str = "OpenNeuroDatasets") -> Dict[str, Any]:
-        """
-        Calculate outdatedness for a derivative dataset.
-
-        Args:
-            derivative_id: Derivative dataset ID (e.g., "ds001234")
-            source_datasets: List of SourceDatasets from dataset_description.json
-            org_prefix: GitHub organization for raw datasets
-
-        Returns:
-            Dictionary with outdatedness info per source dataset
-        """
-        outdatedness_info = {}
-
-        for source in source_datasets:
-            # Extract dataset ID
-            dataset_id = self.parse_openneuro_dataset_id(source)
-            if not dataset_id:
-                logger.warning(f"Could not parse dataset ID from {source}")
-                outdatedness_info[str(source)] = {
-                    "status": "error",
-                    "message": "Could not parse dataset ID"
-                }
-                continue
-
-            # Extract version derivative was processed from
-            processed_version = self.parse_version_from_source(source)
-            if not processed_version:
-                logger.warning(f"Could not parse version from {source}")
-                outdatedness_info[dataset_id] = {
-                    "status": "error",
-                    "message": "Could not parse processed version"
-                }
-                continue
-
-            # Get current latest version
-            repo_name = f"{org_prefix}/{dataset_id}"
-            current_version = self.get_latest_version(repo_name)
-
-            if not current_version:
-                logger.warning(f"No tags found for {repo_name}")
-                outdatedness_info[dataset_id] = {
-                    "status": "error",
-                    "message": "No version tags found",
-                    "processed_version": processed_version
-                }
-                continue
-
-            # Calculate commit difference
-            commit_count = self.calculate_commits_between(
-                repo_name=repo_name,
-                base_ref=processed_version,
-                head_ref=current_version
-            )
-
-            if commit_count is None:
-                # Try fallback method
-                commit_count = self._fallback_commit_count(
-                    repo_name=repo_name,
-                    base_ref=processed_version,
-                    head_ref=current_version
-                )
-
-            outdatedness_info[dataset_id] = {
-                "status": "ok" if commit_count is not None else "error",
-                "processed_version": processed_version,
-                "current_version": current_version,
-                "commits_behind": commit_count if commit_count is not None else "unknown",
-                "is_outdated": commit_count > 0 if commit_count is not None else None
-            }
-
-        return outdatedness_info
-
-    def _fallback_commit_count(self, repo_name: str, base_ref: str, head_ref: str) -> Optional[int]:
-        """
-        Fallback method: shallow clone and calculate commits.
-        Only used when GitHub API fails.
-        """
-        try:
-            # Create temporary directory
-            import tempfile
-            with tempfile.TemporaryDirectory() as tmpdir:
-                repo_url = f"https://github.com/{repo_name}"
-
-                # Shallow clone at head ref
-                subprocess.run(
-                    ['git', 'clone', '--depth=1', '--branch', head_ref, repo_url, tmpdir],
-                    check=True,
-                    capture_output=True,
-                    timeout=60
-                )
-
-                # Fetch base ref with limited depth
-                subprocess.run(
-                    ['git', 'fetch', '--depth=100', 'origin', f'refs/tags/{base_ref}:refs/tags/{base_ref}'],
-                    cwd=tmpdir,
-                    check=True,
-                    capture_output=True,
-                    timeout=60
-                )
-
-                # Count commits
-                result = subprocess.run(
-                    ['git', 'rev-list', '--count', f'{base_ref}..{head_ref}'],
-                    cwd=tmpdir,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
-
-                count = int(result.stdout.strip())
-                logger.info(f"Fallback method succeeded: {base_ref}..{head_ref} = {count} commits")
-                return count
-
-        except Exception as e:
-            logger.error(f"Fallback method failed: {e}")
-            return None
-
-# Usage example
-if __name__ == "__main__":
-    from github import Github
-    import os
-
-    # Initialize
-    github = Github(os.getenv('GITHUB_TOKEN'))
-    calculator = OutdatednessCalculator(github, Path.home() / ".cache" / "outdatedness")
-
-    # Example derivative with SourceDatasets
-    derivative_id = "ds006185"
-    source_datasets = [
-        {
-            "URL": "https://openneuro.org/datasets/ds006131",
-            "DOI": "doi:10.18112/openneuro.ds006131.v1.0.3",
-            "Version": "1.0.3"
-        }
-    ]
-
-    # Calculate outdatedness
-    outdatedness = calculator.calculate_derivative_outdatedness(
-        derivative_id=derivative_id,
-        source_datasets=source_datasets
-    )
-
-    # Display results
-    for dataset_id, info in outdatedness.items():
-        if info['status'] == 'ok':
-            print(f"{dataset_id}: {info['commits_behind']} commits behind")
-            print(f"  Processed version: {info['processed_version']}")
-            print(f"  Current version: {info['current_version']}")
-            print(f"  Is outdated: {info['is_outdated']}")
-        else:
-            print(f"{dataset_id}: ERROR - {info.get('message', 'Unknown error')}")
+print(raw_entry)
+print()
+print(derivative_entry)
 ```
 
-## Summary
+#### Output
 
-This research has identified optimal technical approaches for the OpenNeuroStudies infrastructure refactoring:
+```ini
+[submodule "ds000001-raw"]
+	path = sourcedata/raw
+	url = https://github.com/OpenNeuroDatasets/ds000001
+	datalad-id = 9850e7d6-100e-11e5-96f6-002590c1b0b6
+	datalad-url = https://github.com/OpenNeuroDatasets/ds000001
 
-**Concurrency**: `ThreadPoolExecutor` provides the right balance of simplicity, I/O-bound performance, and DataLad compatibility. Thread-based concurrency with explicit locks for shared state (studies.tsv) enables efficient parallel processing of 1000+ datasets without the complexity of process-based parallelism.
+[submodule "ds000001-fmriprep"]
+	path = derivatives/fmriprep-21.0.1
+	url = https://github.com/OpenNeuroDerivatives/ds000001-fmriprep
+	datalad-id = eb586851-1a79-4671-aded-31384b3d5d7f
+	datalad-url = https://github.com/OpenNeuroDerivatives/ds000001-fmriprep
+```
 
-**GitHub API Caching**: The `requests-cache` library with conditional requests (ETags) offers transparent integration with PyGithub while keeping us within the 5000 req/hour rate limit. Time-based cache expiration combined with GitHub's 304 Not Modified responses (which don't count against rate limits) provides an effective caching strategy.
+#### Reading .gitmodules Programmatically
 
-**Sparse Data Access**: A multi-tiered approach using fsspec-git-annex for HTTP range requests, falling back to `git annex get --bytes`, and ultimately marking failures for batch processing provides robust NIfTI header access without full dataset cloning. This enables imaging metrics extraction as a separate operation stage.
+```python
+import configparser
+from pathlib import Path
 
-**DataLad API Usage**: The high-level `datalad.api` should be used for all standard operations (create, save, run, status), with direct git commands via subprocess for operations not exposed in the API (like submodule manipulation without cloning). The internal `datalad.support.annexrepo` should be avoided as it's designed for DataLad internal use and lacks stability guarantees.
+def read_gitmodules(repo_path: str) -> dict:
+    """
+    Parse .gitmodules file into structured dictionary.
 
-**GitHub Actions + act**: Workflows should be designed for full GitHub Actions capabilities with conditional logic using the `$ACT` environment variable to handle act's limitations. Matrix strategies, basic jobs, and Docker containers work in both, while scheduled triggers, full artifact handling, and services require workarounds or GitHub-only execution.
+    Returns:
+        Dict mapping submodule names to their properties
+    """
+    gitmodules_path = Path(repo_path) / '.gitmodules'
 
-**Outdatedness Calculation**: PyGithub's `repo.compare()` method provides efficient commit counting between versions without cloning, using GitHub's Compare API. The `Comparison` object's `ahead_by` attribute directly gives us the outdatedness metric. Fallback to shallow cloning handles edge cases.
+    if not gitmodules_path.exists():
+        return {}
 
-These decisions collectively enable efficient processing of 1000+ datasets with minimal cloning, intelligent API usage staying within rate limits, and robust error handling for production reliability.
+    config = configparser.ConfigParser()
+    config.read(gitmodules_path)
+
+    submodules = {}
+    for section in config.sections():
+        if section.startswith('submodule '):
+            name = section.replace('submodule ', '').strip('"')
+            submodules[name] = dict(config[section])
+
+    return submodules
+
+# Example usage
+submodules = read_gitmodules('study-ds000001')
+for name, props in submodules.items():
+    print(f"{name}:")
+    print(f"  Path: {props['path']}")
+    print(f"  URL: {props['url']}")
+    print(f"  DataLad ID: {props.get('datalad-id', 'N/A')}")
+```
+
+#### Extracting DataLad ID from Dataset
+
+```python
+import configparser
+from pathlib import Path
+
+def get_datalad_id(dataset_path: str) -> str:
+    """
+    Extract DataLad UUID from dataset's .datalad/config file.
+
+    Returns:
+        DataLad UUID or None if not found
+    """
+    config_path = Path(dataset_path) / '.datalad' / 'config'
+
+    if not config_path.exists():
+        return None
+
+    config = configparser.ConfigParser()
+    config.read(config_path)
+
+    try:
+        return config['datalad.dataset']['id']
+    except KeyError:
+        return None
+
+# For remote datasets, get from .gitmodules in source superdataset
+def get_datalad_id_from_remote(
+    source_repo: str,
+    submodule_path: str,
+    gitmodules_content: str
+) -> str:
+    """Extract datalad-id for a submodule from .gitmodules content."""
+    config = configparser.ConfigParser()
+    config.read_string(gitmodules_content)
+
+    for section in config.sections():
+        if section.startswith('submodule '):
+            if config[section].get('path') == submodule_path:
+                return config[section].get('datalad-id')
+
+    return None
+```
+
+#### Best Practices
+
+1. **Submodule naming**: Use descriptive names (e.g., `ds000001-fmriprep`) not just paths
+2. **Path structure**: Organize by type (`sourcedata/`, `derivatives/`)
+3. **URL stability**: Prefer https URLs over ssh for public datasets
+4. **DataLad ID**: Always include for DataLad datasets (enables provenance tracking)
+5. **Comments**: .gitmodules doesn't support comments; document in README instead
+
+---
+
+### 2.3 DataLad vs Direct Git for Submodules
+
+#### Decision
+Use **direct git commands** for submodule manipulation when not cloning, use **DataLad** when working with actual dataset content.
+
+#### Rationale
+- Direct git: Faster for structural operations (no DataLad overhead)
+- Direct git: More control over submodule references without content
+- DataLad: Better for content operations (get, save, update with data)
+- Hybrid approach: Structure with git, content with DataLad
+
+#### Decision Matrix
+
+| Operation | Use | Reason |
+|-----------|-----|--------|
+| Add submodule without cloning | **Git** | DataLad requires clone |
+| Add submodule with cloning | **DataLad** | Preserves metadata |
+| Update submodule reference | **Git** | Direct SHA manipulation |
+| Fetch submodule content | **DataLad** | Handles annex content |
+| Remove submodule | **Git** | Simple reference removal |
+| Query submodule status | **DataLad** | Richer status info |
+
+#### Code Examples
+
+```python
+# Use Git for: Adding submodule link without cloning
+import subprocess
+
+subprocess.run([
+    'git', 'config', '-f', '.gitmodules',
+    'submodule.name.path', 'path'
+], check=True)
+subprocess.run([
+    'git', 'update-index', '--cacheinfo',
+    '160000,<sha>,path'
+], check=True)
+
+# Use DataLad for: Cloning and getting content
+import datalad.api as dl
+
+ds = dl.clone(
+    source='https://github.com/OpenNeuroDatasets/ds000001',
+    path='sourcedata/raw',
+    dataset='.'  # Register in parent
+)
+
+# Get specific files
+dl.get(path='sourcedata/raw/dataset_description.json')
+
+# Use Git for: Updating submodule reference
+subprocess.run([
+    'git', 'update-index', '--cacheinfo',
+    f'160000,{new_sha},sourcedata/raw'
+], check=True)
+
+# Use DataLad for: Checking what's available
+from datalad.api import Dataset
+ds = Dataset('.')
+status = ds.subdatasets()
+```
+
+#### Alternatives Considered
+1. **Always use DataLad**: Rejected due to overhead for non-content operations
+2. **Always use git**: Rejected as it loses DataLad benefits for content operations
+3. **GitPython library**: Rejected as it's another dependency; subprocess is sufficient
+
+---
+
+## 3. GitHub API for Discovery
+
+### 3.1 Reading Files Without Cloning
+
+#### Decision
+Use GitHub Contents API (`GET /repos/{owner}/{repo}/contents/{path}`) with `Accept: application/vnd.github.v3.raw` header to fetch file content directly without cloning.
+
+#### Rationale
+- No cloning overhead: Fetch only needed files (dataset_description.json)
+- Rate limit efficient: Single request per file
+- Direct access: Get raw content or base64 encoded
+- Supports specific refs: Can fetch from any branch/tag/commit
+- Essential for scaling to 1000+ datasets
+
+#### Code Example
+
+```python
+import requests
+import json
+import base64
+from typing import Optional, Dict, Any
+
+class GitHubFileReader:
+    """Read files from GitHub repositories without cloning."""
+
+    def __init__(self, token: Optional[str] = None):
+        """
+        Initialize with optional GitHub token.
+
+        Args:
+            token: GitHub personal access token (increases rate limits)
+        """
+        self.base_url = 'https://api.github.com'
+        self.session = requests.Session()
+
+        if token:
+            self.session.headers['Authorization'] = f'token {token}'
+
+        # Default to API v3
+        self.session.headers['Accept'] = 'application/vnd.github.v3+json'
+
+    def read_file_raw(
+        self,
+        owner: str,
+        repo: str,
+        path: str,
+        ref: str = None
+    ) -> str:
+        """
+        Read file content as raw text.
+
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            path: Path to file in repository
+            ref: Branch, tag, or commit SHA (default: default branch)
+
+        Returns:
+            Raw file content as string
+
+        Raises:
+            requests.HTTPError: If file not found or API error
+        """
+        url = f'{self.base_url}/repos/{owner}/{repo}/contents/{path}'
+
+        # Request raw content directly
+        headers = {'Accept': 'application/vnd.github.v3.raw'}
+        params = {}
+        if ref:
+            params['ref'] = ref
+
+        response = self.session.get(url, headers=headers, params=params)
+        response.raise_for_status()
+
+        return response.text
+
+    def read_file_json(
+        self,
+        owner: str,
+        repo: str,
+        path: str,
+        ref: str = None
+    ) -> Dict[str, Any]:
+        """
+        Read JSON file and parse it.
+
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            path: Path to JSON file
+            ref: Branch, tag, or commit SHA
+
+        Returns:
+            Parsed JSON as dictionary
+        """
+        content = self.read_file_raw(owner, repo, path, ref)
+        return json.loads(content)
+
+    def read_file_base64(
+        self,
+        owner: str,
+        repo: str,
+        path: str,
+        ref: str = None
+    ) -> tuple[str, Dict[str, Any]]:
+        """
+        Read file with metadata (includes SHA, size, etc.).
+
+        Returns:
+            Tuple of (decoded_content, metadata_dict)
+        """
+        url = f'{self.base_url}/repos/{owner}/{repo}/contents/{path}'
+
+        params = {}
+        if ref:
+            params['ref'] = ref
+
+        response = self.session.get(url, params=params)
+        response.raise_for_status()
+
+        data = response.json()
+
+        # Decode base64 content
+        if data.get('encoding') == 'base64':
+            content = base64.b64decode(data['content']).decode('utf-8')
+        else:
+            content = data['content']
+
+        metadata = {
+            'sha': data['sha'],
+            'size': data['size'],
+            'name': data['name'],
+            'path': data['path'],
+            'download_url': data.get('download_url')
+        }
+
+        return content, metadata
+
+# Example usage for OpenNeuro datasets
+reader = GitHubFileReader(token='your_github_token')
+
+# Read dataset_description.json from OpenNeuro dataset
+dataset_desc = reader.read_file_json(
+    owner='OpenNeuroDatasets',
+    repo='ds000001',
+    path='dataset_description.json'
+)
+
+print(f"Dataset Name: {dataset_desc.get('Name')}")
+print(f"BIDS Version: {dataset_desc.get('BIDSVersion')}")
+print(f"License: {dataset_desc.get('License')}")
+
+# Read from specific commit
+dataset_desc_v1 = reader.read_file_json(
+    owner='OpenNeuroDatasets',
+    repo='ds000001',
+    path='dataset_description.json',
+    ref='f8e27ac909e50b5b5e311f6be271f0b1757ebb7b'
+)
+
+# Read with metadata
+content, metadata = reader.read_file_base64(
+    owner='OpenNeuroDatasets',
+    repo='ds000001',
+    path='dataset_description.json'
+)
+print(f"File SHA: {metadata['sha']}")
+print(f"File size: {metadata['size']} bytes")
+```
+
+#### API Response Format
+
+**With `Accept: application/vnd.github.v3.raw`:**
+```
+HTTP/1.1 200 OK
+Content-Type: text/plain; charset=utf-8
+
+{
+  "Name": "Balloon Analog Risk-taking Task",
+  "BIDSVersion": "1.0.2",
+  ...
+}
+```
+
+**With default Accept header:**
+```json
+{
+  "name": "dataset_description.json",
+  "path": "dataset_description.json",
+  "sha": "a1b2c3d4e5...",
+  "size": 532,
+  "encoding": "base64",
+  "content": "ewogICJOYW1lIjogIkJhbGxvb24g...",
+  "download_url": "https://raw.githubusercontent.com/..."
+}
+```
+
+#### File Size Limits
+
+- **Up to 1 MB**: Fully supported by Contents API
+- **1-100 MB**: Limited support; use `download_url` or Git Blob API
+- **Over 100 MB**: Use Git Blob API or git-lfs
+
+For OpenNeuro datasets, `dataset_description.json` is typically < 10 KB.
+
+#### Alternatives Considered
+
+1. **Git Tree API**: More complex; better for batch operations (see section 3.4)
+2. **Raw GitHub content**: No rate limit info in response headers
+3. **`download_url` from API response**: Extra HTTP request; no auth benefits
+4. **Cloning sparse**: Still requires clone operation; slower
+
+---
+
+### 3.2 Efficient Pagination for 1000+ Repositories
+
+#### Decision
+Use Link header-based pagination with `per_page=100` for listing organization repositories, avoiding the 1000-result Search API limit.
+
+#### Rationale
+- List repositories endpoint: No 1000-result limit (unlike Search API)
+- Link headers: Official pagination mechanism
+- `per_page=100`: Maximum allowed, minimizes requests
+- Authenticated: 5,000 requests/hour vs 60 unauthenticated
+
+#### Code Example
+
+```python
+import requests
+from typing import Iterator, Dict, Any, Optional
+import re
+
+class GitHubOrgExplorer:
+    """Discover repositories in GitHub organizations."""
+
+    def __init__(self, token: Optional[str] = None):
+        self.base_url = 'https://api.github.com'
+        self.session = requests.Session()
+
+        if token:
+            self.session.headers['Authorization'] = f'token {token}'
+
+        self.session.headers['Accept'] = 'application/vnd.github.v3+json'
+
+    def list_repos(
+        self,
+        org: str,
+        repo_type: str = 'all'
+    ) -> Iterator[Dict[str, Any]]:
+        """
+        List all repositories in an organization with pagination.
+
+        Args:
+            org: Organization name (e.g., 'OpenNeuroDatasets')
+            repo_type: 'all', 'public', 'private', 'forks', 'sources', 'member'
+
+        Yields:
+            Repository dictionaries with metadata
+        """
+        url = f'{self.base_url}/orgs/{org}/repos'
+        params = {
+            'per_page': 100,  # Maximum allowed
+            'type': repo_type,
+            'page': 1
+        }
+
+        while True:
+            response = self.session.get(url, params=params)
+            response.raise_for_status()
+
+            repos = response.json()
+
+            # Yield each repository
+            for repo in repos:
+                yield repo
+
+            # Check for next page in Link header
+            link_header = response.headers.get('Link', '')
+            if not self._has_next_page(link_header):
+                break
+
+            # Increment page for next iteration
+            params['page'] += 1
+
+    def _has_next_page(self, link_header: str) -> bool:
+        """Check if Link header indicates more pages."""
+        return 'rel="next"' in link_header
+
+    def _extract_page_count(self, link_header: str) -> Optional[int]:
+        """Extract total page count from Link header."""
+        # Link header format: <...&page=10>; rel="last"
+        match = re.search(r'&page=(\d+)>; rel="last"', link_header)
+        return int(match.group(1)) if match else None
+
+    def get_repo_metadata(
+        self,
+        owner: str,
+        repo: str
+    ) -> Dict[str, Any]:
+        """
+        Get detailed metadata for a specific repository.
+
+        Returns:
+            Repository metadata including default_branch, created_at, etc.
+        """
+        url = f'{self.base_url}/repos/{owner}/{repo}'
+        response = self.session.get(url)
+        response.raise_for_status()
+        return response.json()
+
+    def list_repo_refs(
+        self,
+        owner: str,
+        repo: str,
+        ref_type: str = 'heads'
+    ) -> Iterator[Dict[str, Any]]:
+        """
+        List references (branches, tags) in a repository.
+
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            ref_type: 'heads' (branches) or 'tags'
+
+        Yields:
+            Reference dictionaries with name and SHA
+        """
+        url = f'{self.base_url}/repos/{owner}/{repo}/git/refs/{ref_type}'
+        params = {'per_page': 100, 'page': 1}
+
+        while True:
+            response = self.session.get(url, params=params)
+            response.raise_for_status()
+
+            refs = response.json()
+            for ref in refs:
+                yield ref
+
+            if not self._has_next_page(response.headers.get('Link', '')):
+                break
+
+            params['page'] += 1
+
+# Example: Discover all OpenNeuro datasets
+explorer = GitHubOrgExplorer(token='your_github_token')
+
+print("OpenNeuroDatasets repositories:")
+for i, repo in enumerate(explorer.list_repos('OpenNeuroDatasets'), 1):
+    print(f"{i}. {repo['name']} - {repo['default_branch']} "
+          f"({repo['updated_at']})")
+
+    if i >= 10:  # Limit output for example
+        print("... (continuing)")
+        break
+
+# Get full count
+all_repos = list(explorer.list_repos('OpenNeuroDatasets'))
+print(f"\nTotal repositories: {len(all_repos)}")
+
+# Example: Get specific dataset metadata
+ds_metadata = explorer.get_repo_metadata('OpenNeuroDatasets', 'ds000001')
+print(f"\nds000001 metadata:")
+print(f"  Default branch: {ds_metadata['default_branch']}")
+print(f"  Clone URL: {ds_metadata['clone_url']}")
+print(f"  Size: {ds_metadata['size']} KB")
+
+# Example: List all tags (releases) for a dataset
+print(f"\nds000001 tags:")
+for tag in explorer.list_repo_refs('OpenNeuroDatasets', 'ds000001', 'tags'):
+    tag_name = tag['ref'].replace('refs/tags/', '')
+    print(f"  {tag_name}: {tag['object']['sha']}")
+```
+
+#### Link Header Format
+
+```
+Link: <https://api.github.com/organizations/123/repos?page=2&per_page=100>; rel="next",
+      <https://api.github.com/organizations/123/repos?page=15&per_page=100>; rel="last"
+```
+
+Possible `rel` values:
+- `next`: URL for next page
+- `last`: URL for last page
+- `first`: URL for first page
+- `prev`: URL for previous page
+
+#### Pagination Best Practices
+
+1. **Check rate limits** before starting large batch operations
+2. **Use per_page=100** to minimize request count
+3. **Follow Link headers** instead of manually constructing URLs
+4. **Handle empty results** gracefully (end of pagination)
+5. **Monitor X-RateLimit-Remaining** header during iteration
+
+#### Alternatives Considered
+
+1. **Search API**: Limited to 1000 results; rejected
+2. **Manual page counting**: Fragile if results change; rejected
+3. **GraphQL API**: More complex; consider for future optimization
+4. **PyGithub library**: Hides details; prefer explicit control for now
+
+---
+
+### 3.3 ETag-Based Caching for Rate Limit Management
+
+#### Decision
+Implement conditional requests using `If-None-Match` with ETag caching to reduce rate limit consumption and enable efficient incremental updates.
+
+#### Rationale
+- 304 responses: Don't count against rate limit
+- Incremental updates: Only process changed datasets
+- Disk-based cache: Persist across script runs
+- Standard HTTP: Works with any API client
+- Critical for 1000+ dataset updates
+
+#### Code Example
+
+```python
+import requests
+import json
+import hashlib
+from pathlib import Path
+from typing import Optional, Dict, Any, Tuple
+import time
+
+class CachedGitHubClient:
+    """GitHub API client with ETag-based caching."""
+
+    def __init__(
+        self,
+        token: Optional[str] = None,
+        cache_dir: str = 'scratch/cache'
+    ):
+        """
+        Initialize client with caching support.
+
+        Args:
+            token: GitHub personal access token
+            cache_dir: Directory for cache storage
+        """
+        self.base_url = 'https://api.github.com'
+        self.session = requests.Session()
+
+        if token:
+            self.session.headers['Authorization'] = f'token {token}'
+
+        self.session.headers['Accept'] = 'application/vnd.github.v3+json'
+
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+        self.etag_file = self.cache_dir / 'etags.json'
+        self.etags = self._load_etags()
+
+    def _load_etags(self) -> Dict[str, str]:
+        """Load ETags from cache file."""
+        if self.etag_file.exists():
+            with open(self.etag_file, 'r') as f:
+                return json.load(f)
+        return {}
+
+    def _save_etags(self):
+        """Save ETags to cache file."""
+        with open(self.etag_file, 'w') as f:
+            json.dump(self.etags, f, indent=2)
+
+    def _cache_key(self, url: str, params: dict = None) -> str:
+        """Generate cache key from URL and parameters."""
+        key_input = url
+        if params:
+            # Sort params for consistent keys
+            param_str = '&'.join(f"{k}={v}" for k, v in sorted(params.items()))
+            key_input = f"{url}?{param_str}"
+
+        return hashlib.sha256(key_input.encode()).hexdigest()
+
+    def _get_cache_path(self, cache_key: str) -> Path:
+        """Get file path for cached response."""
+        return self.cache_dir / f"{cache_key}.json"
+
+    def get(
+        self,
+        url: str,
+        params: dict = None,
+        use_cache: bool = True
+    ) -> Tuple[Any, bool]:
+        """
+        Make GET request with ETag caching.
+
+        Args:
+            url: API endpoint URL
+            params: Query parameters
+            use_cache: Whether to use conditional requests
+
+        Returns:
+            Tuple of (response_data, from_cache)
+            - response_data: Parsed JSON response
+            - from_cache: True if 304 response (not modified)
+
+        Raises:
+            requests.HTTPError: On API errors
+        """
+        cache_key = self._cache_key(url, params)
+        cache_path = self._get_cache_path(cache_key)
+
+        # Prepare request headers
+        headers = {}
+        if use_cache and cache_key in self.etags:
+            # Add If-None-Match header for conditional request
+            headers['If-None-Match'] = self.etags[cache_key]
+
+        # Make request
+        response = self.session.get(url, params=params, headers=headers)
+
+        # Handle 304 Not Modified
+        if response.status_code == 304:
+            # Load from cache
+            if cache_path.exists():
+                with open(cache_path, 'r') as f:
+                    return json.load(f), True
+            else:
+                # Cache file missing; re-fetch without conditional
+                return self.get(url, params, use_cache=False)
+
+        # Handle other errors
+        response.raise_for_status()
+
+        # Store ETag for future requests
+        if 'ETag' in response.headers:
+            self.etags[cache_key] = response.headers['ETag']
+            self._save_etags()
+
+        # Parse and cache response
+        data = response.json()
+        with open(cache_path, 'w') as f:
+            json.dump(data, f, indent=2)
+
+        return data, False
+
+    def check_rate_limit(self) -> Dict[str, Any]:
+        """
+        Check current rate limit status.
+
+        Returns:
+            Dict with limit, remaining, reset timestamp
+        """
+        url = f'{self.base_url}/rate_limit'
+        response = self.session.get(url)
+        response.raise_for_status()
+        return response.json()['resources']['core']
+
+    def wait_for_rate_limit(self, min_remaining: int = 100):
+        """
+        Wait if rate limit is too low.
+
+        Args:
+            min_remaining: Minimum requests to keep available
+        """
+        rate_limit = self.check_rate_limit()
+        remaining = rate_limit['remaining']
+
+        if remaining < min_remaining:
+            reset_time = rate_limit['reset']
+            wait_seconds = reset_time - int(time.time()) + 60
+
+            print(f"Rate limit low ({remaining} remaining). "
+                  f"Waiting {wait_seconds}s until reset...")
+            time.sleep(wait_seconds)
+
+# Example usage
+client = CachedGitHubClient(token='your_github_token')
+
+# First request: Fetches from API, stores ETag
+url = 'https://api.github.com/repos/OpenNeuroDatasets/ds000001/contents/dataset_description.json'
+data, from_cache = client.get(url)
+print(f"First request - from cache: {from_cache}")
+
+# Second request: Returns 304 if unchanged, uses cache
+data, from_cache = client.get(url)
+print(f"Second request - from cache: {from_cache}")
+
+# Check rate limit status
+rate_limit = client.check_rate_limit()
+print(f"\nRate limit status:")
+print(f"  Limit: {rate_limit['limit']}")
+print(f"  Remaining: {rate_limit['remaining']}")
+print(f"  Resets at: {time.ctime(rate_limit['reset'])}")
+
+# Batch processing with rate limit awareness
+def process_datasets_cached(dataset_ids: list):
+    """Process multiple datasets with caching."""
+    client = CachedGitHubClient(token='your_token')
+
+    results = []
+    for ds_id in dataset_ids:
+        # Check rate limit periodically
+        if len(results) % 50 == 0:
+            client.wait_for_rate_limit(min_remaining=100)
+
+        url = f'https://api.github.com/repos/OpenNeuroDatasets/{ds_id}'
+        try:
+            data, cached = client.get(url)
+            results.append({
+                'id': ds_id,
+                'name': data.get('name'),
+                'cached': cached
+            })
+        except requests.HTTPError as e:
+            print(f"Error fetching {ds_id}: {e}")
+
+    return results
+```
+
+#### Cache Directory Structure
+
+```
+scratch/cache/
+├── etags.json                           # ETag mapping
+├── a1b2c3d4e5f6789...abcdef.json      # Cached response 1
+├── fedcba987...123456789abc.json      # Cached response 2
+└── ...
+```
+
+#### ETags File Format
+
+```json
+{
+  "a1b2c3d4e5f6789abcdef123456789abcdef": "\"6d82cfc7b33c1c9a6e9e7f1e9c6e8d5b\"",
+  "fedcba9876543210fedcba9876543210": "\"8d5b7a9c6e1f0e2d3c4b5a6e9f8d7c6b\""
+}
+```
+
+#### HTTP Flow with ETags
+
+```
+# First request
+GET /repos/OpenNeuroDatasets/ds000001/contents/dataset_description.json
+-> 200 OK
+   ETag: "abc123"
+   { ... response data ... }
+
+# Second request (file unchanged)
+GET /repos/OpenNeuroDatasets/ds000001/contents/dataset_description.json
+If-None-Match: "abc123"
+-> 304 Not Modified
+   (no body, uses cached data)
+
+# Third request (file changed)
+GET /repos/OpenNeuroDatasets/ds000001/contents/dataset_description.json
+If-None-Match: "abc123"
+-> 200 OK
+   ETag: "def456"
+   { ... new response data ... }
+```
+
+#### Rate Limit Headers
+
+Every API response includes:
+```
+X-RateLimit-Limit: 5000
+X-RateLimit-Remaining: 4995
+X-RateLimit-Reset: 1372700873
+X-RateLimit-Used: 5
+X-RateLimit-Resource: core
+```
+
+#### Benefits
+
+1. **Rate limit preservation**: 304 responses don't count
+2. **Network efficiency**: No response body for 304
+3. **Incremental updates**: Only fetch changed resources
+4. **Persistent cache**: Survives script restarts
+5. **Automatic invalidation**: New ETag = cache invalid
+
+#### Alternatives Considered
+
+1. **Time-based caching**: Less accurate; rejected
+2. **No caching**: Wastes rate limit; rejected
+3. **Database cache**: Overkill for this use case; rejected
+4. **Redis/Memcached**: Additional dependency; file-based sufficient
+
+---
+
+## 4. Summary of Decisions
+
+### DataLad Python API
+
+| Topic | Decision | Key Benefit |
+|-------|----------|-------------|
+| Import convention | `import datalad.api as dl` | Standard, concise |
+| Dataset creation | `dl.create(annex=False)` | Plain Git for metadata |
+| Error handling | `on_failure='continue'` | Batch resilience |
+| Commits | `Dataset.save(message=...)` | Provenance tracking |
+
+### Git Submodules
+
+| Topic | Decision | Key Benefit |
+|-------|----------|-------------|
+| Adding submodules | `git update-index --cacheinfo 160000` | No cloning needed |
+| .gitmodules format | DataLad extended format | Preserves DataLad IDs |
+| Tool choice | Git for structure, DataLad for content | Optimal performance |
+
+### GitHub API
+
+| Topic | Decision | Key Benefit |
+|-------|----------|-------------|
+| File reading | Contents API with raw Accept header | Direct access |
+| Pagination | Link header-based | No 1000-result limit |
+| Caching | ETag-based conditional requests | Rate limit savings |
+
+---
+
+## 5. References
+
+### Official Documentation
+- DataLad Python API: http://docs.datalad.org/en/stable/modref.html
+- DataLad Handbook: https://handbook.datalad.org/
+- GitHub REST API: https://docs.github.com/en/rest
+- Git Submodules: https://git-scm.com/book/en/v2/Git-Tools-Submodules
+- BIDS Specification: https://bids-specification.readthedocs.io/
+
+### Key Resources
+- DataLad create: http://docs.datalad.org/en/stable/generated/datalad.api.create.html
+- GitHub Contents API: https://docs.github.com/en/rest/repos/contents
+- GitHub Tree API: https://docs.github.com/en/rest/git/trees
+- GitHub Best Practices: https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api
+
+---
+
+**End of Research Document**

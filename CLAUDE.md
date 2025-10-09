@@ -3,6 +3,7 @@
 Auto-generated from all feature plans. Last updated: 2025-10-09
 
 ## Active Technologies
+- File-based (TSV, JSON, git submodules); no database required (001-read-file-doc)
 
 ### Core Stack (001-read-file-doc)
 - **Language**: Python 3.10+ (for compatibility with DataLad ecosystem)
@@ -356,6 +357,7 @@ This project follows the [OpenNeuroStudies Constitution](/.specify/memory/consti
 ✅ **Observability**: Complete status via studies.tsv and studies_derivatives.tsv
 
 ## Recent Changes
+- 001-read-file-doc: Added Python 3.10+
 
 - **2025-10-09** (001-read-file-doc): Implementation planning phase complete
   - Added core Python stack (Click, Pydantic, PyYAML, PyGithub)
