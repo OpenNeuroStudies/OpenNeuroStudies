@@ -149,8 +149,7 @@ commands:
       - name: --github-org
         type: string
         required: false
-        default: "OpenNeuroStudies"
-        help: "GitHub organization for publishing study repositories"
+        help: "Override GitHub organization from config file for publishing study repositories"
 
       - name: --dry-run
         type: flag
@@ -442,6 +441,7 @@ exit_codes:
 # Configuration File Schema (Pydantic-compatible YAML)
 # Documented for reference, actual implementation in config/models.py
 configuration_schema:
+  github_org: "string (GitHub organization for publishing study repositories, e.g., 'OpenNeuroStudies')"
   sources:
     - name: "string (friendly name)"
       organization_url: "string (GitHub org URL)"

@@ -284,6 +284,10 @@ class DerivativeDataset(BaseModel):
 **Example YAML** (`.openneuro-studies/config.yaml` at repository root):
 
 ```yaml
+# GitHub organization for publishing study repositories
+github_org: OpenNeuroStudies
+
+# Dataset sources to discover
 sources:
   - name: OpenNeuroDatasets
     organization_url: https://github.com/OpenNeuroDatasets
@@ -326,7 +330,9 @@ class SourceSpecification(BaseModel):
     exclusion_patterns: List[str] = Field(default_factory=list)
     access_token_env: Optional[str] = "GITHUB_TOKEN"
 
-class SourcesConfiguration(BaseModel):
+class OpenNeuroStudiesConfig(BaseModel):
+    github_org: str = Field(default="OpenNeuroStudies",
+                            description="GitHub organization for publishing study repositories")
     sources: List[SourceSpecification]
 ```
 

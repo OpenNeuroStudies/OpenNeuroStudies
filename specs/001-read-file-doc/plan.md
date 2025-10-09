@@ -407,7 +407,7 @@ Structure:
 ## Prerequisites
 - Python 3.10+
 - DataLad installed
-- Git with submodule support
+- Git, git-annex
 - GITHUB_TOKEN environment variable
 
 ## Installation

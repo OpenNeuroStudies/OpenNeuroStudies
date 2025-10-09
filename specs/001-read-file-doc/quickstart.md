@@ -146,6 +146,10 @@ Create a configuration file at `.openneuro-studies/config.yaml`:
 ```bash
 mkdir -p .openneuro-studies
 cat > .openneuro-studies/config.yaml <<EOF
+# GitHub organization for publishing study repositories
+github_org: OpenNeuroStudies
+
+# Dataset sources to discover
 sources:
   - name: OpenNeuroDatasets
     organization_url: https://github.com/OpenNeuroDatasets
@@ -165,11 +169,15 @@ EOF
 
 ### 2. Configure GitHub Organization (Optional)
 
-If you plan to publish study repositories to GitHub, create an organization:
+The `github_org` setting in config.yaml determines where study repositories are published.
 
+If using a custom organization:
 1. Go to https://github.com/organizations/new
-2. Create organization (e.g., "OpenNeuroStudies")
-3. Ensure your access token has write permissions for the organization
+2. Create organization (e.g., "MyOpenNeuroStudies")
+3. Update `github_org` in `.openneuro-studies/config.yaml`
+4. Ensure your GITHUB_TOKEN has write permissions for the organization
+
+You can also override per-command with `--github-org` flag
 
 ---
 
@@ -458,7 +466,7 @@ cat derivatives/bids-validator.json | jq '.issues'
 1. **Run Full Workflow**: Process all 1000+ datasets
    ```bash
    openneuro-studies discover
-   openneuro-studies organize --github-org OpenNeuroStudies
+   openneuro-studies organize  # Uses github_org from config
    openneuro-studies metadata generate --stage all
    openneuro-studies validate
    ```
@@ -485,7 +493,7 @@ cat derivatives/bids-validator.json | jq '.issues'
 | Task | Command |
 |------|---------|
 | Discover all datasets | `openneuro-studies discover` |
-| Organize specific study | `openneuro-studies organize study-ds000001 --github-org MyOrg` |
+| Organize specific study | `openneuro-studies organize study-ds000001` |
 | Generate basic metadata | `openneuro-studies metadata generate --stage basic` |
 | Generate imaging metrics | `openneuro-studies metadata generate --stage imaging` |
 | Calculate outdatedness | `openneuro-studies metadata generate --stage outdatedness` |
