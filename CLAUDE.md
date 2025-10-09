@@ -57,6 +57,7 @@ OpenNeuroStudies/                    # Repository root (BEP035 BIDS mega-analysi
 ├── study-ds000010/
 ├── ...                              # More study-{id}/ directories
 ├── dataset_description.json         # BIDS dataset description (DatasetType: "study")
+├── CHANGES                          # Version history (CPAN Changelog format)
 ├── .bidsignore                      # Exclude study-* from top-level validation
 ├── studies.tsv                      # Study metadata (wide format)
 ├── studies.json                     # Column descriptions
@@ -329,6 +330,15 @@ This repository is itself a **BIDS dataset** following [BEP035 (Mega-analysis)](
 
 - **DatasetType**: `"study"` - This is a meta-dataset aggregating information about multiple studies
 - **dataset_description.json**: At repository root following [BIDS specification](https://bids-specification.readthedocs.io/en/stable/modality-agnostic-files/dataset-description.html)
+- **CHANGES**: Version history following [CPAN Changelog convention](https://metacpan.org/dist/CPAN-Changes/view/lib/CPAN/Changes/Spec.pod)
+  - Format: `VERSION DATE\n  - Change description\n`
+  - Encoding: UTF-8
+  - Example:
+    ```
+    0.20251009.0 2025-10-09
+      - Initial infrastructure implementation
+      - Dataset discovery and organization
+    ```
 - **.bidsignore**: Excludes `study-*` subdirectories from top-level BIDS validation
   - Each `study-{id}/` is its own BIDS dataset (DatasetType: "study")
   - Top-level validation focuses on metadata files (studies.tsv, studies_derivatives.tsv)

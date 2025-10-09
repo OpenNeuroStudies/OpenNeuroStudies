@@ -111,6 +111,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-031**: System MUST extract imaging modality file counts from raw datasets (bold_num, t1w_num, t2w_num) and populate studies.tsv
 - **FR-032**: System MUST extract imaging data characteristics (bold_size, t1w_size, bold_size_max, bold_voxels) requiring sparse data access via datalad-fuse or fsspec
 - **FR-033**: System MUST implement imaging metrics extraction as a separate operation stage with sparse access to avoid full dataset cloning
+- **FR-034**: System MUST maintain top-level CHANGES file following CPAN::Changes::Spec format with UTF-8 encoding for repository version history, as required by BIDS specification for datasets
 
 ### Key Entities
 

@@ -200,6 +200,7 @@ code/
 ├── study-ds006190/
 ├── ...                          # More study-{id} directories
 ├── dataset_description.json     # BIDS dataset description (BEP035 mega-analysis)
+├── CHANGES                      # Version history (CPAN Changelog format)
 ├── .bidsignore                  # Exclude study-* from top-level BIDS validation
 ├── studies.tsv                  # Study metadata (wide format)
 ├── studies.json                 # Column descriptions
