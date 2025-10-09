@@ -1,20 +1,15 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version Change: 1.0.0 → 1.20251008.0
+Version Change: 1.20251008.0 → 1.20251009.0
 Principle Changes:
-  - Modified: II. Automation & Reproducibility - added retry policy for API calls
-  - Modified: III. Standard Formats - added JSON schema for TSV columns
-  - Modified: IV. Git/DataLad-First Workflow - refined dirty tree guidance, added commit statistics
-  - Modified: V. Observability & Monitoring - no changes
+  - Modified: III. Standard Formats - added BIDS tabular file naming conventions (snake_case requirement)
 Amended Sections:
-  - Derivative Versioning - added UUID disambiguation for same-version tools, expanded metrics
-  - Metadata Completeness - added HED Version, Subject/Session counts, datatypes list
-  - Dependencies - added Python preference, shellcheck, con-duct/duct, removed "Python for JSON"
-  - Amendment Process - changed to calendar-based MINOR versioning (YYYYMMDD format)
+  - Standard Formats - added explicit snake_case requirement for TSV column names with CamelCase exception
+  - Metadata Completeness - updated column names to snake_case (study_id, bids_version, hed_version, etc.)
 Templates Status:
   ✅ plan-template.md - Constitution Check section aligned
-  ✅ spec-template.md - Requirements sections aligned with data integrity principles
+  ✅ spec-template.md - Requirements sections aligned with BIDS tabular file conventions
   ✅ tasks-template.md - Task categorization supports automation and reproducibility
   ⚠ agent-file-template.md - Generic template, no updates required
   ⚠ checklist-template.md - Generic template, no updates required
@@ -52,11 +47,13 @@ All data operations MUST be scripted and reproducible from a clean repository st
 Use text-based, human-readable formats for all configuration and metadata.
 
 - TSV files for tabular data (studies.tsv, derivatives.tsv) to enable command-line tools like visidata
-- JSON for structured metadata following BIDS specification standards, in particular to provide description for TSV files columns
+- TSV column names MUST follow BIDS tabular file conventions (https://bids-specification.readthedocs.io/en/stable/common-principles.html#tabular-files) using snake_case (e.g., study_id, subject_count, session_min)
+- Exception: When copying metadata fields from JSON files that use CamelCase (e.g., BIDSVersion, SourceDatasets from dataset_description.json), preserve the original CamelCase naming in TSV columns
+- JSON for structured metadata following BIDS specification standards, in particular to provide description for TSV file columns via .json sidecars
 - YAML for configuration where hierarchical structure is required
 - AVOID binary formats or databases that require special tools to inspect
 
-**Rationale**: Text formats enable version control, diff viewing, and inspection with standard Unix tools. This aligns with the scientific principle of transparent, inspectable data.
+**Rationale**: Text formats enable version control, diff viewing, and inspection with standard Unix tools. BIDS tabular file conventions ensure consistency and compatibility with the neuroscience ecosystem. This aligns with the scientific principle of transparent, inspectable data.
 
 ### IV. Git/DataLad-First Workflow
 
@@ -102,7 +99,7 @@ Derivative datasets MUST include version information:
 
 ### Metadata Completeness
 
-- studies.tsv MUST include: Study ID, Name, BIDS version, HED Version, License, Authors, Number of Subjects, Min/Max number of sessions per subject (or "n/a" if single session), list of datatypes (`anat`, `func`, ...), derivatives list
+- studies.tsv MUST include: study_id, name, bids_version, hed_version, license, authors, subject_count, session_min, session_max (or "n/a" if single session), datatypes (`anat`, `func`, ...), derivatives
 - Missing or unknown values MUST be explicitly marked "n/a" rather than omitted
 - GitHub repository information MUST be preserved in submodule configuration
 
@@ -173,4 +170,4 @@ Deviations from simplicity MUST be justified:
 - Manual operations → explain why automation not possible
 - Database introduction → explain why file-based approach insufficient
 
-**Version**: 1.20251008.0 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-10-09
+**Version**: 1.20251009.0 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-10-09

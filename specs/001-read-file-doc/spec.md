@@ -13,14 +13,15 @@ As a neuroscience researcher, I need to navigate a unified collection of OpenNeu
 
 **Why this priority**: This is the foundation for the entire system. Without proper dataset discovery and organization, no other features can function. This directly addresses the core mission of making 1000+ datasets navigable and accessible.
 
-**Independent Test**: Can be fully tested by verifying that the system discovers datasets from configured sources (OpenNeuroDatasets, OpenNeuroDerivatives, etc.), organizes them into study-{id} folders with proper sourcedata/ and derivatives/ structure, and generates a complete studies.tsv index file.
+**Independent Test**: Can be fully tested by verifying that the system discovers datasets from configured sources (OpenNeuroDatasets, OpenNeuroDerivatives, etc.), organizes them into study-{id} folders with proper sourcedata/ and derivatives/ structure, and generates a complete studies.tsv index file. All linked repositories should be associated with public URLs and tested to (still) exist.
 
 **Acceptance Scenarios**:
 
-1. **Given** multiple source repositories configured in sourcedata/ (openneuro, openneuro-derivatives, openfmri), **When** the discovery script runs, **Then** all datasets are identified with their URLs and current commit states extracted from .gitmodules
+1. **Given** multiple source repositories configured in sourcedata/ (openneuro, openneuro-derivatives, openfmri), **When** the discovery script runs, **Then** all datasets are identified with their URLs and current commit states extracted from .gitmodules and Git
 2. **Given** a discovered raw dataset (e.g., ds000001), **When** the organization process runs, **Then** a study-ds000001 folder is created with sourcedata/raw/ linked as a git submodule to the original dataset
-3. **Given** derivative datasets matching a raw dataset, **When** organization runs, **Then** derivatives are linked under derivatives/{toolname-version}/ as git submodules
-4. **Given** a derivative dataset with multiple SourceDatasets (e.g., ds006190), **When** organization runs, **Then** all source datasets are linked under sourcedata/{original_id}/ without creating a single sourcedata/raw folder
+3. **Given** derivative datasets (e.g. ds006185) matching a single raw dataset (e.g. ds006131), **When** organization process runs, **Then** derivatives are linked under derivatives/{toolname-version}/ as git submodules within the raw dataset (i.e ds006131).
+4. **Given** a derivative dataset (e.g. ds006185) from OpenNeuroDatasets has a single raw source dataset, **When** organization process runs, **Then** we do NOT create a `study-{id}` for that dataset.
+5. **Given** a derivative dataset with multiple SourceDatasets (e.g., ds006190) from OpenNeuroDatasets, **When** organization process runs, **Then** we do create a `study-{id}` for that dataset and all source datasets are linked under sourcedata/{original_id}/ without creating a single sourcedata/raw folder, and the entire `study-{id}` is linked under `derivatives/study-{id}` of each original raw dataset (e.g. ds006189, ds006185, ds006131 for ds006185)
 
 ---
 
@@ -30,12 +31,12 @@ As a dataset curator, I need automatically generated and synchronized metadata f
 
 **Why this priority**: Metadata provides essential context for researchers and enables dashboard generation. It builds upon the organized structure from P1 but can be implemented and tested independently once the structure exists.
 
-**Independent Test**: Can be tested by verifying that running the metadata generation script on an existing study produces correct dataset_description.json with BIDS 1.10.1 study format, populates studies.tsv with accurate summary data, and creates derivatives.tsv listing all available derivatives with versions.
+**Independent Test**: Can be tested by verifying that running the metadata generation script on an existing study produces correct and reproducible dataset_description.json with BIDS 1.10.1 study format, populates studies.tsv with accurate summary data, and creates derivatives.tsv listing all available derivatives with versions.
 
 **Acceptance Scenarios**:
 
-1. **Given** a study folder with sourcedata/raw/, **When** metadata generation runs, **Then** dataset_description.json is created with DatasetType="study", Authors from git shortlog, Title prefixed with "Study dataset for ", and SourceDatasets referencing all sourcedata entries
-2. **Given** multiple studies with varying metadata, **When** studies.tsv generation runs, **Then** the file contains Study ID, Name, BIDS version, HED Version, License, Authors, Subject counts, Session counts, datatypes list, and derivatives list
+1. **Given** a study folder with sourcedata/raw/, **When** metadata generation runs, **Then** dataset_description.json is created with DatasetType="study", Authors from git shortlog of the study dataset, Title prefixed with "Study dataset for ", and SourceDatasets referencing all sourcedata entries
+2. **Given** multiple studies with varying metadata, **When** studies.tsv generation runs, **Then** the file contains study_id (e.g. study-ds000001), name, bids_version, hed_version, license, authors, subject_count, session_min, session_max, datatypes, and derivatives
 3. **Given** a study with 3 derivatives (e.g., fmriprep-21.0.1, mriqc-23.0.0), **When** derivatives.tsv generation runs, **Then** all derivatives are listed with versions, size statistics from git annex info, and execution metrics if available
 4. **Given** updates to source datasets or derivatives, **When** metadata sync runs, **Then** only affected studies are updated (incremental updates supported)
 
@@ -59,7 +60,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 
 ### Edge Cases
 
-- What happens when a source repository is unreachable during discovery? System should cache last known state and log the error without blocking processing of other datasets.
+- What happens when a source repository is unreachable during discovery? System should cache last known state and log the error without blocking processing of other datasets. A logs/errors.tsv file at the top level should aggregate information about all errors with columns study_id, error_type, message.
 - What happens when a dataset has malformed dataset_description.json? System should mark metadata fields as "n/a" and log validation warnings.
 - What happens when two derivatives have the same tool and version? System should disambiguate using the first 8 letters of DataLad UUID from .datalad/config.
 - What happens when SourceDatasets contains non-OpenNeuro references (DOIs, local paths)? System should preserve them in metadata but only process OpenNeuro datasets for linking.
@@ -70,6 +71,8 @@ As a data quality manager, I need automated BIDS validation results stored for e
 
 ### Functional Requirements
 
+**Note on Naming Conventions**: All TSV column names MUST follow BIDS tabular file conventions (https://bids-specification.readthedocs.io/en/stable/common-principles.html#tabular-files) using snake_case (e.g., study_id, subject_count, session_min). Exception: When copying fields directly from JSON files that use CamelCase (e.g., BIDSVersion, SourceDatasets in dataset_description.json), preserve the original CamelCase naming in the TSV columns.
+
 - **FR-001**: System MUST discover datasets from configured sources (OpenNeuroDatasets, OpenNeuroDerivatives, openfmri) without requiring full clones
 - **FR-002**: System MUST extract dataset metadata (URLs, commit SHAs, dataset_description.json) using GitHub/Forgejo tree APIs
 - **FR-003**: System MUST create study-{id} folder structures with sourcedata/ and derivatives/ subfolders
@@ -78,7 +81,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-006**: System MUST populate SourceDatasets field referencing all sourcedata entries
 - **FR-007**: System MUST generate GeneratedBy field with code provenance information
 - **FR-008**: System MUST copy or collate ReferencesAndLinks, License, Keywords, Acknowledgements, and Funding from source datasets
-- **FR-009**: System MUST generate studies.tsv with Study ID, Name, BIDS version, HED Version, License, Authors, Subject counts, Session min/max, datatypes, and derivatives list
+- **FR-009**: System MUST generate studies.tsv with study_id, name, bids_version, hed_version, license, authors, subject_count, session_min, session_max, datatypes, and derivatives columns
 - **FR-010**: System MUST generate derivatives.tsv with tool names, versions, UUID disambiguation, size statistics, and execution metrics
 - **FR-011**: System MUST generate studies.json describing TSV column purposes following BIDS sidecar conventions
 - **FR-012**: System MUST support incremental updates (process specific studies, not all at once)
@@ -112,7 +115,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **SC-003**: 100% of organized studies have valid dataset_description.json files conforming to BIDS 1.10.1 study specification
 - **SC-004**: studies.tsv provides complete overview with all required columns populated (or marked "n/a" where data unavailable)
 - **SC-005**: Incremental updates process individual studies in under 30 seconds per study
-- **SC-006**: Git submodule linking completes without cloning, reducing disk space usage by 95% compared to full clones
+- **SC-006**: Git submodule linking completes without cloning, reducing disk space and performance
 - **SC-007**: Researchers can locate any dataset and its derivatives within 3 clicks/commands using studies.tsv index
 - **SC-008**: BIDS validation results are available for all study datasets within 24 hours of organization
 - **SC-009**: System handles API failures gracefully with less than 1% data loss using cached state
