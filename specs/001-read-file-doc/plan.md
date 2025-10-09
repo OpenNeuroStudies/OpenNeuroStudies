@@ -354,8 +354,9 @@ commands:
 
   organize:
     description: Organize datasets into study structures
+    arguments:
+      targets: Study IDs, URLs, or paths (positional, supports globs)
     options:
-      --study-id: Process specific study (for incremental updates)
       --github-org: GitHub organization for study repositories
       --dry-run: Show what would be done without executing
 
@@ -363,19 +364,23 @@ commands:
     subcommands:
       generate:
         description: Generate metadata files
+        arguments:
+          targets: Study IDs or globs (positional)
         options:
-          --study-id: Process specific study
           --stage: Metadata generation stage (basic|imaging|outdatedness)
 
       sync:
         description: Incrementally sync metadata for updated studies
+        arguments:
+          targets: Study IDs or globs (positional)
         options:
           --check-sources: Check source datasets for updates
 
   validate:
     description: Run BIDS validation on study datasets
+    arguments:
+      targets: Study IDs or globs (positional)
     options:
-      --study-id: Validate specific study
       --validator-version: bids-validator-deno version
 ```
 

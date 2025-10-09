@@ -198,7 +198,7 @@ openneuro-studies --debug-level DEBUG discover --limit 10
 ```
 [INFO] Discovering datasets from OpenNeuroDatasets...
 [INFO] Found 1000+ datasets
-[INFO] Cached API responses to .cache/openneuro-studies/
+[INFO] Cached API responses to .openneuro-studies/cache/
 [INFO] Saved metadata to discovered.json
 ```
 
@@ -267,7 +267,7 @@ Run BIDS validation on study datasets:
 
 ```bash
 # Validate specific study
-openneuro-studies validate --study-id ds000001
+openneuro-studies validate study-ds000001
 
 # Validate all studies (parallel)
 openneuro-studies validate --parallel 4
@@ -334,7 +334,7 @@ Update specific study when source dataset changes:
 
 ```bash
 # Sync metadata for specific study
-openneuro-studies metadata sync --study-id ds000001
+openneuro-studies metadata sync study-ds000001
 
 # Sync all studies with updated sources
 openneuro-studies metadata sync --check-sources
@@ -414,7 +414,7 @@ git config --global user.email "you@example.com"
 git annex version
 
 # Retry with debug logging
-openneuro-studies --debug-level DEBUG organize --study-id ds000001
+openneuro-studies --debug-level DEBUG organize study-ds000001
 ```
 
 ### Missing Source Datasets
@@ -485,7 +485,7 @@ cat derivatives/bids-validator.json | jq '.issues'
 | Task | Command |
 |------|---------|
 | Discover all datasets | `openneuro-studies discover` |
-| Organize specific study | `openneuro-studies organize --study-id ds000001 --github-org MyOrg` |
+| Organize specific study | `openneuro-studies organize study-ds000001 --github-org MyOrg` |
 | Generate basic metadata | `openneuro-studies metadata generate --stage basic` |
 | Generate imaging metrics | `openneuro-studies metadata generate --stage imaging` |
 | Calculate outdatedness | `openneuro-studies metadata generate --stage outdatedness` |

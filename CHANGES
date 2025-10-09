@@ -1,0 +1,6 @@
+0.20251009.0 2025-10-09
+  - Initial infrastructure implementation
+  - Dataset discovery and organization framework
+  - Metadata generation system design
+  - BIDS compliance validation integration
+  - BEP035 mega-analysis dataset structure
