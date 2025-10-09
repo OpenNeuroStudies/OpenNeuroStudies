@@ -1,9 +1,8 @@
 """Derivative dataset model."""
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
-from pydantic_core import core_schema
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class DerivativeDataset(BaseModel):
@@ -43,16 +42,12 @@ class DerivativeDataset(BaseModel):
             raise ValueError("datalad_uuid must be 36 characters")
         return v
 
-    @field_validator("uuid_prefix", mode="before")
-    @classmethod
-    def extract_uuid_prefix(
-        cls, v: Optional[str], info: core_schema.ValidationInfo
-    ) -> Optional[str]:
-        """Extract first 8 characters of datalad_uuid as prefix."""
-        if v is None and "datalad_uuid" in info.data:
-            uuid_value: Any = info.data["datalad_uuid"]
-            return str(uuid_value)[:8]
-        return v
+    @model_validator(mode="after")
+    def extract_uuid_prefix(self) -> "DerivativeDataset":
+        """Extract first 8 characters of datalad_uuid as prefix if not provided."""
+        if self.uuid_prefix is None:
+            self.uuid_prefix = self.datalad_uuid[:8]
+        return self
 
 
 def generate_derivative_id(
