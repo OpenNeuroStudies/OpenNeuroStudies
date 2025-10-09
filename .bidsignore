@@ -1,0 +1,5 @@
+# BIDS Ignore Configuration
+# Exclude study-* subdirectories as they are individual study datasets
+# managed separately, not part of the top-level BEP035 mega-analysis dataset
+
+study-*

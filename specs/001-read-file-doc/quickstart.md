@@ -12,6 +12,8 @@ This guide will help you set up the OpenNeuroStudies infrastructure and organize
 - Generated metadata files (studies.tsv, studies_derivatives.tsv)
 - Validated BIDS compliance
 
+**Note**: This repository is itself a BIDS dataset following [BEP035 (Mega-analysis)](https://bids.neuroimaging.io/extensions/beps/bep_035.html) with `DatasetType: "study"`. The repository root contains `dataset_description.json` and `.bidsignore` to exclude individual `study-*` subdirectories from top-level validation.
+
 **Estimated time**: 15-30 minutes for setup + initial discovery
 
 ---

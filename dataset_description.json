@@ -1,0 +1,29 @@
+{
+  "Name": "OpenNeuroStudies: collection of OpenNeuro datasets and their derivatives",
+  "BIDSVersion": "1.10.1",
+  "DatasetType": "study",
+  "License": "CC0",
+  "Authors": [
+    "Yaroslav O. Halchenko <debian@onerussian.com>"
+  ],
+  "HowToAcknowledge": "Please cite the OpenNeuroStudies project and the individual datasets included in your analysis.",
+  "Funding": [
+    "NIH #2R24MH117179-06 OpenNeuro: An open archive for analysis and sharing of BRAIN Initiative data.  PI: Poldrack (Stanford)"
+  ],
+  "EthicsApprovals": [],
+  "ReferencesAndLinks": [
+    "https://openneuro.org",
+    "https://github.com/OpenNeuroStudies/OpenNeuroStudies",
+    "https://bids.neuroimaging.io/extensions/beps/bep_035.html",
+    "https://handbook.datalad.org/en/latest/basics/101-127-yoda.html"
+  ],
+  "DatasetDOI": "",
+  "GeneratedBy": [
+    {
+      "Name": "Claude Code",
+      "Version": "claude-sonnet-4-5-20250929",
+      "Description": "AI assistant (Anthropic's Claude) used for designing and implementing the OpenNeuroStudies infrastructure, including dataset organization, metadata generation, and BIDS compliance validation scripts",
+      "CodeURL": "https://github.com/OpenNeuroStudies/OpenNeuroStudies"
+    }
+  ]
+}

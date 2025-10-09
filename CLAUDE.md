@@ -34,7 +34,7 @@ Auto-generated from all feature plans. Last updated: 2025-10-09
 **Note**: All code is in `code/` subdirectory. Repository root contains generated data.
 
 ```
-OpenNeuroStudies/                    # Repository root (data directory)
+OpenNeuroStudies/                    # Repository root (BEP035 BIDS mega-analysis dataset)
 ├── code/                            # All source code
 │   ├── src/
 │   │   └── openneuro_studies/       # Main package
@@ -56,6 +56,8 @@ OpenNeuroStudies/                    # Repository root (data directory)
 ├── study-ds000001/                  # Study datasets (generated)
 ├── study-ds000010/
 ├── ...                              # More study-{id}/ directories
+├── dataset_description.json         # BIDS dataset description (DatasetType: "study")
+├── .bidsignore                      # Exclude study-* from top-level validation
 ├── studies.tsv                      # Study metadata (wide format)
 ├── studies.json                     # Column descriptions
 ├── studies_derivatives.tsv          # Derivative metadata (tall format)
@@ -320,6 +322,16 @@ If pre-commit modifies files:
 # Just commit again - files are already fixed
 git commit -m "your message"
 ```
+
+## BIDS Compliance (BEP035)
+
+This repository is itself a **BIDS dataset** following [BEP035 (Mega-analysis)](https://bids.neuroimaging.io/extensions/beps/bep_035.html):
+
+- **DatasetType**: `"study"` - This is a meta-dataset aggregating information about multiple studies
+- **dataset_description.json**: At repository root following [BIDS specification](https://bids-specification.readthedocs.io/en/stable/modality-agnostic-files/dataset-description.html)
+- **.bidsignore**: Excludes `study-*` subdirectories from top-level BIDS validation
+  - Each `study-{id}/` is its own BIDS dataset (DatasetType: "study")
+  - Top-level validation focuses on metadata files (studies.tsv, studies_derivatives.tsv)
 
 ## Constitution Compliance
 
