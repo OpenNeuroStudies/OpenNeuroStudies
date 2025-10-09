@@ -45,9 +45,9 @@ def load_config(config_path: Optional[str] = None) -> OpenNeuroStudiesConfig:
         with open(config_file, "r", encoding="utf-8") as f:
             config_data = yaml.safe_load(f)
     except yaml.YAMLError as e:
-        raise ConfigLoadError(f"Invalid YAML in {config_path}: {e}")
+        raise ConfigLoadError(f"Invalid YAML in {config_path}: {e}") from e
     except Exception as e:
-        raise ConfigLoadError(f"Failed to read {config_path}: {e}")
+        raise ConfigLoadError(f"Failed to read {config_path}: {e}") from e
 
     if config_data is None:
         raise ConfigLoadError(f"Configuration file is empty: {config_path}")
@@ -55,7 +55,7 @@ def load_config(config_path: Optional[str] = None) -> OpenNeuroStudiesConfig:
     try:
         config = OpenNeuroStudiesConfig(**config_data)
     except ValidationError as e:
-        raise ConfigLoadError(f"Configuration validation failed:\n{e}")
+        raise ConfigLoadError(f"Configuration validation failed:\n{e}") from e
 
     # Validate environment variables for access tokens
     for source in config.sources:
@@ -105,4 +105,4 @@ def create_example_config(output_path: str = ".openneuro-studies/config.yaml") -
         with open(output_file, "w", encoding="utf-8") as f:
             yaml.dump(example_config, f, default_flow_style=False, sort_keys=False)
     except Exception as e:
-        raise ConfigLoadError(f"Failed to write example config to {output_path}: {e}")
+        raise ConfigLoadError(f"Failed to write example config to {output_path}: {e}") from e

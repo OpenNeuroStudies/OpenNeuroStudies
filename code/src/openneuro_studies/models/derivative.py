@@ -1,8 +1,9 @@
 """Derivative dataset model."""
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
+from pydantic_core import core_schema
 
 
 class DerivativeDataset(BaseModel):
@@ -44,10 +45,13 @@ class DerivativeDataset(BaseModel):
 
     @field_validator("uuid_prefix", mode="before")
     @classmethod
-    def extract_uuid_prefix(cls, v: Optional[str], info) -> Optional[str]:
+    def extract_uuid_prefix(
+        cls, v: Optional[str], info: core_schema.ValidationInfo
+    ) -> Optional[str]:
         """Extract first 8 characters of datalad_uuid as prefix."""
         if v is None and "datalad_uuid" in info.data:
-            return info.data["datalad_uuid"][:8]
+            uuid_value: Any = info.data["datalad_uuid"]
+            return str(uuid_value)[:8]
         return v
 
 

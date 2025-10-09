@@ -70,7 +70,7 @@ class GitHubClient:
 
     def _request(
         self, endpoint: str, params: Optional[Dict[str, Any]] = None, retry: int = 3
-    ) -> Dict[str, Any]:
+    ) -> Any:
         """Make GitHub API request with retry logic.
 
         Args:
@@ -79,7 +79,7 @@ class GitHubClient:
             retry: Number of retries for transient errors
 
         Returns:
-            JSON response as dictionary
+            JSON response (can be dict, list, or other JSON types)
 
         Raises:
             GitHubAPIError: If request fails after retries
@@ -107,7 +107,7 @@ class GitHubClient:
 
             except requests.exceptions.RequestException as e:
                 if attempt == retry - 1:  # Last attempt
-                    raise GitHubAPIError(f"GitHub API request failed: {e}")
+                    raise GitHubAPIError(f"GitHub API request failed: {e}") from e
                 time.sleep(2**attempt)  # Exponential backoff
 
         raise GitHubAPIError(f"Failed to fetch {url} after {retry} attempts")
@@ -127,7 +127,7 @@ class GitHubClient:
         Raises:
             GitHubAPIError: If request fails
         """
-        repos = []
+        repos: List[Dict[str, Any]] = []
         page = 1
         per_page = 100
 
@@ -135,18 +135,21 @@ class GitHubClient:
             endpoint = f"/orgs/{organization}/repos"
             params = {"page": page, "per_page": per_page, "type": "public"}
 
-            response_data = self._request(endpoint, params)
+            response_data: Any = self._request(endpoint, params)
 
             if not response_data:
                 break
 
-            # Apply dataset filter if provided
-            if dataset_filter:
-                response_data = [
-                    repo for repo in response_data if repo["name"] in dataset_filter
-                ]
+            # Ensure response_data is a list
+            if not isinstance(response_data, list):
+                break
 
-            repos.extend(response_data)
+            # Apply dataset filter if provided
+            filtered_repos: List[Dict[str, Any]] = response_data
+            if dataset_filter:
+                filtered_repos = [repo for repo in response_data if repo["name"] in dataset_filter]
+
+            repos.extend(filtered_repos)
 
             # Check if we've found all filtered datasets or reached end of pagination
             if dataset_filter and len(repos) >= len(dataset_filter):
@@ -177,15 +180,16 @@ class GitHubClient:
         endpoint = f"/repos/{owner}/{repo}/contents/{file_path}"
         params = {"ref": ref}
 
-        response_data = self._request(endpoint, params)
+        response_data: Any = self._request(endpoint, params)
 
-        if "content" not in response_data:
+        if not isinstance(response_data, dict) or "content" not in response_data:
             raise GitHubAPIError(f"File {file_path} has no content field")
 
         # GitHub returns base64-encoded content
         import base64
 
-        content = base64.b64decode(response_data["content"]).decode("utf-8")
+        content_encoded: Any = response_data["content"]
+        content = base64.b64decode(content_encoded).decode("utf-8")
         return content
 
     def get_default_branch_sha(self, owner: str, repo: str) -> str:
@@ -202,15 +206,21 @@ class GitHubClient:
             GitHubAPIError: If request fails
         """
         endpoint = f"/repos/{owner}/{repo}"
-        response_data = self._request(endpoint)
+        response_data: Any = self._request(endpoint)
 
-        default_branch = response_data.get("default_branch", "main")
+        if not isinstance(response_data, dict):
+            raise GitHubAPIError(f"Invalid response for repo {owner}/{repo}")
+
+        default_branch: str = response_data.get("default_branch", "main")
 
         # Get latest commit on default branch
         endpoint = f"/repos/{owner}/{repo}/commits/{default_branch}"
-        commit_data = self._request(endpoint)
+        commit_data: Any = self._request(endpoint)
 
-        return commit_data["sha"]
+        if not isinstance(commit_data, dict) or "sha" not in commit_data:
+            raise GitHubAPIError(f"Invalid commit data for {owner}/{repo}")
+
+        return str(commit_data["sha"])
 
     def clear_cache(self) -> None:
         """Clear all cached API responses."""

@@ -1,7 +1,5 @@
 """Main CLI entry point for openneuro-studies."""
 
-from typing import Optional
-
 import click
 
 from openneuro_studies import __version__

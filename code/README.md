@@ -125,16 +125,28 @@ pytest -m integration
 
 ### Code Quality
 
+**IMPORTANT: Before committing**, always run linting and type checking to ensure code quality:
+
 ```bash
-# Format code
+# Run all quality checks before committing
+tox -e lint    # Check formatting and linting
+tox -e type    # Type checking with mypy
+
+# Auto-format code if needed
 tox -e format
 
-# Check linting
-tox -e lint
-
-# Type checking
-tox -e type
+# Or run all checks at once
+tox -e lint,type
 ```
+
+**Git Workflow Best Practice**:
+1. Make code changes
+2. Run `tox -e format` to auto-format
+3. Run `tox -e lint,type` to verify quality
+4. Fix any errors reported
+5. Commit changes
+
+This ensures all commits maintain consistent code quality and type safety.
 
 ## Usage
 
