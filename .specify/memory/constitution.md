@@ -113,7 +113,7 @@ Derivative datasets MUST include version information:
 
 When creating or modifying automation scripts:
 
-1. Test on a small subset of datasets first (e.g., sample of ds000001, ds000010, ds006190, ds005256)
+1. Test on a small subset of datasets first (e.g., sample of ds000001, ds000010, ds005256, ds006131, ds006185, ds006189, ds006190)
 2. Implement robust error handling for non-conformant datasets
 3. Use caching for all external API calls (GitHub, etc.)
 4. Provide progress indicators for long-running operations
@@ -138,6 +138,7 @@ Before running scripts on the full dataset collection:
 
 1. Verify on a single dataset (e.g., study-ds000001)
 2. Test with datasets of different states (complete, incomplete, non-BIDS)
+3. Test with multi-source derivatives (e.g., ds006190 which sources ds006189, ds006185, ds006131)
 3. Verify idempotency by running twice and comparing results
 4. Check that git history shows expected commits
 

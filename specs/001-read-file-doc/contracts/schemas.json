@@ -1,0 +1,441 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OpenNeuroStudies Data Schemas",
+  "description": "JSON Schema definitions for OpenNeuroStudies Pydantic models",
+  "definitions": {
+    "StudyState": {
+      "title": "StudyState",
+      "description": "Processing state of a study dataset",
+      "type": "string",
+      "enum": ["discovered", "organized", "metadata_generated", "validated"]
+    },
+    "SourceType": {
+      "title": "SourceType",
+      "description": "Type of dataset source",
+      "type": "string",
+      "enum": ["raw", "derivative"]
+    },
+    "StudyDataset": {
+      "title": "StudyDataset",
+      "description": "BIDS study folder containing source and derivative datasets",
+      "type": "object",
+      "properties": {
+        "study_id": {
+          "title": "Study ID",
+          "description": "Unique study identifier",
+          "type": "string",
+          "pattern": "^study-ds\\d+$",
+          "examples": ["study-ds000001", "study-ds006190"]
+        },
+        "name": {
+          "title": "Name",
+          "description": "Human-readable study name",
+          "type": "string",
+          "examples": ["Balloon Analog Risk-taking Task"]
+        },
+        "version": {
+          "title": "Version",
+          "description": "Study dataset version (calendar-based)",
+          "type": "string",
+          "pattern": "^0\\.\\d{8}\\.\\d+$",
+          "examples": ["0.20251009.0", "0.20251009.1"]
+        },
+        "raw_version": {
+          "title": "Raw Version",
+          "description": "Source dataset version/tag or 'n/a' if multiple sources",
+          "type": "string",
+          "examples": ["1.0.5", "n/a"]
+        },
+        "title": {
+          "title": "Title",
+          "description": "Full study title",
+          "type": "string",
+          "examples": ["Study dataset for Balloon Analog Risk-taking Task"]
+        },
+        "authors": {
+          "title": "Authors",
+          "description": "Study dataset authors from git shortlog",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["Smith, John", "Doe, Jane"]]
+        },
+        "bids_version": {
+          "title": "BIDS Version",
+          "description": "BIDS specification version",
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "examples": ["1.10.1"]
+        },
+        "hed_version": {
+          "title": "HED Version",
+          "description": "HED schema version if applicable",
+          "type": ["string", "null"],
+          "examples": ["8.3.0", null]
+        },
+        "license": {
+          "title": "License",
+          "description": "Dataset license",
+          "type": ["string", "null"],
+          "examples": ["CC0", "CC-BY-4.0", null]
+        },
+        "source_datasets": {
+          "title": "Source Datasets",
+          "description": "Raw datasets under sourcedata/",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceDataset"
+          },
+          "minItems": 1
+        },
+        "derivative_datasets": {
+          "title": "Derivative Datasets",
+          "description": "Processed datasets under derivatives/",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DerivativeDataset"
+          }
+        },
+        "github_url": {
+          "title": "GitHub URL",
+          "description": "Published repository URL",
+          "type": "string",
+          "pattern": "^https://github\\.com/[\\w-]+/study-ds\\d+$",
+          "examples": ["https://github.com/OpenNeuroStudies/study-ds000001"]
+        },
+        "datatypes": {
+          "title": "Datatypes",
+          "description": "BIDS datatypes present in study",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["anat", "func"]]
+        },
+        "state": {
+          "$ref": "#/definitions/StudyState"
+        }
+      },
+      "required": [
+        "study_id",
+        "name",
+        "title",
+        "authors",
+        "bids_version",
+        "source_datasets",
+        "github_url",
+        "state"
+      ]
+    },
+    "SourceDataset": {
+      "title": "SourceDataset",
+      "description": "Raw BIDS dataset from OpenNeuroDatasets or other sources",
+      "type": "object",
+      "properties": {
+        "dataset_id": {
+          "title": "Dataset ID",
+          "description": "Original dataset identifier",
+          "type": "string",
+          "pattern": "^ds\\d+$",
+          "examples": ["ds000001", "ds006131"]
+        },
+        "url": {
+          "title": "URL",
+          "description": "Git repository URL",
+          "type": "string",
+          "format": "uri",
+          "examples": ["https://github.com/OpenNeuroDatasets/ds000001"]
+        },
+        "commit_sha": {
+          "title": "Commit SHA",
+          "description": "Specific commit to link",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "examples": ["1234567890abcdef1234567890abcdef12345678"]
+        },
+        "bids_version": {
+          "title": "BIDS Version",
+          "description": "BIDS specification version from dataset_description.json",
+          "type": "string",
+          "examples": ["1.10.1"]
+        },
+        "license": {
+          "title": "License",
+          "description": "Dataset license from dataset_description.json",
+          "type": ["string", "null"],
+          "examples": ["CC0", null]
+        },
+        "authors": {
+          "title": "Authors",
+          "description": "Dataset authors from dataset_description.json",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subjects_num": {
+          "title": "Number of Subjects",
+          "description": "Number of subjects in dataset",
+          "type": ["integer", "null"],
+          "examples": [16, null]
+        },
+        "sessions_num": {
+          "title": "Number of Sessions",
+          "description": "Total number of sessions",
+          "type": ["integer", "null"],
+          "examples": [32, null]
+        },
+        "sessions_min": {
+          "title": "Minimum Sessions",
+          "description": "Minimum sessions per subject",
+          "type": ["integer", "null"],
+          "examples": [1, null]
+        },
+        "sessions_max": {
+          "title": "Maximum Sessions",
+          "description": "Maximum sessions per subject",
+          "type": ["integer", "null"],
+          "examples": [2, null]
+        }
+      },
+      "required": ["dataset_id", "url", "commit_sha", "bids_version"]
+    },
+    "DerivativeDataset": {
+      "title": "DerivativeDataset",
+      "description": "Processed dataset from OpenNeuroDerivatives or OpenNeuro derivatives",
+      "type": "object",
+      "properties": {
+        "dataset_id": {
+          "title": "Dataset ID",
+          "description": "Original derivative dataset identifier",
+          "type": "string",
+          "pattern": "^ds\\d+$",
+          "examples": ["ds006185"]
+        },
+        "derivative_id": {
+          "title": "Derivative ID",
+          "description": "Unique identifier for tracking (tool-version[-uuid])",
+          "type": "string",
+          "examples": ["fmriprep-21.0.1", "mriqc-23.0.0-a1b2c3d4"]
+        },
+        "tool_name": {
+          "title": "Tool Name",
+          "description": "Processing tool name",
+          "type": "string",
+          "examples": ["fmriprep", "mriqc", "freesurfer"]
+        },
+        "version": {
+          "title": "Version",
+          "description": "Tool version",
+          "type": "string",
+          "examples": ["21.0.1", "23.0.0"]
+        },
+        "datalad_uuid": {
+          "title": "DataLad UUID",
+          "description": "DataLad dataset UUID from .datalad/config",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "examples": ["12345678-1234-5678-1234-567812345678"]
+        },
+        "uuid_prefix": {
+          "title": "UUID Prefix",
+          "description": "First 8 chars of UUID for disambiguation",
+          "type": ["string", "null"],
+          "minLength": 8,
+          "maxLength": 8,
+          "examples": ["12345678", null]
+        },
+        "size_stats": {
+          "title": "Size Statistics",
+          "description": "Size statistics from git annex info",
+          "type": "object",
+          "properties": {
+            "total_size": {
+              "type": "integer",
+              "description": "Total dataset size in bytes"
+            },
+            "annexed_size": {
+              "type": "integer",
+              "description": "Annexed content size in bytes"
+            },
+            "file_count": {
+              "type": "integer",
+              "description": "Number of files"
+            }
+          }
+        },
+        "execution_metrics": {
+          "title": "Execution Metrics",
+          "description": "Runtime metrics from con-duct/duct if available",
+          "type": "object",
+          "properties": {
+            "execution_time": {
+              "type": "number",
+              "description": "Processing time in seconds"
+            },
+            "peak_memory": {
+              "type": "number",
+              "description": "Peak memory usage in MB"
+            },
+            "cpu_time": {
+              "type": "number",
+              "description": "CPU time in seconds"
+            }
+          }
+        },
+        "source_datasets": {
+          "title": "Source Datasets",
+          "description": "IDs of source datasets processed",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^ds\\d+$"
+          },
+          "minItems": 1,
+          "examples": [["ds000001"], ["ds006131", "ds006185"]]
+        },
+        "processed_raw_version": {
+          "title": "Processed Raw Version",
+          "description": "Version of raw dataset when processed",
+          "type": ["string", "null"],
+          "examples": ["1.0.3", null]
+        },
+        "outdatedness": {
+          "title": "Outdatedness",
+          "description": "Number of commits behind current raw version",
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "examples": [0, 5, null]
+        }
+      },
+      "required": [
+        "dataset_id",
+        "derivative_id",
+        "tool_name",
+        "version",
+        "datalad_uuid",
+        "source_datasets"
+      ]
+    },
+    "SourceSpecification": {
+      "title": "SourceSpecification",
+      "description": "Configuration for a dataset source",
+      "type": "object",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "description": "Friendly name for source",
+          "type": "string",
+          "examples": ["OpenNeuroDatasets", "OpenNeuroDerivatives"]
+        },
+        "organization_url": {
+          "title": "Organization URL",
+          "description": "GitHub/Forgejo organization URL",
+          "type": "string",
+          "format": "uri",
+          "examples": ["https://github.com/OpenNeuroDatasets"]
+        },
+        "type": {
+          "$ref": "#/definitions/SourceType"
+        },
+        "inclusion_patterns": {
+          "title": "Inclusion Patterns",
+          "description": "Regex patterns for datasets to include",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [".*"]
+        },
+        "exclusion_patterns": {
+          "title": "Exclusion Patterns",
+          "description": "Regex patterns for datasets to exclude",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "access_token_env": {
+          "title": "Access Token Environment Variable",
+          "description": "Environment variable name for access token",
+          "type": "string",
+          "default": "GITHUB_TOKEN",
+          "examples": ["GITHUB_TOKEN", "GITLAB_TOKEN"]
+        }
+      },
+      "required": ["name", "organization_url", "type"]
+    },
+    "SourcesConfiguration": {
+      "title": "SourcesConfiguration",
+      "description": "Top-level configuration containing all sources",
+      "type": "object",
+      "properties": {
+        "sources": {
+          "title": "Sources",
+          "description": "List of configured dataset sources",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceSpecification"
+          },
+          "minItems": 1
+        }
+      },
+      "required": ["sources"]
+    },
+    "StudiesRow": {
+      "title": "StudiesRow",
+      "description": "Row schema for studies.tsv (wide format)",
+      "type": "object",
+      "properties": {
+        "study_id": {"type": "string"},
+        "name": {"type": "string"},
+        "version": {"type": "string"},
+        "raw_version": {"type": "string"},
+        "bids_version": {"type": "string"},
+        "hed_version": {"type": "string"},
+        "license": {"type": "string"},
+        "authors": {"type": "string", "description": "Comma-separated"},
+        "subjects_num": {"type": "integer"},
+        "sessions_num": {"type": "integer"},
+        "sessions_min": {"type": ["integer", "string"], "description": "Integer or 'n/a'"},
+        "sessions_max": {"type": ["integer", "string"], "description": "Integer or 'n/a'"},
+        "bold_num": {"type": "integer"},
+        "t1w_num": {"type": "integer"},
+        "t2w_num": {"type": "integer"},
+        "bold_size": {"type": ["integer", "string"], "description": "Bytes or 'n/a'"},
+        "t1w_size": {"type": ["integer", "string"], "description": "Bytes or 'n/a'"},
+        "bold_size_max": {"type": ["integer", "string"], "description": "Bytes or 'n/a'"},
+        "bold_voxels": {"type": "string", "description": "e.g., '64x64x40x200'"},
+        "datatypes": {"type": "string", "description": "Comma-separated"},
+        "derivative_ids": {"type": "string", "description": "Comma-separated"},
+        "bids_valid": {"type": "string", "enum": ["pass", "fail", "warning", "n/a"]}
+      },
+      "required": ["study_id", "name"]
+    },
+    "DerivativesRow": {
+      "title": "DerivativesRow",
+      "description": "Row schema for studies_derivatives.tsv (tall format)",
+      "type": "object",
+      "properties": {
+        "study_id": {"type": "string"},
+        "derivative_id": {"type": "string"},
+        "dataset_id": {"type": "string"},
+        "tool_name": {"type": "string"},
+        "version": {"type": "string"},
+        "datalad_uuid": {"type": "string"},
+        "total_size": {"type": ["integer", "string"]},
+        "annexed_size": {"type": ["integer", "string"]},
+        "file_count": {"type": ["integer", "string"]},
+        "execution_time": {"type": ["number", "string"]},
+        "peak_memory": {"type": ["number", "string"]},
+        "processed_raw_version": {"type": "string"},
+        "outdatedness": {"type": ["integer", "string"]},
+        "status": {"type": "string", "enum": ["complete", "incomplete", "failed", "n/a"]}
+      },
+      "required": ["study_id", "derivative_id"]
+    }
+  }
+}

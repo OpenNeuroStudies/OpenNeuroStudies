@@ -1,0 +1,451 @@
+# CLI Specification: OpenNeuroStudies
+#
+# This file defines the Click command-line interface structure for the
+# openneuro-studies tool. It serves as a contract for implementation.
+#
+# Feature: specs/001-read-file-doc
+# Date: 2025-10-09
+
+cli:
+  name: openneuro-studies
+  description: "Organize OpenNeuro datasets into BIDS study structures with automated metadata generation"
+  version: "0.1.0"
+  entry_point: "code/src/openneuro_studies/cli/main.py:cli"
+
+  global_options:
+    - name: --debug-level
+      short: -l
+      type: choice
+      choices: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+      default: INFO
+      help: "Set Python logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+
+    - name: --config
+      short: -c
+      type: path
+      default: ".openneuro-studies/config.yaml"
+      help: "Path to source configuration YAML file"
+
+    - name: --cache-dir
+      type: path
+      default: ".openneuro-studies/cache"
+      help: "Directory for caching API responses"
+
+commands:
+  discover:
+    description: "Discover datasets from configured sources without cloning"
+    module: "code/src/openneuro_studies/cli/discover.py"
+    help: |
+      Discover datasets from GitHub organizations specified in the source
+      configuration file. Uses GitHub API to list repositories and extract
+      basic metadata without requiring full clones.
+
+      Examples:
+        # Discover all datasets from default sources
+        $ openneuro-studies discover
+
+        # Discover from custom configuration
+        $ openneuro-studies discover --config my-sources.yaml
+
+        # Update existing cache
+        $ openneuro-studies discover --update-cache
+
+        # Discover from specific source only
+        $ openneuro-studies discover --source OpenNeuroDatasets
+
+    options:
+      - name: --source
+        type: string
+        required: false
+        help: "Process only the named source from configuration (e.g., 'OpenNeuroDatasets')"
+
+      - name: --update-cache
+        type: flag
+        help: "Update existing cache entries using conditional requests (ETags)"
+
+      - name: --limit
+        type: int
+        required: false
+        help: "Limit number of datasets to discover (for testing)"
+
+      - name: --output
+        type: path
+        default: "discovered-datasets.json"
+        help: "Output file for discovered dataset metadata"
+
+    returns:
+      exit_code: 0
+      output_file: "discovered-datasets.json"
+      format: "JSON list of discovered dataset metadata"
+
+  organize:
+    description: "Organize datasets into BIDS study structures"
+    module: "code/src/openneuro_studies/cli/organize.py"
+    help: |
+      Create study-{id} folders as DataLad datasets, link source and derivative
+      datasets as git submodules, and prepare for metadata generation.
+
+      Arguments accept:
+      - Study IDs: study-ds000001, study-ds000010 (supports shell globs: study-ds0000*)
+      - Dataset URLs: https://github.com/OpenNeuroDerivatives/ds001761-fmriprep
+      - Local paths: /path/to/local/dataset
+
+      When URLs/paths are provided, the system:
+      - Detects type (raw vs derivative) from dataset_description.json
+      - Adds to appropriate study or creates new study
+      - Links as git submodule in correct location
+
+      Examples:
+        # Organize all discovered datasets
+        $ openneuro-studies organize
+
+        # Organize specific studies (incremental)
+        $ openneuro-studies organize study-ds000001 study-ds000010
+
+        # Use shell globs to select studies
+        $ openneuro-studies organize study-ds0000*
+
+        # Add/update specific derivative from URL
+        $ openneuro-studies organize https://github.com/OpenNeuroDerivatives/ds001761-fmriprep
+
+        # Add derivative from non-GitHub forge
+        $ openneuro-studies organize https://cerebra.fz-juelich.de/f.hoffstaedter/ds005256-mriqc
+
+        # Add/update multiple derivatives
+        $ openneuro-studies organize \
+            https://github.com/OpenNeuroDerivatives/ds001761-fmriprep \
+            https://cerebra.fz-juelich.de/f.hoffstaedter/ds005256-mriqc
+
+        # Mix studies and URLs
+        $ openneuro-studies organize study-ds001761 \
+            https://github.com/OpenNeuroDerivatives/ds001761-fmriprep
+
+        # Add local dataset
+        $ openneuro-studies organize /path/to/my/derivative
+
+        # Dry run to see what would be created
+        $ openneuro-studies organize --dry-run study-ds000001
+
+        # Debug logging
+        $ openneuro-studies -l DEBUG organize study-ds000001
+
+        # Skip GitHub publishing (local only)
+        $ openneuro-studies organize --no-publish study-ds000001
+
+        # Recreate existing studies
+        $ openneuro-studies organize --force study-ds000001
+
+    arguments:
+      - name: targets
+        type: string
+        nargs: "*"
+        help: |
+          Study IDs (study-ds000001), dataset URLs, or local paths.
+          If omitted, organizes all discovered datasets.
+          Supports shell globs (study-ds0000*).
+          URLs/paths can be raw datasets or derivatives - system auto-detects type.
+
+    options:
+      - name: --github-org
+        type: string
+        required: false
+        default: "OpenNeuroStudies"
+        help: "GitHub organization for publishing study repositories"
+
+      - name: --dry-run
+        type: flag
+        help: "Show what would be done without executing any changes"
+
+      - name: --no-publish
+        type: flag
+        help: "Create study datasets locally without publishing to GitHub"
+
+      - name: --force
+        type: flag
+        help: "Recreate existing studies (DESTRUCTIVE - use with caution)"
+
+    returns:
+      exit_code: 0
+      output: "Created/updated study datasets in current directory"
+
+  metadata:
+    description: "Metadata generation and synchronization operations"
+    module: "code/src/openneuro_studies/cli/metadata.py"
+    is_group: true
+    help: |
+      Commands for generating and synchronizing metadata files (dataset_description.json,
+      studies.tsv, studies_derivatives.tsv).
+
+    subcommands:
+      generate:
+        description: "Generate metadata files for studies"
+        help: |
+          Generate metadata files for organized studies. Supports three-stage
+          processing: basic (no cloning), imaging (sparse access), and
+          outdatedness (selective cloning).
+
+          Examples:
+            # Generate basic metadata for all studies
+            $ openneuro-studies metadata generate --stage basic
+
+            # Generate imaging metrics (requires sparse access setup)
+            $ openneuro-studies metadata generate --stage imaging
+
+            # Calculate derivative outdatedness
+            $ openneuro-studies metadata generate --stage outdatedness
+
+            # Generate metadata for specific studies
+            $ openneuro-studies metadata generate study-ds000001 --stage basic
+
+            # Use globs
+            $ openneuro-studies metadata generate study-ds0000* --stage basic
+
+        arguments:
+          - name: targets
+            type: string
+            nargs: "*"
+            help: "Study IDs (study-ds000001) or globs. If omitted, processes all studies."
+
+        options:
+          - name: --stage
+            type: choice
+            choices: [basic, imaging, outdatedness, all]
+            default: basic
+            help: |
+              Metadata generation stage:
+              - basic: Extract metadata without cloning (GitHub API, git submodules)
+              - imaging: Extract NIfTI metrics using sparse access (datalad-fuse/fsspec)
+              - outdatedness: Calculate derivative versions vs current raw (may clone)
+              - all: Run all stages sequentially
+
+          - name: --force-refresh
+            type: flag
+            help: "Regenerate metadata even if up-to-date"
+
+          - name: --sparse-method
+            type: choice
+            choices: [datalad-fuse, fsspec, git-annex]
+            default: datalad-fuse
+            help: "Method for sparse data access in imaging stage"
+
+        returns:
+          exit_code: 0
+          output_files:
+            - "studies.tsv"
+            - "studies.json"
+            - "studies_derivatives.tsv"
+            - "studies_derivatives.json"
+            - "study-*/dataset_description.json"
+
+      sync:
+        description: "Incrementally sync metadata for updated studies"
+        help: |
+          Check for updates to source datasets or derivatives and regenerate
+          metadata only for affected studies. More efficient than full regeneration.
+
+          Examples:
+            # Sync metadata for studies with updated sources
+            $ openneuro-studies metadata sync --check-sources
+
+            # Sync specific studies
+            $ openneuro-studies metadata sync study-ds000001
+
+            # Sync with globs
+            $ openneuro-studies metadata sync study-ds0000*
+
+        arguments:
+          - name: targets
+            type: string
+            nargs: "*"
+            help: "Study IDs or globs. If omitted, syncs all studies."
+
+        options:
+          - name: --check-sources
+            type: flag
+            help: "Check source datasets for updates before syncing"
+
+          - name: --since
+            type: string
+            required: false
+            help: "Only sync studies modified since ISO date (e.g., '2025-01-01')"
+
+        returns:
+          exit_code: 0
+          output: "Updated metadata files for changed studies"
+
+  validate:
+    description: "Run BIDS validation on study datasets"
+    module: "code/src/openneuro_studies/cli/validate.py"
+    help: |
+      Run bids-validator-deno on study datasets and store results under
+      derivatives/bids-validator.json and derivatives/bids-validator.txt.
+      Updates bids_valid column in studies.tsv.
+
+      Examples:
+        # Validate all study datasets
+        $ openneuro-studies validate
+
+        # Validate specific studies
+        $ openneuro-studies validate study-ds000001
+
+        # Validate with globs
+        $ openneuro-studies validate study-ds0000*
+
+        # Use specific validator version
+        $ openneuro-studies validate --validator-version 2.1.0
+
+        # Validation with custom config
+        $ openneuro-studies validate --config-file .bidsignore
+
+    arguments:
+      - name: targets
+        type: string
+        nargs: "*"
+        help: "Study IDs or globs. If omitted, validates all studies."
+
+    options:
+      - name: --validator-version
+        type: string
+        default: "2.1.0"
+        help: "bids-validator-deno version to use"
+
+      - name: --config-file
+        type: path
+        required: false
+        help: "Path to .bidsignore or validator config file"
+
+      - name: --parallel
+        type: int
+        default: 4
+        help: "Number of parallel validation processes"
+
+    returns:
+      exit_code: 0
+      output_files:
+        - "study-*/derivatives/bids-validator.json"
+        - "study-*/derivatives/bids-validator.txt"
+      side_effects:
+        - "Updates bids_valid column in studies.tsv"
+
+  status:
+    description: "Show status of studies and processing progress"
+    module: "code/src/openneuro_studies/cli/status.py"
+    help: |
+      Display summary of study processing status, including discovered,
+      organized, metadata-generated, and validated counts.
+
+      Examples:
+        # Show overall status
+        $ openneuro-studies status
+
+        # Show detailed status for specific studies
+        $ openneuro-studies status study-ds000001
+
+        # Show status with globs
+        $ openneuro-studies status study-ds0000*
+
+        # Show only incomplete studies
+        $ openneuro-studies status --filter incomplete
+
+    arguments:
+      - name: targets
+        type: string
+        nargs: "*"
+        help: "Study IDs or globs. If omitted, shows all studies."
+
+    options:
+      - name: --filter
+        type: choice
+        choices: [all, discovered, organized, metadata_generated, validated, incomplete]
+        default: all
+        help: "Filter studies by processing state"
+
+      - name: --format
+        type: choice
+        choices: [table, json, csv]
+        default: table
+        help: "Output format"
+
+    returns:
+      exit_code: 0
+      output: "Status summary to stdout"
+
+  clean:
+    description: "Clean cache and temporary files"
+    module: "code/src/openneuro_studies/cli/clean.py"
+    help: |
+      Remove cached API responses, temporary files, or incomplete studies.
+
+      Examples:
+        # Clean API cache only
+        $ openneuro-studies clean --cache
+
+        # Clean cache and temporary files
+        $ openneuro-studies clean --cache --temp
+
+        # Remove incomplete study datasets
+        $ openneuro-studies clean --incomplete-studies
+
+    options:
+      - name: --cache
+        type: flag
+        help: "Remove cached API responses"
+
+      - name: --temp
+        type: flag
+        help: "Remove temporary files"
+
+      - name: --incomplete-studies
+        type: flag
+        help: "Remove study datasets that failed organization (DESTRUCTIVE)"
+
+      - name: --all
+        type: flag
+        help: "Clean everything (cache, temp, incomplete studies)"
+
+      - name: --dry-run
+        type: flag
+        help: "Show what would be cleaned without removing files"
+
+    returns:
+      exit_code: 0
+      output: "Cleaned files summary"
+
+# Environment Variables
+environment:
+  GITHUB_TOKEN:
+    required: true
+    description: "GitHub personal access token for API access (5000 req/hour)"
+    example: "ghp_xxxxxxxxxxxxxxxxxxxx"
+
+  OPENNEURO_STUDIES_CONFIG:
+    required: false
+    description: "Override default config file path"
+    default: ".openneuro-studies/config.yaml"
+
+  OPENNEURO_STUDIES_CACHE:
+    required: false
+    description: "Override default cache directory"
+    default: ".openneuro-studies/cache"
+
+# Exit Codes
+exit_codes:
+  0: "Success"
+  1: "General error"
+  2: "Invalid arguments or configuration"
+  3: "API rate limit exceeded"
+  4: "Git/DataLad operation failed"
+  5: "Validation failed"
+  6: "Missing required environment variables"
+  7: "Source datasets not found or inaccessible"
+
+# Configuration File Schema (Pydantic-compatible YAML)
+# Documented for reference, actual implementation in config/models.py
+configuration_schema:
+  sources:
+    - name: "string (friendly name)"
+      organization_url: "string (GitHub org URL)"
+      type: "raw | derivative"
+      inclusion_patterns: ["list of regex patterns"]
+      exclusion_patterns: ["list of regex patterns"]
+      access_token_env: "string (env var name, default GITHUB_TOKEN)"
