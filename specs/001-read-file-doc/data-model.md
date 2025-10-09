@@ -526,3 +526,27 @@ With corresponding tests in:
 - `code/tests/unit/test_models.py`
 
 The models will be used by all workflow modules (discovery, organization, metadata, validation) as defined in plan.md Phase 1.
+
+---
+
+## Future Work: Additional Metadata Extractors
+
+**TODO**: Review `sourcedata/openneuro-graphql.tsv` for additional metadata fields to incorporate in future phases.
+
+**Rationale**: The file produced by [openneuro_metadata](https://github.com/jbwexler/openneuro_metadata/blob/main/metadata_update.py) contains rich metadata extracted from OpenNeuro's GraphQL API, including fields not currently captured in our data model:
+
+- `dx_status`: Diagnostic status information
+- `ages`: Age demographics
+- `tasks`: Experimental tasks used
+- `study_design`: Study design characteristics
+- `domain_studied`: Research domain/field
+- `senior_author`: Already incorporated into studies.tsv schema
+
+**Action Items** (future phases):
+1. Analyze complete schema of openneuro-graphql.tsv
+2. Identify high-value metadata fields for studies.tsv expansion
+3. Formalize metadata extractors for GraphQL API integration
+4. Consider adding `metadata_sources` field to track provenance (GitHub API vs GraphQL vs git)
+5. Evaluate whether to query GraphQL API during discovery or use cached TSV file
+
+**Note**: This work is deferred to Phase 2+ to maintain focus on core infrastructure implementation.
