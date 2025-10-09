@@ -3,6 +3,7 @@
 import click
 
 from openneuro_studies import __version__
+from openneuro_studies.cli.discover import discover as discover_cmd
 
 
 @click.group()
@@ -28,21 +29,8 @@ def cli(ctx: click.Context, config: str) -> None:
     ctx.obj["config"] = config
 
 
-@cli.command()
-@click.pass_context
-def discover(ctx: click.Context) -> None:
-    """Discover datasets from configured sources.
-
-    Queries GitHub/Forgejo APIs to identify available raw and derivative datasets
-    without cloning. Results are cached to .openneuro-studies/cache/discovered-datasets.json.
-
-    Example:
-        openneuro-studies discover
-        openneuro-studies discover --config custom-config.yaml
-    """
-    config_path = ctx.obj.get("config", ".openneuro-studies/config.yaml")
-    click.echo(f"[Placeholder] Would discover datasets using config: {config_path}")
-    click.echo("Phase 2 implementation pending...")
+# Register discover command
+cli.add_command(discover_cmd, name="discover")
 
 
 @cli.command()
