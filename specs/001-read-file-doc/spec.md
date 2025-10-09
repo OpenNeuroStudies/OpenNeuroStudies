@@ -27,17 +27,17 @@ As a neuroscience researcher, I need to navigate a unified collection of OpenNeu
 
 ### User Story 2 - Metadata Generation and Synchronization (Priority: P2)
 
-As a dataset curator, I need automatically generated and synchronized metadata files (dataset_description.json, studies.tsv, derivatives.tsv) for each study and the overall collection, so that I can track dataset provenance, licensing, versioning, and available derivatives without manual maintenance.
+As a dataset curator, I need automatically generated and synchronized metadata files (dataset_description.json, studies.tsv, studies_derivatives.tsv) for each study and the overall collection, so that I can track dataset provenance, licensing, versioning, and available derivatives without manual maintenance.
 
 **Why this priority**: Metadata provides essential context for researchers and enables dashboard generation. It builds upon the organized structure from P1 but can be implemented and tested independently once the structure exists.
 
-**Independent Test**: Can be tested by verifying that running the metadata generation script on an existing study produces correct and reproducible dataset_description.json with BIDS 1.10.1 study format, populates studies.tsv with accurate summary data, and creates derivatives.tsv listing all available derivatives with versions.
+**Independent Test**: Can be tested by verifying that running the metadata generation script on an existing study produces correct and reproducible dataset_description.json with BIDS 1.10.1 study format, populates studies.tsv with accurate summary data, and creates studies_derivatives.tsv listing all available derivatives with versions.
 
 **Acceptance Scenarios**:
 
 1. **Given** a study folder with sourcedata/raw/, **When** metadata generation runs, **Then** dataset_description.json is created with DatasetType="study", Authors from git shortlog of the study dataset, Title prefixed with "Study dataset for ", and SourceDatasets referencing all sourcedata entries
-2. **Given** multiple studies with varying metadata, **When** studies.tsv generation runs, **Then** the file contains study_id (e.g. study-ds000001), name, bids_version, hed_version, license, authors, num_subjects, num_sessions, session_min, session_max, num_bold, num_t1w, num_t2w, bold_size, t1w_size, max_bold_size, bold_voxels, datatypes, derivative_ids (list of derivative identifiers), and raw_version (version/tag of raw dataset if single source and released, "n/a" if multiple sources or no release)
-2a. **Given** imaging metrics extraction is triggered (separate stage), **When** sparse data access via datalad-fuse or fsspec is established, **Then** bold_size, t1w_size, max_bold_size, and bold_voxels are populated in studies.tsv without full cloning
+2. **Given** multiple studies with varying metadata, **When** studies.tsv generation runs, **Then** the file contains study_id (e.g. study-ds000001), name, version, raw_version, bids_version, hed_version, license, authors, subjects_num, sessions_num, sessions_min, sessions_max, bold_num, t1w_num, t2w_num, bold_size, t1w_size, bold_size_max, bold_voxels, datatypes, derivative_ids (list of derivative identifiers), and bids_valid (where version is study dataset version, raw_version is version/tag of raw dataset if single source and released or "n/a" if multiple sources or no release)
+2a. **Given** imaging metrics extraction is triggered (separate stage), **When** sparse data access via datalad-fuse or fsspec is established, **Then** bold_size, t1w_size, bold_size_max, and bold_voxels are populated in studies.tsv without full cloning
 3. **Given** a study with 3 derivatives (e.g., fmriprep-21.0.1, mriqc-23.0.0, bids-validator), **When** studies_derivatives.tsv generation runs, **Then** 3 rows are created with study_id, derivative_id pairs, each listing tool name, version, size statistics from git annex info, execution metrics if available, and outdatedness (number of commits the processed raw dataset is behind current raw dataset version)
 4. **Given** a raw dataset with version 1.0.5 and a derivative processed from version 1.0.3, **When** outdatedness calculation runs for studies_derivatives.tsv, **Then** the derivative's outdatedness column shows the commit count between 1.0.3 and 1.0.5 in the raw dataset
 5. **Given** updates to source datasets or derivatives, **When** metadata sync runs, **Then** only affected studies are updated (incremental updates supported)
@@ -86,7 +86,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-006**: System MUST populate SourceDatasets field referencing all sourcedata entries
 - **FR-007**: System MUST generate GeneratedBy field with code provenance information
 - **FR-008**: System MUST copy or collate ReferencesAndLinks, License, Keywords, Acknowledgements, and Funding from source datasets
-- **FR-009**: System MUST generate studies.tsv with study_id, name, bids_version, hed_version, license, authors, num_subjects, num_sessions, session_min, session_max, num_bold, num_t1w, num_t2w, bold_size, t1w_size, max_bold_size, bold_voxels, datatypes, derivative_ids, and raw_version columns
+- **FR-009**: System MUST generate studies.tsv with study_id, name, version, raw_version, bids_version, hed_version, license, authors, subjects_num, sessions_num, sessions_min, sessions_max, bold_num, t1w_num, t2w_num, bold_size, t1w_size, bold_size_max, bold_voxels, datatypes, derivative_ids, and bids_valid columns
 - **FR-010**: System MUST generate studies_derivatives.tsv (tall format) at top level with study_id, derivative_id as lead columns, followed by tool name, version, UUID disambiguation, size statistics, execution metrics, outdatedness, and other status columns
 - **FR-011**: System MUST generate studies.json and studies_derivatives.json describing TSV column purposes following BIDS sidecar conventions
 - **FR-012**: System MUST support incremental updates (process specific studies, not all at once)
@@ -104,12 +104,12 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-024**: System MUST publish study repositories to the configured GitHub organization for public access
 - **FR-025**: System MUST extract raw dataset version from git tags without cloning when available
 - **FR-026**: System MUST fetch CHANGES file to determine version when git tags are unavailable, avoiding full clone
-- **FR-027**: System MUST populate studies.tsv raw_version column with dataset version/tag (single source) or "n/a" (multiple sources or no release)
+- **FR-027**: System MUST populate studies.tsv version and raw_version columns (version for study dataset version, raw_version for source dataset version/tag or "n/a" if multiple sources or no release)
 - **FR-028**: System MUST calculate derivative outdatedness as commit count between processed raw version and current raw version
 - **FR-029**: System MUST populate studies_derivatives.tsv with outdatedness metric for each study-derivative pair
 - **FR-030**: System MUST perform outdatedness calculations as a separate batch operation with caching to minimize cloning requirements
-- **FR-031**: System MUST extract imaging modality file counts from raw datasets (num_bold, num_t1w, num_t2w) and populate studies.tsv
-- **FR-032**: System MUST extract imaging data characteristics (bold_size, t1w_size, max_bold_size, bold_voxels) requiring sparse data access via datalad-fuse or fsspec
+- **FR-031**: System MUST extract imaging modality file counts from raw datasets (bold_num, t1w_num, t2w_num) and populate studies.tsv
+- **FR-032**: System MUST extract imaging data characteristics (bold_size, t1w_size, bold_size_max, bold_voxels) requiring sparse data access via datalad-fuse or fsspec
 - **FR-033**: System MUST implement imaging metrics extraction as a separate operation stage with sparse access to avoid full dataset cloning
 
 ### Key Entities

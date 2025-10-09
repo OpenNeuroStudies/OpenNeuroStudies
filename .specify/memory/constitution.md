@@ -1,16 +1,20 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version Change: 1.20251008.0 → 1.20251009.0
+Version Change: 1.20251009.0 → 1.20251009.1
 Principle Changes:
-  - Modified: III. Standard Formats - added BIDS tabular file naming conventions (snake_case requirement)
+  - None (clarification and consistency improvements only)
 Amended Sections:
-  - Standard Formats - added explicit snake_case requirement for TSV column names with CamelCase exception
-  - Metadata Completeness - updated column names to snake_case (study_id, bids_version, hed_version, etc.)
+  - Metadata Completeness - column naming consistency improvements:
+    * Added version column (study dataset version) after name
+    * Moved raw_version to follow version
+    * Changed num_ prefix to _num suffix (subjects_num, sessions_num, bold_num, t1w_num, t2w_num)
+    * Changed session_min/max to sessions_min/max for consistency
+    * Changed max_bold_size to bold_size_max for consistency with _size suffix pattern
 Templates Status:
-  ✅ plan-template.md - Constitution Check section aligned
-  ✅ spec-template.md - Requirements sections aligned with BIDS tabular file conventions
-  ✅ tasks-template.md - Task categorization supports automation and reproducibility
+  ✅ plan-template.md - No changes required
+  ✅ spec-template.md - No changes required
+  ✅ tasks-template.md - No changes required
   ⚠ agent-file-template.md - Generic template, no updates required
   ⚠ checklist-template.md - Generic template, no updates required
 Follow-up TODOs: None
@@ -95,11 +99,11 @@ Derivative datasets MUST include version information:
 
 - Folder naming: `toolname-version` (e.g., `fmriprep-21.0.1`)
 - Support multiple versions of same tool simultaneously by adding first 8 letters of DataLad UUID (under `.datalad/config`)
-- derivatives.tsv MUST list all available derivatives with versions, extracted statistics of size (from `git annex info`), over execution if were collected using `con-duct` and potentially other metrics such as successfull completion etc
+- studies_derivatives.tsv (tall format at top level) MUST list all study-derivative pairs with versions, extracted statistics of size (from `git annex info`), execution metrics if collected using `con-duct`, and potentially other metrics such as successful completion, outdatedness, etc
 
 ### Metadata Completeness
 
-- studies.tsv MUST include: study_id, name, bids_version, hed_version, license, authors, num_subjects, num_sessions, session_min, session_max (or "n/a" if single session), num_bold, num_t1w, num_t2w, bold_size, t1w_size, max_bold_size, bold_voxels, datatypes (`anat`, `func`, ...), derivative_ids
+- studies.tsv MUST include: study_id, name, version, raw_version, bids_version, hed_version, license, authors, subjects_num, sessions_num, sessions_min, sessions_max (or "n/a" if single session), bold_num, t1w_num, t2w_num, bold_size, t1w_size, bold_size_max, bold_voxels, datatypes (`anat`, `func`, ...), derivative_ids, bids_valid
 - Missing or unknown values MUST be explicitly marked "n/a" rather than omitted
 - GitHub repository information MUST be preserved in submodule configuration
 
@@ -170,4 +174,4 @@ Deviations from simplicity MUST be justified:
 - Manual operations → explain why automation not possible
 - Database introduction → explain why file-based approach insufficient
 
-**Version**: 1.20251009.0 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-10-09
+**Version**: 1.20251009.1 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-10-09
