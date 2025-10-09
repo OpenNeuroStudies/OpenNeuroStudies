@@ -76,6 +76,8 @@ This data model defines the core entities for organizing 1000+ OpenNeuro dataset
 | `raw_version` | str | No | Source dataset version/tag | "n/a" if multiple sources or no release |
 | `title` | str | Yes | Full study title | Prefix: "Study dataset for {source title}" |
 | `authors` | List[str] | Yes | Study dataset authors | From git shortlog of study dataset |
+| `author_lead_raw` | str | No | Lead author of raw dataset | First element from Authors in raw dataset_description.json |
+| `author_senior_raw` | str | No | Senior author of raw dataset | Last element from Authors in raw dataset_description.json |
 | `bids_version` | str | Yes | BIDS specification version | From source dataset_description.json |
 | `hed_version` | str | No | HED schema version if applicable | From source dataset_description.json |
 | `license` | str | No | Dataset license | Collated from sources |
@@ -118,6 +120,8 @@ class StudyDataset(BaseModel):
     raw_version: Optional[str] = "n/a"
     title: str
     authors: List[str]
+    author_lead_raw: Optional[str] = None
+    author_senior_raw: Optional[str] = None
     bids_version: str
     hed_version: Optional[str] = None
     license: Optional[str] = None
@@ -357,7 +361,9 @@ class OpenNeuroStudiesConfig(BaseModel):
 | `bids_version` | str | BIDS spec version | From source dataset_description.json |
 | `hed_version` | str | HED schema version | From source or "n/a" |
 | `license` | str | Dataset license | Collated from sources |
-| `authors` | str | Comma-separated authors | From git shortlog |
+| `authors` | str | Study dataset authors | From git shortlog of study dataset (comma-separated) |
+| `author_lead_raw` | str | Lead author of raw dataset | First element from Authors array in raw dataset_description.json; if multiple sources and all same use that, else "n/a"; if single author duplicate |
+| `author_senior_raw` | str | Senior author of raw dataset | Last element from Authors array in raw dataset_description.json; if multiple sources and all same use that, else "n/a"; if single author duplicate |
 | `subjects_num` | int | Number of subjects | From participants.tsv or file count |
 | `sessions_num` | int | Total sessions | Counted from structure |
 | `sessions_min` | int | Min sessions per subject | Or "n/a" if single-session |
