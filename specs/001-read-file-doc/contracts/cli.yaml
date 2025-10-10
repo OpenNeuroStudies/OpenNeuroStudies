@@ -32,6 +32,54 @@ cli:
       help: "Directory for caching API responses"
 
 commands:
+  init:
+    description: "Initialize OpenNeuroStudies repository"
+    module: "code/src/openneuro_studies/cli/init.py"
+    help: |
+      Initialize a new OpenNeuroStudies repository as a DataLad dataset
+      (git repository without git-annex). Creates configuration files,
+      directory structure, and initial commit.
+
+      Examples:
+        # Initialize in current directory
+        $ openneuro-studies init
+
+        # Initialize in specific path
+        $ openneuro-studies init /path/to/openneurostudies
+
+        # Initialize with custom organization
+        $ openneuro-studies init --github-org MyOrganization
+
+    arguments:
+      - name: path
+        type: path
+        required: false
+        default: "."
+        help: "Path where to initialize the repository (default: current directory)"
+
+    options:
+      - name: --github-org
+        type: string
+        default: "OpenNeuroStudies"
+        help: "GitHub organization for publishing study repositories"
+
+      - name: --force
+        type: flag
+        help: "Reinitialize existing repository (DESTRUCTIVE)"
+
+    returns:
+      exit_code: 0
+      creates:
+        - ".openneuro-studies/config.yaml"
+        - ".openneuro-studies/test-discover.sh"
+        - ".gitignore"
+        - "dataset_description.json"
+        - ".bidsignore"
+        - "README.md"
+      side_effects:
+        - "Runs: datalad create --no-annex <path>"
+        - "Creates initial git commit"
+
   discover:
     description: "Discover datasets from configured sources without cloning"
     module: "code/src/openneuro_studies/cli/discover.py"

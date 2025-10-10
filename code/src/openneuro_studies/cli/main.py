@@ -4,6 +4,7 @@ import click
 
 from openneuro_studies import __version__
 from openneuro_studies.cli.discover import discover as discover_cmd
+from openneuro_studies.cli.init import init as init_cmd
 
 
 @click.group()
@@ -29,7 +30,8 @@ def cli(ctx: click.Context, config: str) -> None:
     ctx.obj["config"] = config
 
 
-# Register discover command
+# Register commands
+cli.add_command(init_cmd, name="init")
 cli.add_command(discover_cmd, name="discover")
 
 
