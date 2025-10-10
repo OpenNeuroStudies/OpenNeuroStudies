@@ -11,7 +11,7 @@ from openneuro_studies.cli.init import init as init_cmd
 @click.version_option(version=__version__, prog_name="openneuro-studies")
 @click.option(
     "--config",
-    type=click.Path(exists=True, dir_okay=False, readable=True),
+    type=click.Path(dir_okay=False, readable=True),
     default=".openneuro-studies/config.yaml",
     help="Configuration file path",
     show_default=True,
