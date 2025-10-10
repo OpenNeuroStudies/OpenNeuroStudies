@@ -34,7 +34,8 @@ def discover(
     Queries GitHub/Forgejo APIs to identify available raw and derivative datasets
     without cloning. Results are cached to the specified output file.
 
-    Example:
+    \b
+    Examples:
         openneuro-studies discover
         openneuro-studies discover --test-filter ds000001 --test-filter ds000010
     """

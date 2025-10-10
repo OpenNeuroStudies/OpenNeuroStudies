@@ -23,7 +23,8 @@ def init(path: str, github_org: str, force: bool) -> None:
     (git repository without git-annex). Creates configuration files,
     directory structure, and initial commit.
 
-    Example:
+    \b
+    Examples:
         openneuro-studies init
         openneuro-studies init /path/to/openneurostudies
         openneuro-studies init --github-org MyOrganization
