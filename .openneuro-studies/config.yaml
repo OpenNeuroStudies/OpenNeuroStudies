@@ -20,7 +20,7 @@ sources:
     organization_url: https://github.com/OpenNeuroDerivatives
     type: derivative
     inclusion_patterns:
-      - "^ds\\d{6}$"  # Match ds000001 through ds999999
+      - "^ds\\d{6}-.*$"  # Match ds000001-fmriprep, ds000001-mriqc, etc.
     exclusion_patterns: []
     access_token_env: GITHUB_TOKEN
 
