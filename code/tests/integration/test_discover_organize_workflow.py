@@ -205,8 +205,9 @@ def test_full_workflow(test_workspace: Path) -> None:
     # but no untracked files
     status_lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
     for line in status_lines:
-        # Should only see modified submodules, not untracked files
-        assert line.startswith(" M ") or line.startswith("?? study-"), \
+        # Should only see modified submodules (M or  M) or untracked study dirs
+        # Git porcelain format: "M" = modified in index, " M" = modified in worktree
+        assert line.startswith("M ") or line.startswith(" M ") or line.startswith("?? study-"), \
             f"Unexpected git status: {line}"
 
     print("\n=== Integration test PASSED ===")
