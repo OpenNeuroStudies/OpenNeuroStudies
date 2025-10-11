@@ -34,18 +34,11 @@ class GitHubClient:
 
         Args:
             token: GitHub personal access token. If None, reads from GITHUB_TOKEN env var.
+                   If no token provided, will use unauthenticated requests (lower rate limit).
             cache_dir: Directory for cache storage
             cache_expire_after: Cache expiration time in seconds (default: 1 hour)
-
-        Raises:
-            GitHubAPIError: If no token provided and GITHUB_TOKEN not set
         """
         self.token = token or os.getenv("GITHUB_TOKEN")
-        if not self.token:
-            raise GitHubAPIError(
-                "GitHub token required. Set GITHUB_TOKEN environment variable or "
-                "pass token parameter."
-            )
 
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -59,12 +52,12 @@ class GitHubClient:
             stale_if_error=True,  # Use stale cache if API fails
         )
 
-        self.session.headers.update(
-            {
-                "Authorization": f"token {self.token}",
-                "Accept": "application/vnd.github.v3+json",
-            }
-        )
+        # Set up headers - only add Authorization if token is available
+        headers = {"Accept": "application/vnd.github.v3+json"}
+        if self.token:
+            headers["Authorization"] = f"token {self.token}"
+
+        self.session.headers.update(headers)
 
         self.base_url = "https://api.github.com"
 
@@ -95,9 +88,15 @@ class GitHubClient:
                     reset_time = int(response.headers.get("X-RateLimit-Reset", 0))
                     if reset_time:
                         wait_time = max(0, reset_time - time.time())
+
+                        # Provide helpful message if no token is set
+                        token_hint = ""
+                        if not self.token:
+                            token_hint = " Set GITHUB_TOKEN environment variable for higher rate limits."
+
                         if wait_time > 300:  # Don't wait more than 5 minutes
                             raise GitHubAPIError(
-                                f"Rate limit exceeded. Reset in {wait_time/60:.1f} minutes."
+                                f"Rate limit exceeded. Reset in {wait_time/60:.1f} minutes.{token_hint}"
                             )
                         time.sleep(wait_time + 1)
                         continue
