@@ -48,7 +48,7 @@ def organize(
     datasets as git submodules, and prepare for metadata generation.
 
     Arguments accept:
-    - Study IDs: study-ds000001, study-ds000010 (supports shell globs: study-ds0000*)
+    - Study IDs: study-ds000001, study-ds005256 (supports shell globs: study-ds0000*)
     - Dataset URLs: https://github.com/OpenNeuroDerivatives/ds001761-fmriprep
     - Local paths: /path/to/local/dataset
 
@@ -63,7 +63,7 @@ def organize(
         openneuro-studies organize
 
         # Organize specific studies (incremental)
-        openneuro-studies organize study-ds000001 study-ds000010
+        openneuro-studies organize study-ds000001 study-ds005256
 
         # Use shell globs to select studies
         openneuro-studies organize study-ds0000*

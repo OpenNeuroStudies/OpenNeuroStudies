@@ -157,7 +157,7 @@ This ensures all commits maintain consistent code quality and type safety.
 openneuro-studies discover
 
 # Organize specific studies
-openneuro-studies organize study-ds000001 study-ds000010
+openneuro-studies organize study-ds000001 study-ds005256
 
 # Generate metadata for all studies
 openneuro-studies metadata generate

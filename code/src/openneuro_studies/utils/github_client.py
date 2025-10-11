@@ -118,7 +118,7 @@ class GitHubClient:
 
         Args:
             organization: GitHub organization name
-            dataset_filter: Optional list of dataset IDs to filter (e.g., ["ds000001", "ds000010"])
+            dataset_filter: Optional list of dataset IDs to filter (e.g., ["ds000001", "ds005256"])
 
         Returns:
             List of repository dictionaries

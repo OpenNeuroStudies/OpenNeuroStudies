@@ -115,7 +115,7 @@ echo ""
 
 openneuro-studies discover \\
     --test-filter ds000001 \\
-    --test-filter ds000010 \\
+    --test-filter ds005256 \\
     --test-filter ds006131 \\
     --test-filter ds006185 \\
     --test-filter ds006189 \\
@@ -126,7 +126,7 @@ echo ""
 echo "Discovery complete! Results saved to .openneuro-studies/discovered-datasets.json"
 echo ""
 echo "Test datasets:"
-echo "  Raw datasets: ds000001, ds000010, ds006131"
+echo "  Raw datasets: ds000001, ds005256, ds006131"
 echo "  Derivatives:  ds006185, ds006189, ds006190"
 """
             test_script.write_text(script_content)

@@ -37,7 +37,7 @@ class DatasetFinder:
             config: OpenNeuroStudies configuration
             github_client: GitHub API client (creates new if None)
             test_dataset_filter: Optional list of dataset IDs for testing
-                                (e.g., ["ds000001", "ds000010"])
+                                (e.g., ["ds000001", "ds005256"])
         """
         self.config = config
         self.github_client = github_client or GitHubClient()

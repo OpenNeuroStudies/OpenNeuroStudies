@@ -80,7 +80,7 @@ def metadata_sync(study_ids: tuple[str, ...]) -> None:
         STUDY_IDS: One or more study IDs to synchronize.
 
     Example:
-        openneuro-studies metadata sync study-ds000001 study-ds000010
+        openneuro-studies metadata sync study-ds000001 study-ds005256
     """
     click.echo(f"[Placeholder] Would sync metadata for: {', '.join(study_ids)}")
     click.echo("Phase 4 implementation pending...")

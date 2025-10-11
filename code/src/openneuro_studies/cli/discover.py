@@ -37,7 +37,7 @@ def discover(
     \b
     Examples:
         openneuro-studies discover
-        openneuro-studies discover --test-filter ds000001 --test-filter ds000010
+        openneuro-studies discover --test-filter ds000001 --test-filter ds005256
     """
     try:
         # Load configuration (don't require tokens - will work without until rate limits)
