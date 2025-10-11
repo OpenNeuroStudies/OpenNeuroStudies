@@ -68,156 +68,147 @@ def test_full_workflow(test_workspace: Path) -> None:
     Args:
         test_workspace: Temporary test workspace path
     """
-    # Save current directory
-    original_cwd = Path.cwd()
+    # Step 1: Initialize repository
+    print("\n=== Step 1: Initialize repository ===")
+    result = subprocess.run(
+        ["openneuro-studies", "init"],
+        cwd=test_workspace,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.returncode == 0
+    assert (test_workspace / ".openneuro-studies" / "config.yaml").exists()
+    assert (test_workspace / ".git").exists()
 
-    try:
-        # Change to test workspace
-        import os
-        os.chdir(test_workspace)
+    # Step 2: Discover datasets (with filter for test datasets)
+    print("\n=== Step 2: Discover datasets ===")
+    discover_args = ["openneuro-studies", "discover"]
+    for dataset_id in TEST_RAW_DATASETS:
+        discover_args.extend(["--test-filter", dataset_id])
 
-        # Step 1: Initialize repository
-        print("\n=== Step 1: Initialize repository ===")
-        result = subprocess.run(
-            ["openneuro-studies", "init"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        assert result.returncode == 0
-        assert (test_workspace / ".openneuro-studies" / "config.yaml").exists()
-        assert (test_workspace / ".git").exists()
+    result = subprocess.run(
+        discover_args,
+        cwd=test_workspace,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.returncode == 0
 
-        # Step 2: Discover datasets (with filter for test datasets)
-        print("\n=== Step 2: Discover datasets ===")
-        discover_args = ["openneuro-studies", "discover"]
-        for dataset_id in TEST_RAW_DATASETS:
-            discover_args.extend(["--test-filter", dataset_id])
+    # Check discovered datasets file
+    discovered_file = test_workspace / ".openneuro-studies" / "discovered-datasets.json"
+    assert discovered_file.exists()
 
-        result = subprocess.run(
-            discover_args,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        assert result.returncode == 0
+    with open(discovered_file) as f:
+        discovered = json.load(f)
 
-        # Check discovered datasets file
-        discovered_file = test_workspace / ".openneuro-studies" / "discovered-datasets.json"
-        assert discovered_file.exists()
+    raw_count = len(discovered.get("raw", []))
+    deriv_count = len(discovered.get("derivative", []))
 
-        with open(discovered_file) as f:
-            discovered = json.load(f)
+    print(f"Discovered: {raw_count} raw, {deriv_count} derivatives")
+    assert raw_count > 0, "Should discover at least one raw dataset"
 
-        raw_count = len(discovered.get("raw", []))
-        deriv_count = len(discovered.get("derivative", []))
+    # Verify we found the expected datasets
+    raw_ids = {d["dataset_id"] for d in discovered.get("raw", [])}
+    for expected_id in TEST_RAW_DATASETS:
+        if expected_id != "ds006190":  # ds006190 is a derivative
+            assert expected_id in raw_ids, f"Should discover {expected_id}"
 
-        print(f"Discovered: {raw_count} raw, {deriv_count} derivatives")
-        assert raw_count > 0, "Should discover at least one raw dataset"
+    # Step 3: Organize datasets
+    print("\n=== Step 3: Organize datasets ===")
+    result = subprocess.run(
+        ["openneuro-studies", "organize"],
+        cwd=test_workspace,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.returncode == 0
 
-        # Verify we found the expected datasets
-        raw_ids = {d["dataset_id"] for d in discovered.get("raw", [])}
-        for expected_id in TEST_RAW_DATASETS:
-            if expected_id != "ds006190":  # ds006190 is a derivative
-                assert expected_id in raw_ids, f"Should discover {expected_id}"
+    # Step 4: Verify organization structure
+    print("\n=== Step 4: Verify organization ===")
 
-        # Step 3: Organize datasets
-        print("\n=== Step 3: Organize datasets ===")
-        result = subprocess.run(
-            ["openneuro-studies", "organize"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        assert result.returncode == 0
+    # Check parent .gitmodules exists and has entries
+    parent_gitmodules = test_workspace / ".gitmodules"
+    assert parent_gitmodules.exists(), "Parent .gitmodules should exist"
 
-        # Step 4: Verify organization structure
-        print("\n=== Step 4: Verify organization ===")
+    gitmodules_content = parent_gitmodules.read_text()
 
-        # Check parent .gitmodules exists and has entries
-        parent_gitmodules = test_workspace / ".gitmodules"
-        assert parent_gitmodules.exists(), "Parent .gitmodules should exist"
+    # Check each raw dataset has a corresponding study
+    for dataset_id in raw_ids:
+        study_id = f"study-{dataset_id}"
+        study_path = test_workspace / study_id
 
-        gitmodules_content = parent_gitmodules.read_text()
+        # Study directory should exist
+        assert study_path.exists(), f"{study_id} directory should exist"
 
-        # Check each raw dataset has a corresponding study
-        for dataset_id in raw_ids:
-            study_id = f"study-{dataset_id}"
-            study_path = test_workspace / study_id
+        # Study should be a git repository
+        assert (study_path / ".git").exists(), f"{study_id} should be a git repo"
 
-            # Study directory should exist
-            assert study_path.exists(), f"{study_id} directory should exist"
+        # Study should be registered in parent .gitmodules
+        assert f'[submodule "{study_id}"]' in gitmodules_content, \
+            f"{study_id} should be in parent .gitmodules"
+        assert f"https://github.com/OpenNeuroStudies/{study_id}.git" in gitmodules_content, \
+            f"{study_id} should point to OpenNeuroStudies organization"
 
-            # Study should be a git repository
-            assert (study_path / ".git").exists(), f"{study_id} should be a git repo"
+        # Study should have its own .gitmodules with raw dataset
+        study_gitmodules = study_path / ".gitmodules"
+        assert study_gitmodules.exists(), f"{study_id} should have .gitmodules"
 
-            # Study should be registered in parent .gitmodules
-            assert f'[submodule "{study_id}"]' in gitmodules_content, \
-                f"{study_id} should be in parent .gitmodules"
-            assert f"https://github.com/OpenNeuroStudies/{study_id}.git" in gitmodules_content, \
-                f"{study_id} should point to OpenNeuroStudies organization"
+        study_gitmodules_content = study_gitmodules.read_text()
+        assert "sourcedata/raw" in study_gitmodules_content, \
+            f"{study_id} should have sourcedata/raw submodule"
 
-            # Study should have its own .gitmodules with raw dataset
-            study_gitmodules = study_path / ".gitmodules"
-            assert study_gitmodules.exists(), f"{study_id} should have .gitmodules"
-
-            study_gitmodules_content = study_gitmodules.read_text()
-            assert "sourcedata/raw" in study_gitmodules_content, \
-                f"{study_id} should have sourcedata/raw submodule"
-
-            # Check raw dataset submodule status
-            result = subprocess.run(
-                ["git", "submodule", "status"],
-                cwd=study_path,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            assert "sourcedata/raw" in result.stdout, \
-                f"{study_id} should have sourcedata/raw submodule registered"
-
-        # Step 5: Verify parent submodule status
-        print("\n=== Step 5: Verify parent submodule status ===")
+        # Check raw dataset submodule status
         result = subprocess.run(
             ["git", "submodule", "status"],
-            cwd=test_workspace,
+            cwd=study_path,
             capture_output=True,
             text=True,
             check=True,
         )
+        assert "sourcedata/raw" in result.stdout, \
+            f"{study_id} should have sourcedata/raw submodule registered"
 
-        # Check that studies are listed as submodules
-        for dataset_id in raw_ids:
-            study_id = f"study-{dataset_id}"
-            assert study_id in result.stdout, \
-                f"{study_id} should be registered as parent submodule"
+    # Step 5: Verify parent submodule status
+    print("\n=== Step 5: Verify parent submodule status ===")
+    result = subprocess.run(
+        ["git", "submodule", "status"],
+        cwd=test_workspace,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
 
-        # Step 6: Check git status is clean (all changes committed)
-        print("\n=== Step 6: Verify git status ===")
-        result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=test_workspace,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+    # Check that studies are listed as submodules
+    for dataset_id in raw_ids:
+        study_id = f"study-{dataset_id}"
+        assert study_id in result.stdout, \
+            f"{study_id} should be registered as parent submodule"
 
-        # Git status should show studies as modified (because they have submodules)
-        # but no untracked files
-        status_lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
-        for line in status_lines:
-            # Should only see modified submodules, not untracked files
-            assert line.startswith(" M ") or line.startswith("?? study-"), \
-                f"Unexpected git status: {line}"
+    # Step 6: Check git status is clean (all changes committed)
+    print("\n=== Step 6: Verify git status ===")
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=test_workspace,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
 
-        print("\n=== Integration test PASSED ===")
-        print(f"Workspace: {test_workspace}")
-        print(f"Raw datasets organized: {raw_count}")
-        print(f"Derivatives discovered: {deriv_count}")
+    # Git status should show studies as modified (because they have submodules)
+    # but no untracked files
+    status_lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
+    for line in status_lines:
+        # Should only see modified submodules, not untracked files
+        assert line.startswith(" M ") or line.startswith("?? study-"), \
+            f"Unexpected git status: {line}"
 
-    finally:
-        # Restore original directory
-        os.chdir(original_cwd)
+    print("\n=== Integration test PASSED ===")
+    print(f"Workspace: {test_workspace}")
+    print(f"Raw datasets organized: {raw_count}")
+    print(f"Derivatives discovered: {deriv_count}")
 
 
 @pytest.mark.integration
@@ -237,38 +228,28 @@ def test_persistent_test_directory() -> None:
 
     test_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save current directory
-    original_cwd = Path.cwd()
+    # Initialize
+    print("\n=== Initializing /tmp/openneuro-test-discover ===")
+    subprocess.run(["openneuro-studies", "init"], cwd=test_dir, check=True)
 
-    try:
-        import os
-        os.chdir(test_dir)
+    # Discover with test filter
+    print("\n=== Discovering test datasets ===")
+    discover_args = ["openneuro-studies", "discover"]
+    for dataset_id in TEST_RAW_DATASETS:
+        discover_args.extend(["--test-filter", dataset_id])
 
-        # Initialize
-        print("\n=== Initializing /tmp/openneuro-test-discover ===")
-        subprocess.run(["openneuro-studies", "init"], check=True)
+    subprocess.run(discover_args, cwd=test_dir, check=True)
 
-        # Discover with test filter
-        print("\n=== Discovering test datasets ===")
-        discover_args = ["openneuro-studies", "discover"]
-        for dataset_id in TEST_RAW_DATASETS:
-            discover_args.extend(["--test-filter", dataset_id])
+    # Organize
+    print("\n=== Organizing datasets ===")
+    subprocess.run(["openneuro-studies", "organize"], cwd=test_dir, check=True)
 
-        subprocess.run(discover_args, check=True)
+    # Report results
+    discovered_file = test_dir / ".openneuro-studies" / "discovered-datasets.json"
+    with open(discovered_file) as f:
+        discovered = json.load(f)
 
-        # Organize
-        print("\n=== Organizing datasets ===")
-        subprocess.run(["openneuro-studies", "organize"], check=True)
-
-        # Report results
-        discovered_file = test_dir / ".openneuro-studies" / "discovered-datasets.json"
-        with open(discovered_file) as f:
-            discovered = json.load(f)
-
-        print(f"\n✓ Created {test_dir}")
-        print(f"✓ Raw datasets: {len(discovered.get('raw', []))}")
-        print(f"✓ Derivatives: {len(discovered.get('derivative', []))}")
-        print(f"✓ Studies created: {len(list(test_dir.glob('study-*')))}")
-
-    finally:
-        os.chdir(original_cwd)
+    print(f"\n✓ Created {test_dir}")
+    print(f"✓ Raw datasets: {len(discovered.get('raw', []))}")
+    print(f"✓ Derivatives: {len(discovered.get('derivative', []))}")
+    print(f"✓ Studies created: {len(list(test_dir.glob('study-*')))}")
