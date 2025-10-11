@@ -5,6 +5,7 @@ import click
 from openneuro_studies import __version__
 from openneuro_studies.cli.discover import discover as discover_cmd
 from openneuro_studies.cli.init import init as init_cmd
+from openneuro_studies.cli.organize import organize as organize_cmd
 
 
 @click.group()
@@ -33,32 +34,7 @@ def cli(ctx: click.Context, config: str) -> None:
 # Register commands
 cli.add_command(init_cmd, name="init")
 cli.add_command(discover_cmd, name="discover")
-
-
-@cli.command()
-@click.argument("study_ids", nargs=-1, required=False)
-@click.pass_context
-def organize(ctx: click.Context, study_ids: tuple[str, ...]) -> None:
-    """Organize discovered datasets into study structures.
-
-    Creates study-{id} folders as DataLad datasets with sourcedata/ and derivatives/
-    linked as git submodules. Operates without cloning source datasets.
-
-    Arguments:
-        STUDY_IDS: Optional list of study IDs to organize (e.g., study-ds000001).
-                   If not provided, organizes all discovered datasets.
-
-    Example:
-        openneuro-studies organize
-        openneuro-studies organize study-ds000001 study-ds000010
-    """
-    config_path = ctx.obj.get("config", ".openneuro-studies/config.yaml")
-    if study_ids:
-        click.echo(f"[Placeholder] Would organize studies: {', '.join(study_ids)}")
-    else:
-        click.echo("[Placeholder] Would organize all discovered datasets")
-    click.echo(f"Using config: {config_path}")
-    click.echo("Phase 3 implementation pending...")
+cli.add_command(organize_cmd, name="organize")
 
 
 @cli.group()
