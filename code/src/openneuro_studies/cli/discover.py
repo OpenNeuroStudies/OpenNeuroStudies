@@ -40,9 +40,9 @@ def discover(
         openneuro-studies discover --test-filter ds000001 --test-filter ds000010
     """
     try:
-        # Load configuration
+        # Load configuration (don't require tokens - will work without until rate limits)
         config_path = config or ctx.obj.get("config", ".openneuro-studies/config.yaml")
-        cfg = load_config(config_path)
+        cfg = load_config(config_path, require_tokens=False)
 
         # Create dataset finder
         test_dataset_filter = list(test_filter) if test_filter else None
