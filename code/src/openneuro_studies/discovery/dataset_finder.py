@@ -250,10 +250,10 @@ class DatasetFinder:
         output_file = Path(output_path)
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        # Convert to serializable format
+        # Convert to serializable format (mode='json' handles Pydantic types like HttpUrl)
         serializable = {
-            "raw": [d.model_dump() for d in discovered["raw"]],
-            "derivative": [d.model_dump() for d in discovered["derivative"]],
+            "raw": [d.model_dump(mode="json") for d in discovered["raw"]],
+            "derivative": [d.model_dump(mode="json") for d in discovered["derivative"]],
         }
 
         with open(output_file, "w") as f:
