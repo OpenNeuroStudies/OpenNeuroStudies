@@ -16,12 +16,17 @@ class ConfigLoadError(Exception):
     pass
 
 
-def load_config(config_path: Optional[str] = None) -> OpenNeuroStudiesConfig:
+def load_config(
+    config_path: Optional[str] = None, require_tokens: bool = True
+) -> OpenNeuroStudiesConfig:
     """Load and validate configuration from YAML file.
 
     Args:
         config_path: Path to configuration file. If None, defaults to
                     .openneuro-studies/config.yaml in current directory.
+        require_tokens: If True, validate that access tokens are set in environment.
+                       If False, skip token validation (useful for commands that don't
+                       need API access like organize).
 
     Returns:
         Validated OpenNeuroStudiesConfig instance
@@ -57,14 +62,15 @@ def load_config(config_path: Optional[str] = None) -> OpenNeuroStudiesConfig:
     except ValidationError as e:
         raise ConfigLoadError(f"Configuration validation failed:\n{e}") from e
 
-    # Validate environment variables for access tokens
-    for source in config.sources:
-        if source.access_token_env:
-            if not os.getenv(source.access_token_env):
-                raise ConfigLoadError(
-                    f"Environment variable {source.access_token_env} not set "
-                    f"(required for source: {source.name})"
-                )
+    # Validate environment variables for access tokens (if required)
+    if require_tokens:
+        for source in config.sources:
+            if source.access_token_env:
+                if not os.getenv(source.access_token_env):
+                    raise ConfigLoadError(
+                        f"Environment variable {source.access_token_env} not set "
+                        f"(required for source: {source.name})"
+                    )
 
     return config
 

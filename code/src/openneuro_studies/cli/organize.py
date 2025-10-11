@@ -75,9 +75,9 @@ def organize(
         openneuro-studies organize --dry-run study-ds000001
     """
     try:
-        # Load configuration
+        # Load configuration (no GitHub token needed for organize)
         config_path = ctx.obj.get("config", ".openneuro-studies/config.yaml")
-        cfg = load_config(config_path)
+        cfg = load_config(config_path, require_tokens=False)
 
         # Override github_org if provided
         if github_org:

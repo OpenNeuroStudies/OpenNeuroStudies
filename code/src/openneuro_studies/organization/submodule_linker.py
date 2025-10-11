@@ -50,9 +50,14 @@ def link_submodule(
         submodule_name = submodule_path.replace("/", "-")
 
     try:
-        # 1. Create directory structure (git expects it for update-index)
+        # 1. Ensure parent directory for submodule exists
+        # (e.g., "sourcedata" must exist for "sourcedata/raw")
         submodule_dir = parent_repo / submodule_path
-        submodule_dir.mkdir(parents=True, exist_ok=True)
+        submodule_dir.parent.mkdir(parents=True, exist_ok=True)
+
+        # Note: We do NOT create the submodule directory itself. Git handles this
+        # when the submodule is cloned. Creating an empty directory causes:
+        # "error: 'sourcedata/raw' does not have a commit checked out"
 
         # 2. Configure .gitmodules - path
         subprocess.run(

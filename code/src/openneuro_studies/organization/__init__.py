@@ -118,11 +118,24 @@ def _organize_raw_dataset(
         datalad_id=None,  # TODO: Extract from .datalad/config if available
     )
 
-    # Save changes
-    ds = dl.Dataset(str(study_path))
-    ds.save(
-        message=f"Link raw dataset {dataset.dataset_id}\n\n"
-        f"Added sourcedata/raw submodule pointing to {dataset.url} @ {dataset.commit_sha[:8]}"
+    # Commit the submodule changes using git directly
+    # (DataLad's save() doesn't handle gitlinks created via update-index properly)
+    # Note: We don't specify paths because the gitlink is already staged via update-index
+    import subprocess
+
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(study_path),
+            "commit",
+            "-m",
+            f"Link raw dataset {dataset.dataset_id}\n\n"
+            f"Added sourcedata/raw submodule pointing to {dataset.url} @ {dataset.commit_sha[:8]}",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     )
 
     return study_path
@@ -165,11 +178,12 @@ def _organize_single_source_derivative(
         datalad_id=dataset.datalad_uuid,
     )
 
-    # Save changes
+    # Save changes (explicitly include .gitmodules and the submodule path)
     ds = dl.Dataset(str(study_path))
     ds.save(
+        path=[".gitmodules", derivative_path],
         message=f"Link derivative {dataset.derivative_id}\n\n"
-        f"Added {derivative_path} submodule for {dataset.tool_name} {dataset.version}"
+        f"Added {derivative_path} submodule for {dataset.tool_name} {dataset.version}",
     )
 
     return study_path
@@ -199,6 +213,9 @@ def _organize_multi_source_derivative(
     # Create study dataset
     study_path = create_study_dataset(study_id, github_org, parent_path)
 
+    # Track all submodule paths for later commit
+    submodule_paths = [".gitmodules"]
+
     # Link all source datasets under sourcedata/
     for source_id in dataset.source_datasets:
         source_path = f"sourcedata/{source_id}"
@@ -210,6 +227,7 @@ def _organize_multi_source_derivative(
             submodule_name=f"{source_id}-raw",
             datalad_id=None,  # TODO: Extract if available
         )
+        submodule_paths.append(source_path)
 
     # Link derivative under derivatives/
     derivative_path = f"derivatives/{dataset.tool_name}-{dataset.version}"
@@ -221,12 +239,14 @@ def _organize_multi_source_derivative(
         submodule_name=f"{dataset.dataset_id}",
         datalad_id=dataset.datalad_uuid,
     )
+    submodule_paths.append(derivative_path)
 
-    # Save changes
+    # Save changes (explicitly include .gitmodules and all submodule paths)
     ds = dl.Dataset(str(study_path))
     ds.save(
+        path=submodule_paths,
         message=f"Link multi-source derivative {dataset.derivative_id}\n\n"
-        f"Added {len(dataset.source_datasets)} source datasets and derivative {dataset.tool_name}"
+        f"Added {len(dataset.source_datasets)} source datasets and derivative {dataset.tool_name}",
     )
 
     return study_path
