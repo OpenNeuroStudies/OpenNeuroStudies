@@ -138,6 +138,9 @@ def _organize_raw_dataset(
         text=True,
     )
 
+    # Register the study dataset as a submodule in the parent repository
+    _register_study_in_parent(study_path, study_id, github_org)
+
     return study_path
 
 
@@ -185,6 +188,9 @@ def _organize_single_source_derivative(
         message=f"Link derivative {dataset.derivative_id}\n\n"
         f"Added {derivative_path} submodule for {dataset.tool_name} {dataset.version}",
     )
+
+    # Register the study dataset as a submodule in the parent repository
+    _register_study_in_parent(study_path, study_id, github_org)
 
     return study_path
 
@@ -249,4 +255,84 @@ def _organize_multi_source_derivative(
         f"Added {len(dataset.source_datasets)} source datasets and derivative {dataset.tool_name}",
     )
 
+    # Register the study dataset as a submodule in the parent repository
+    _register_study_in_parent(study_path, study_id, github_org)
+
     return study_path
+
+
+def _register_study_in_parent(study_path: Path, study_id: str, github_org: str) -> None:
+    """Register a study dataset as a submodule in the parent repository.
+
+    Args:
+        study_path: Path to the study dataset
+        study_id: Study identifier (e.g., "study-ds000001")
+        github_org: GitHub organization for study repository URL
+
+    Raises:
+        OrganizationError: If registration fails
+    """
+    import subprocess
+
+    parent_repo = study_path.parent
+
+    # Get current HEAD commit SHA of the study
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(study_path), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        study_commit_sha = result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        raise OrganizationError(f"Failed to get study commit SHA: {e}") from e
+
+    # Link study as submodule in parent using configured GitHub org
+    study_url = f"https://github.com/{github_org}/{study_id}.git"
+
+    # Get DataLad ID from study's .datalad/config
+    datalad_id = None
+    datalad_config = study_path / ".datalad" / "config"
+    if datalad_config.exists():
+        try:
+            result = subprocess.run(
+                ["git", "config", "-f", str(datalad_config), "datalad.dataset.id"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                datalad_id = result.stdout.strip()
+        except Exception:
+            pass  # DataLad ID is optional
+
+    link_submodule(
+        parent_repo=parent_repo,
+        submodule_path=study_id,
+        url=study_url,
+        commit_sha=study_commit_sha,
+        submodule_name=study_id,
+        datalad_id=datalad_id,
+    )
+
+    # Commit the study submodule to parent
+    try:
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(parent_repo),
+                "commit",
+                "-m",
+                f"Add study dataset {study_id}\n\n"
+                f"Registered as submodule pointing to {study_url} @ {study_commit_sha[:8]}",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise OrganizationError(
+            f"Failed to commit study submodule in parent: {e.stderr if e.stderr else str(e)}"
+        ) from e
