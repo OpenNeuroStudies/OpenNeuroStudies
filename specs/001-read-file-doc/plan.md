@@ -325,15 +325,54 @@ The tasks.md file will break down implementation into:
 2. Git submodule linking (git config + git update-index)
 3. Study repository initialization
 4. `organize` CLI command
-5. Integration tests with temporary git repos
+5. Unorganized dataset tracking (`.openneuro-studies/unorganized-datasets.json`)
+6. Integration tests with temporary git repos
 
 **Dependencies**: Phase 2 (discovery output)
 
 **Success Criteria**:
 - Creates study-{id} DataLad datasets
 - Links sourcedata and derivatives as submodules
+- Tracks unorganizable derivatives with reason codes
+- Reports organized vs unorganized counts to user
 - No dataset cloning occurs
 - Idempotent (safe to re-run)
+
+**Unorganized Dataset Tracking**:
+
+Per Constitution Principle VI (No Silent Failures), all discovered datasets must be either organized or explicitly tracked. The organize command must:
+
+1. Check if source datasets exist for each derivative
+2. Track derivatives without sources in `.openneuro-studies/unorganized-datasets.json`:
+   ```json
+   {
+     "derivatives_without_raw": [
+       {
+         "dataset_id": "ds000212-fmriprep",
+         "derivative_id": "fmriprep-v20.2.0-abc123",
+         "tool_name": "fmriprep",
+         "version": "20.2.0",
+         "source_datasets": ["ds000212"],
+         "reason": "raw_dataset_not_found",
+         "discovered_at": "2025-10-11T12:34:56Z",
+         "notes": "Raw dataset ds000212 not in discovered datasets"
+       }
+     ]
+   }
+   ```
+3. Report summary to user:
+   ```
+   Organizing 50 datasets:
+     ✓ 48 datasets organized
+     ⚠ 2 derivatives unorganized (missing source datasets)
+
+   See .openneuro-studies/unorganized-datasets.json for details
+   ```
+
+**Reason Codes**:
+- `raw_dataset_not_found`: Source raw dataset(s) not in discovered datasets
+- `invalid_source_reference`: SourceDatasets field cannot be parsed
+- `multi_source_incomplete`: Multi-source derivative missing some source datasets
 
 ### Phase 4: Metadata Generation (Week 3-4)
 
