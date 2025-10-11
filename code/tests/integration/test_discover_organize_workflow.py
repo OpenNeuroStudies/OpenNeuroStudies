@@ -14,9 +14,15 @@ Test datasets (from CLAUDE.md):
 
 Each raw dataset will include any matching derivatives from OpenNeuroDerivatives
 (e.g., ds000001-fmriprep, ds000001-mriqc).
+
+Note on GITHUB_TOKEN:
+- The discovery workflow works WITHOUT token set (uses unauthenticated API)
+- May hit rate limits faster without token (60/hour vs 5000/hour)
+- If tests fail with rate limit errors, set GITHUB_TOKEN and re-run
 """
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
