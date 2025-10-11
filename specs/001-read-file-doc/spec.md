@@ -66,7 +66,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - What happens when a dataset has malformed dataset_description.json? System should mark metadata fields as "n/a" and log validation warnings.
 - What happens when two derivatives have the same tool and version? System should disambiguate using the first 8 letters of DataLad UUID from .datalad/config.
 - What happens when SourceDatasets contains non-OpenNeuro references (DOIs, local paths)? System should preserve them in metadata but only process OpenNeuro datasets for linking.
-- What happens when a derivative dataset points to a source dataset that doesn't exist in the collection? System should log the missing dependency and mark it in metadata as unavailable.
+- What happens when a derivative dataset points to a source dataset that doesn't exist in the collection? System MUST track the derivative in `.openneuro-studies/unorganized-datasets.json` with reason code `raw_dataset_not_found`, including the derivative metadata and missing source dataset IDs. This ensures no discovered datasets are silently ignored.
 - What happens when versioning produces a date-based release (e.g., 0.20251009.0) on the same day? Subsequent releases increment the PATCH number (0.20251009.1, 0.20251009.2).
 - What happens when a raw dataset has no git tags/releases? System should mark raw_version as "n/a" and fetch CHANGES file if available to determine version information without cloning.
 - What happens when calculating outdatedness requires cloning? This operation should be performed sparingly as a separate batch process, with results cached to avoid repeated cloning.
@@ -112,6 +112,9 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-032**: System MUST extract imaging data characteristics (bold_size, t1w_size, bold_size_max, bold_voxels) requiring sparse data access via datalad-fuse or fsspec
 - **FR-033**: System MUST implement imaging metrics extraction as a separate operation stage with sparse access to avoid full dataset cloning
 - **FR-034**: System MUST maintain top-level CHANGES file following CPAN::Changes::Spec format with UTF-8 encoding for repository version history, as required by BIDS specification for datasets; each CHANGES entry MUST be accompanied by a matching git tag (e.g., version 0.20251009.0 requires tag `0.20251009.0`)
+- **FR-035**: System MUST track all discovered but unorganized datasets in `.openneuro-studies/unorganized-datasets.json` with reason codes (e.g., `raw_dataset_not_found`, `invalid_source_reference`, `multi_source_incomplete`)
+- **FR-036**: System MUST report counts of organized vs unorganized datasets during organize operations, directing users to unorganized-datasets.json for details
+- **FR-037**: System MUST support periodic re-evaluation of unorganized datasets when new datasets are discovered, attempting to organize previously unorganizable derivatives
 
 ### Key Entities
 
@@ -124,6 +127,8 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **Source Specification**: YAML configuration defining dataset sources (GitHub organizations, regex patterns, DataLad collections). Key attributes: organization/URL, inclusion patterns, access credentials.
 
 - **Metadata Index**: TSV files with JSON sidecars providing tabular overviews. studies.tsv (wide format) lists studies with derivative_ids column. studies_derivatives.tsv (tall format) has one row per study-derivative pair with study_id and derivative_id as lead columns, enabling detailed derivative tracking. Key attributes: column names, data types, descriptions, relationships. Dashboards can join or compose wide versions as needed.
+
+- **Unorganized Dataset**: A discovered derivative dataset that cannot be organized into a study structure due to missing dependencies or invalid metadata. Tracked in `.openneuro-studies/unorganized-datasets.json`. Key attributes: dataset_id, derivative_id, tool_name, version, source_datasets, reason code, discovered_at timestamp, notes. Enables tracking of all discovered datasets without silent failures.
 
 ## Success Criteria *(mandatory)*
 

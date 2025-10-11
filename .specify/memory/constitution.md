@@ -1,23 +1,27 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version Change: 1.20251009.0 → 1.20251009.1
+Version Change: 1.20251009.1 → 1.20251011.0
 Principle Changes:
-  - None (clarification and consistency improvements only)
+  - NEW PRINCIPLE VI: No Silent Failures
+    * All discovered datasets must be organized or explicitly tracked as unorganized
+    * Requires .openneuro-studies/unorganized-datasets.json for tracking
+    * Mandatory reason codes for unorganized datasets
+    * User reporting during organize operations
 Amended Sections:
-  - Metadata Completeness - column naming consistency improvements:
-    * Added version column (study dataset version) after name
-    * Moved raw_version to follow version
-    * Changed num_ prefix to _num suffix (subjects_num, sessions_num, bold_num, t1w_num, t2w_num)
-    * Changed session_min/max to sessions_min/max for consistency
-    * Changed max_bold_size to bold_size_max for consistency with _size suffix pattern
+  - Core Principles: Added Principle VI (No Silent Failures)
+  - Impacts organize command implementation
+  - Requires new unorganized-datasets.json tracking file
 Templates Status:
-  ✅ plan-template.md - No changes required
-  ✅ spec-template.md - No changes required
-  ✅ tasks-template.md - No changes required
-  ⚠ agent-file-template.md - Generic template, no updates required
-  ⚠ checklist-template.md - Generic template, no updates required
-Follow-up TODOs: None
+  ⚠ plan-template.md - May need update for organize command enhancements
+  ⚠ spec-template.md - May need update for derivative handling requirements
+  ⚠ tasks-template.md - May need new tasks for unorganized tracking
+  ✅ agent-file-template.md - Generic template, no updates required
+  ✅ checklist-template.md - Generic template, no updates required
+Follow-up TODOs:
+  - Update spec.md with derivative handling and unorganized tracking requirements
+  - Update plan.md with unorganized tracking implementation details
+  - Add tasks for implementing unorganized-datasets.json feature
 -->
 
 # OpenNeuroStudies Constitution
@@ -81,6 +85,17 @@ The state of all datasets MUST be queryable and monitorable.
 - Validation results (bids-validation, mriqc, fmriprep) MUST be tracked when available
 
 **Rationale**: With 1000+ studies, operators need quick visibility into dataset status, missing data, and processing completeness without inspecting individual directories.
+
+### VI. No Silent Failures
+
+All discovered datasets MUST be either organized or explicitly tracked as unorganized with documented reasons.
+
+- Discovered datasets that cannot be organized MUST be tracked in `.openneuro-studies/unorganized-datasets.json`
+- Each unorganized dataset MUST include a reason code (e.g., `raw_dataset_not_found`, `invalid_source_reference`)
+- Unorganized datasets MUST be reported to the user during organize operations
+- Periodic re-evaluation of unorganized datasets SHOULD be performed when new datasets are discovered
+
+**Rationale**: Silent failures hide data quality issues and make it impossible to track the completeness of dataset organization. Explicit tracking enables operators to identify gaps, missing dependencies, and take corrective action. This is especially critical for derivative datasets that may reference raw datasets not yet available in the repository.
 
 ## Data Management Standards
 
@@ -175,4 +190,4 @@ Deviations from simplicity MUST be justified:
 - Manual operations → explain why automation not possible
 - Database introduction → explain why file-based approach insufficient
 
-**Version**: 1.20251009.1 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-10-09
+**Version**: 1.20251011.0 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-10-11
