@@ -213,14 +213,24 @@ class GitHubClient:
 
         default_branch: str = response_data.get("default_branch", "main")
 
-        # Get latest commit on default branch
-        endpoint = f"/repos/{owner}/{repo}/commits/{default_branch}"
-        commit_data: Any = self._request(endpoint)
+        # Try to get latest commit on default branch
+        # Some repos may have empty/broken default branches, so try alternatives
+        for branch in [default_branch, "main", "master"]:
+            try:
+                endpoint = f"/repos/{owner}/{repo}/commits/{branch}"
+                commit_data: Any = self._request(endpoint, retry=1)
 
-        if not isinstance(commit_data, dict) or "sha" not in commit_data:
-            raise GitHubAPIError(f"Invalid commit data for {owner}/{repo}")
+                if isinstance(commit_data, dict) and "sha" in commit_data:
+                    return str(commit_data["sha"])
+            except GitHubAPIError:
+                # Try next branch
+                continue
 
-        return str(commit_data["sha"])
+        # If all branches failed, raise error
+        raise GitHubAPIError(
+            f"Could not get commit SHA for {owner}/{repo}. "
+            f"Tried branches: {default_branch}, main, master"
+        )
 
     def clear_cache(self) -> None:
         """Clear all cached API responses."""
