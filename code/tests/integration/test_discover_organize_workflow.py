@@ -4,6 +4,7 @@ This test runs the complete workflow from init through discovery and organizatio
 using real datasets from OpenNeuro (both raw and derivatives).
 
 Test datasets (from CLAUDE.md):
+Raw datasets:
 - ds000001: Single raw dataset (basic case)
 - ds005256: Medium-sized dataset
 - ds006131: Raw dataset with derivatives
@@ -11,8 +12,11 @@ Test datasets (from CLAUDE.md):
 - ds006189: Raw dataset with derivatives
 - ds006190: Multi-source derivative (sources: ds006189, ds006185, ds006131)
 
-Each raw dataset will include any matching derivatives from OpenNeuroDerivatives
-(e.g., ds000001-fmriprep, ds000001-mriqc).
+Derivative datasets:
+- ds000001-mriqc: Quality control metrics for ds000001
+- ds000212-fmriprep: Preprocessed data (note: raw ds000212 not in test set)
+
+Each raw dataset will automatically discover matching derivatives from OpenNeuroDerivatives.
 
 Note on GITHUB_TOKEN:
 - The discovery workflow works WITHOUT token set (uses unauthenticated API)
@@ -37,6 +41,12 @@ TEST_RAW_DATASETS = [
     "ds006185",
     "ds006189",
     "ds006190",
+]
+
+# Derivative datasets to test (note: ds000212-fmriprep has no raw dataset in test set)
+TEST_DERIVATIVE_DATASETS = [
+    "ds000001-mriqc",
+    "ds000212-fmriprep",
 ]
 
 # Note: ds006190 is a special case - it's a multi-source derivative
@@ -90,6 +100,8 @@ def test_full_workflow(test_workspace: Path) -> None:
     discover_args = ["openneuro-studies", "discover"]
     for dataset_id in TEST_RAW_DATASETS:
         discover_args.extend(["--test-filter", dataset_id])
+    for dataset_id in TEST_DERIVATIVE_DATASETS:
+        discover_args.extend(["--test-filter", dataset_id])
 
     result = subprocess.run(
         discover_args,
@@ -113,11 +125,19 @@ def test_full_workflow(test_workspace: Path) -> None:
     print(f"Discovered: {raw_count} raw, {deriv_count} derivatives")
     assert raw_count > 0, "Should discover at least one raw dataset"
 
-    # Verify all expected datasets were found
+    # Verify all expected raw datasets were found
     raw_ids = {d["dataset_id"] for d in discovered.get("raw", [])}
     for expected_id in TEST_RAW_DATASETS:
         if expected_id != "ds006190":  # ds006190 is a derivative, not raw
             assert expected_id in raw_ids, f"Should discover {expected_id}"
+
+    # Verify derivative datasets were discovered
+    deriv_ids = {d["dataset_id"] for d in discovered.get("derivative", [])}
+    for expected_id in TEST_DERIVATIVE_DATASETS:
+        assert expected_id in deriv_ids, f"Should discover derivative {expected_id}"
+
+    # TODO: Future work - verify unorganized-datasets.json for derivatives without raw datasets
+    # For example, ds000212-fmriprep should be tracked as unorganized since ds000212 is not in test set
 
     # Step 3: Organize datasets
     print("\n=== Step 3: Organize datasets ===")
@@ -241,6 +261,8 @@ def test_persistent_test_directory() -> None:
     print("\n=== Discovering test datasets ===")
     discover_args = ["openneuro-studies", "discover"]
     for dataset_id in TEST_RAW_DATASETS:
+        discover_args.extend(["--test-filter", dataset_id])
+    for dataset_id in TEST_DERIVATIVE_DATASETS:
         discover_args.extend(["--test-filter", dataset_id])
 
     subprocess.run(discover_args, cwd=test_dir, check=True)
