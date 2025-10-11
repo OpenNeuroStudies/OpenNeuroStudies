@@ -55,7 +55,7 @@ OpenNeuroStudies/                    # Repository root (BEP035 BIDS mega-analysi
 │   ├── tox.ini                      # tox test configuration
 │   └── README.md                    # Code package overview
 ├── study-ds000001/                  # Study datasets (generated)
-├── study-ds000010/
+├── study-ds005256/
 ├── ...                              # More study-{id}/ directories
 ├── dataset_description.json         # BIDS dataset description (DatasetType: "study")
 ├── CHANGES                          # Version history (CPAN Changelog format)
@@ -113,7 +113,7 @@ openneuro-studies discover --limit 10
 openneuro-studies --debug-level DEBUG discover --limit 10
 
 # Organize specific studies
-openneuro-studies organize study-ds000001 study-ds000010
+openneuro-studies organize study-ds000001 study-ds005256
 
 # Organize with shell globs
 openneuro-studies organize study-ds0000*
@@ -262,7 +262,6 @@ def fetch_dataset_metadata(dataset_id: str) -> dict:
 ### Sample Datasets for Testing
 Use these datasets for comprehensive testing:
 - **ds000001**: Single raw dataset (basic case)
-- **ds000010**: Standard raw dataset
 - **ds005256**: Medium-sized dataset
 - **ds006131**: Raw dataset with derivatives
 - **ds006185**: Raw dataset with derivatives
