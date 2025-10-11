@@ -261,12 +261,18 @@ def fetch_dataset_metadata(dataset_id: str) -> dict:
 
 ### Sample Datasets for Testing
 Use these datasets for comprehensive testing:
+
+**Raw Datasets:**
 - **ds000001**: Single raw dataset (basic case)
 - **ds005256**: Medium-sized dataset
 - **ds006131**: Raw dataset with derivatives
 - **ds006185**: Raw dataset with derivatives
 - **ds006189**: Raw dataset with derivatives
 - **ds006190**: Multi-source derivative (sources: ds006189, ds006185, ds006131)
+
+**Derivative Datasets:**
+- **ds000001-mriqc**: Quality control metrics for ds000001
+- **ds000212-fmriprep**: Preprocessed data (note: raw ds000212 NOT in test set - tests unorganized derivative handling)
 
 ### Test Organization
 ```python
