@@ -1,27 +1,25 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version Change: 1.20251009.1 → 1.20251011.0
+Version Change: 1.20251011.0 → 1.20251011.1
 Principle Changes:
-  - NEW PRINCIPLE VI: No Silent Failures
-    * All discovered datasets must be organized or explicitly tracked as unorganized
-    * Requires .openneuro-studies/unorganized-datasets.json for tracking
-    * Mandatory reason codes for unorganized datasets
-    * User reporting during organize operations
+  - AMENDED PRINCIPLE IV: Git/DataLad-First Workflow
+    * Added: Operations MUST result in clean git status across entire hierarchy
+    * Added: Empty directories MUST be created for gitlinks to prevent "deleted" status
+    * Clarified: Clean status ensures operations are complete
 Amended Sections:
-  - Core Principles: Added Principle VI (No Silent Failures)
-  - Impacts organize command implementation
-  - Requires new unorganized-datasets.json tracking file
+  - Core Principles: Updated Principle IV (Git/DataLad-First Workflow)
+  - Impacts organize command implementation (already implemented)
+  - Aligns with spec.md FR-004 and FR-004a
 Templates Status:
-  ⚠ plan-template.md - May need update for organize command enhancements
-  ⚠ spec-template.md - May need update for derivative handling requirements
-  ⚠ tasks-template.md - May need new tasks for unorganized tracking
-  ✅ agent-file-template.md - Generic template, no updates required
-  ✅ checklist-template.md - Generic template, no updates required
+  ✅ Implementation complete - organize command creates empty directories
+  ✅ Tests verify clean status and gitlink presence
+  ✅ Spec updated with FR-004a requirement
 Follow-up TODOs:
-  - Update spec.md with derivative handling and unorganized tracking requirements
-  - Update plan.md with unorganized tracking implementation details
-  - Add tasks for implementing unorganized-datasets.json feature
+  - None - changes fully implemented and tested
+Previous Version (1.20251011.0):
+  - Added Principle VI: No Silent Failures
+  - Requires unorganized-datasets.json tracking (implementation pending)
 -->
 
 # OpenNeuroStudies Constitution
@@ -68,12 +66,14 @@ Use text-based, human-readable formats for all configuration and metadata.
 All state changes MUST be committed through git/DataLad with descriptive messages.
 
 - Use `datalad run` for scripts that modify the repository state
+- Operations MUST result in clean git status across the entire repository hierarchy (parent and all submodules) with all changes committed
 - Dirty trees are acceptable only with explicit `--input` and `--output` flags and then using `run` with `--explicit` flag, but generally such operations should be avoided
 - Commit messages MUST reference issue numbers or briefly describe the batch operation
 - If feasible, commit messages MIGHT provide descriptive statistics on the changes (e.g. how many subdatasets were affected)
 - Git submodules MUST be updated with `git submodule update --init` when needed
+- For gitlinks created without cloning (via `git update-index`), empty directories MUST be created at submodule paths to prevent "deleted" status markers
 
-**Rationale**: DataLad extends git and git-annex to ease handling collections of large datasets while maintaining complete provenance. This provides scientific audit trails and enables distributed collaboration.
+**Rationale**: DataLad extends git and git-annex to ease handling collections of large datasets while maintaining complete provenance. This provides scientific audit trails and enables distributed collaboration. Clean git status ensures operations are complete and no uncommitted changes exist.
 
 ### V. Observability & Monitoring
 
@@ -190,4 +190,4 @@ Deviations from simplicity MUST be justified:
 - Manual operations → explain why automation not possible
 - Database introduction → explain why file-based approach insufficient
 
-**Version**: 1.20251011.0 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-10-11
+**Version**: 1.20251011.1 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-10-11
