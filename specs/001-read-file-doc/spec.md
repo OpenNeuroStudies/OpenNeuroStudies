@@ -81,7 +81,8 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-001**: System MUST discover datasets from configured sources (OpenNeuroDatasets, OpenNeuroDerivatives, openfmri) without requiring full clones
 - **FR-002**: System MUST extract dataset metadata (URLs, commit SHAs, dataset_description.json) using GitHub/Forgejo tree APIs
 - **FR-003**: System MUST create study-{id} folder structures with sourcedata/ and derivatives/ subfolders
-- **FR-004**: System MUST link datasets as git submodules using git config and git update-index without cloning
+- **FR-004**: System MUST link datasets as git submodules using git config and git update-index without cloning. System MUST create empty directories for submodule paths to ensure clean git status (gitlinks require directories to exist even if not populated)
+- **FR-004a**: After organize operations complete, System MUST ensure git status is clean across entire repository hierarchy (parent and all study submodules). All changes MUST be committed, with gitlinks (mode 160000) present in committed trees
 - **FR-005**: System MUST generate dataset_description.json for each study following BIDS 1.10.1 study dataset specification
 - **FR-006**: System MUST populate SourceDatasets field referencing all sourcedata entries
 - **FR-007**: System MUST generate GeneratedBy field with code provenance information

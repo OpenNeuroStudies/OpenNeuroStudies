@@ -200,6 +200,20 @@ def test_full_workflow(test_workspace: Path) -> None:
         assert "sourcedata/raw" in study_gitmodules_content, \
             f"{study_id} should have sourcedata/raw submodule"
 
+        # Verify the gitlink (mode 160000) is actually committed
+        result = subprocess.run(
+            ["git", "ls-tree", "-r", "HEAD"],
+            cwd=study_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        # Should have a line like: "160000 commit <sha>\tsourcedata/raw"
+        assert "160000 commit" in result.stdout, \
+            f"{study_id} should have gitlink in tree"
+        assert "sourcedata/raw" in result.stdout, \
+            f"{study_id} should have sourcedata/raw gitlink in tree"
+
         # Note: We don't check `git submodule status` because we use gitlinks without
         # cloning (no git submodule init). The .gitmodules check above is sufficient.
 
@@ -210,6 +224,22 @@ def test_full_workflow(test_workspace: Path) -> None:
     expected_count = len(raw_ids)
     assert study_count == expected_count, \
         f"Parent should have {expected_count} study submodules, found {study_count}"
+
+    # Verify parent has gitlinks for all studies in committed tree
+    result = subprocess.run(
+        ["git", "ls-tree", "HEAD"],
+        cwd=test_workspace,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    for dataset_id in raw_ids:
+        study_id = f"study-{dataset_id}"
+        # Each study should appear as: "160000 commit <sha>\tstudy-{id}"
+        assert f"160000 commit" in result.stdout, \
+            f"Parent should have gitlinks (mode 160000)"
+        assert study_id in result.stdout, \
+            f"Parent should have {study_id} gitlink in tree"
 
     # Note: We don't use `git submodule status` because we use gitlinks without cloning
 
