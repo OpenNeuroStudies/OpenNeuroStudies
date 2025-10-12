@@ -120,7 +120,9 @@ def _organize_raw_dataset(
 
     # Commit the submodule changes using git directly
     # (DataLad's save() doesn't handle gitlinks created via update-index properly)
-    # Note: We don't specify paths because the gitlink is already staged via update-index
+    # IMPORTANT: We must explicitly specify paths because the gitlink from update-index
+    # doesn't have an actual directory, so git sees it as deleted in the worktree.
+    # By specifying paths, we commit what's in the index regardless of worktree state.
     import subprocess
 
     subprocess.run(
@@ -129,6 +131,8 @@ def _organize_raw_dataset(
             "-C",
             str(study_path),
             "commit",
+            ".gitmodules",
+            "sourcedata/raw",
             "-m",
             f"Link raw dataset {dataset.dataset_id}\n\n"
             f"Added sourcedata/raw submodule pointing to {dataset.url} @ {dataset.commit_sha[:8]}",
@@ -139,6 +143,7 @@ def _organize_raw_dataset(
     )
 
     # Register the study dataset as a submodule in the parent repository
+    # IMPORTANT: Must be done AFTER committing changes in the study repo
     _register_study_in_parent(study_path, study_id, github_org)
 
     return study_path
@@ -317,6 +322,8 @@ def _register_study_in_parent(study_path: Path, study_id: str, github_org: str) 
     )
 
     # Commit the study submodule to parent
+    # This commits .gitmodules and the gitlink for the study submodule
+    # IMPORTANT: Must explicitly specify paths (gitlink has no directory on disk)
     try:
         subprocess.run(
             [
@@ -324,6 +331,8 @@ def _register_study_in_parent(study_path: Path, study_id: str, github_org: str) 
                 "-C",
                 str(parent_repo),
                 "commit",
+                ".gitmodules",
+                study_id,
                 "-m",
                 f"Add study dataset {study_id}\n\n"
                 f"Registered as submodule pointing to {study_url} @ {study_commit_sha[:8]}",
