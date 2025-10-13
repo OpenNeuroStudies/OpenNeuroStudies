@@ -2,8 +2,9 @@
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from openneuro_studies.config import OpenNeuroStudiesConfig
 from openneuro_studies.models import DerivativeDataset, SourceDataset
@@ -30,6 +31,7 @@ class DatasetFinder:
         config: OpenNeuroStudiesConfig,
         github_client: Optional[GitHubClient] = None,
         test_dataset_filter: Optional[List[str]] = None,
+        max_workers: int = 10,
     ):
         """Initialize dataset finder.
 
@@ -38,15 +40,22 @@ class DatasetFinder:
             github_client: GitHub API client (creates new if None)
             test_dataset_filter: Optional list of dataset IDs for testing
                                 (e.g., ["ds000001", "ds005256"])
+            max_workers: Maximum number of parallel workers for dataset processing (default: 10)
         """
         self.config = config
         self.github_client = github_client or GitHubClient()
         self.test_dataset_filter = test_dataset_filter
+        self.max_workers = max_workers
 
     def discover_all(
         self,
+        progress_callback: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, List[Union[SourceDataset, DerivativeDataset]]]:
         """Discover all datasets from configured sources.
+
+        Args:
+            progress_callback: Optional callback function called for each processed dataset
+                             with the dataset ID as argument
 
         Returns:
             Dictionary with 'raw' and 'derivative' keys containing lists of datasets
@@ -82,21 +91,34 @@ class DatasetFinder:
                         )
                     ]
 
-                # Process each repository
-                # Note: We check dataset_description.json to determine type, not just source config
-                # (e.g., OpenNeuroDatasets contains both raw and derivative datasets)
-                for repo in filtered_repos:
-                    try:
-                        # Fetch dataset_description.json once and determine type
-                        dataset = self._process_dataset(org_name, repo)
-                        if dataset:
-                            if isinstance(dataset, DerivativeDataset):
-                                discovered["derivative"].append(dataset)
-                            elif isinstance(dataset, SourceDataset):
-                                discovered["raw"].append(dataset)
-                    except Exception as e:
-                        # Log error but continue with other datasets
-                        print(f"Warning: Failed to process {repo['name']}: {e}")
+                # Process repositories in parallel using ThreadPoolExecutor
+                # This is I/O-bound work (GitHub API calls), so threading provides speedup
+                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                    # Submit all processing tasks
+                    future_to_repo = {
+                        executor.submit(self._process_dataset, org_name, repo): repo
+                        for repo in filtered_repos
+                    }
+
+                    # Collect results as they complete
+                    for future in as_completed(future_to_repo):
+                        repo = future_to_repo[future]
+                        try:
+                            dataset = future.result()
+                            if dataset:
+                                if isinstance(dataset, DerivativeDataset):
+                                    discovered["derivative"].append(dataset)
+                                elif isinstance(dataset, SourceDataset):
+                                    discovered["raw"].append(dataset)
+
+                            # Call progress callback if provided
+                            if progress_callback:
+                                progress_callback(repo["name"])
+                        except Exception as e:
+                            # Log error but continue with other datasets
+                            print(f"Warning: Failed to process {repo['name']}: {e}")
+                            if progress_callback:
+                                progress_callback(repo["name"])
 
             except GitHubAPIError as e:
                 raise DatasetDiscoveryError(

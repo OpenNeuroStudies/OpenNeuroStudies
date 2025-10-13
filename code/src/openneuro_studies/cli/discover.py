@@ -25,40 +25,92 @@ from openneuro_studies.discovery import DatasetDiscoveryError, DatasetFinder
     multiple=True,
     help="Filter to specific dataset IDs for testing (e.g., ds000001)",
 )
+@click.option(
+    "--workers",
+    type=int,
+    default=10,
+    help="Number of parallel workers for dataset processing",
+    show_default=True,
+)
+@click.option(
+    "--progress/--no-progress",
+    default=True,
+    help="Show progress bar",
+    show_default=True,
+)
 @click.pass_context
 def discover(
-    ctx: click.Context, config: Optional[str], output: str, test_filter: tuple[str, ...]
+    ctx: click.Context,
+    config: Optional[str],
+    output: str,
+    test_filter: tuple[str, ...],
+    workers: int,
+    progress: bool,
 ) -> None:
     """Discover datasets from configured sources.
 
     Queries GitHub/Forgejo APIs to identify available raw and derivative datasets
     without cloning. Results are cached to the specified output file.
 
+    Datasets are processed in parallel using multiple workers for faster discovery.
+
     \b
     Examples:
         openneuro-studies discover
         openneuro-studies discover --test-filter ds000001 --test-filter ds005256
+        openneuro-studies discover --workers 20 --no-progress
     """
     try:
         # Load configuration (don't require tokens - will work without until rate limits)
         config_path = config or ctx.obj.get("config", ".openneuro-studies/config.yaml")
         cfg = load_config(config_path, require_tokens=False)
 
-        # Create dataset finder
+        # Create dataset finder with specified workers
         test_dataset_filter = list(test_filter) if test_filter else None
-        finder = DatasetFinder(cfg, test_dataset_filter=test_dataset_filter)
+        finder = DatasetFinder(cfg, test_dataset_filter=test_dataset_filter, max_workers=workers)
 
         # Discover datasets
         click.echo("Discovering datasets from configured sources...")
         if test_dataset_filter:
             click.echo(f"Using test filter: {', '.join(test_dataset_filter)}")
+        click.echo(f"Using {workers} parallel workers")
 
-        discovered = finder.discover_all()
+        # Set up progress callback if progress bar is enabled
+        progress_callback = None
+        if progress:
+            # Use click.progressbar for progress tracking
+            # We'll need to count repos first to know the total
+            total_repos = 0
+            for source_spec in cfg.sources:
+                org_path = source_spec.organization_url.path
+                org_name = str(org_path).strip("/")
+                repos = finder.github_client.list_repositories(org_name, dataset_filter=test_dataset_filter)
+                # Apply same filtering as discover_all
+                from openneuro_studies.discovery.dataset_finder import DatasetFinder as _DF
+                filtered = _DF._filter_repos(finder, repos, source_spec.inclusion_patterns)
+                if source_spec.exclusion_patterns:
+                    import re
+                    filtered = [r for r in filtered if not any(re.match(p, r["name"]) for p in source_spec.exclusion_patterns)]
+                total_repos += len(filtered)
+
+            pbar = click.progressbar(length=total_repos, label="Processing datasets")
+            pbar.__enter__()
+
+            def progress_cb(dataset_id: str) -> None:
+                pbar.update(1)
+
+            progress_callback = progress_cb
+
+        try:
+            discovered = finder.discover_all(progress_callback=progress_callback)
+        finally:
+            if progress and pbar:
+                pbar.__exit__(None, None, None)
 
         # Report results
         raw_count = len(discovered["raw"])
         deriv_count = len(discovered["derivative"])
-        click.echo(f"✓ Found {raw_count} raw datasets")
+        click.echo(f"\n✓ Found {raw_count} raw datasets")
         click.echo(f"✓ Found {deriv_count} derivative datasets")
 
         # Save results
