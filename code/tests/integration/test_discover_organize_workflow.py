@@ -25,12 +25,10 @@ Note on GITHUB_TOKEN:
 """
 
 import json
-import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
 
 import pytest
 
@@ -60,6 +58,9 @@ TEST_DERIVATIVE_DATASETS = [
     "ds000001-mriqc",
     "ds000212-fmriprep",
 ]
+
+# Combined list for discovery filtering
+TEST_ALL_DATASETS = TEST_RAW_DATASETS + TEST_DERIVATIVE_DATASETS
 
 # Note: ds006190 is a special case - it's a multi-source derivative
 # in OpenNeuroDerivatives, but we list it here for discovery
@@ -110,9 +111,7 @@ def test_full_workflow(test_workspace: Path) -> None:
     # Step 2: Discover datasets (with filter for test datasets)
     print("\n=== Step 2: Discover datasets ===")
     discover_args = ["discover"]
-    for dataset_id in TEST_RAW_DATASETS:
-        discover_args.extend(["--test-filter", dataset_id])
-    for dataset_id in TEST_DERIVATIVE_DATASETS:
+    for dataset_id in TEST_ALL_DATASETS:
         discover_args.extend(["--test-filter", dataset_id])
 
     result = run_cli(
@@ -122,10 +121,10 @@ def test_full_workflow(test_workspace: Path) -> None:
         text=True,
         check=False,  # Don't raise on error - we want to see output
     )
-    if result.returncode != 0:
+    if (exit_code := result.returncode) != 0:
         print(f"STDOUT:\n{result.stdout}")
         print(f"STDERR:\n{result.stderr}")
-    assert result.returncode == 0, f"Discover failed with exit code {result.returncode}"
+        raise AssertionError(f"Discover failed with exit code {exit_code}")
 
     # Check discovered datasets file
     discovered_file = test_workspace / ".openneuro-studies" / "discovered-datasets.json"
@@ -134,21 +133,21 @@ def test_full_workflow(test_workspace: Path) -> None:
     with open(discovered_file) as f:
         discovered = json.load(f)
 
-    raw_count = len(discovered.get("raw", []))
-    deriv_count = len(discovered.get("derivative", []))
+    raw_count = len(raw_datasets := discovered.get("raw", []))
+    deriv_count = len(deriv_datasets := discovered.get("derivative", []))
 
     print(f"Discovered: {raw_count} raw, {deriv_count} derivatives")
     assert raw_count > 0, "Should discover at least one raw dataset"
 
     # Verify all expected raw datasets were found
-    raw_ids = {d["dataset_id"] for d in discovered.get("raw", [])}
+    raw_ids = {d["dataset_id"] for d in raw_datasets}
     for expected_id in TEST_RAW_DATASETS:
         if expected_id != "ds006190":  # ds006190 is a derivative, not raw
             assert expected_id in raw_ids, f"Should discover {expected_id}"
 
     # Verify derivative datasets were discovered
     # TODO: Derivative discovery not yet implemented - skip for now
-    deriv_ids = {d["dataset_id"] for d in discovered.get("derivative", [])}
+    {d["dataset_id"] for d in deriv_datasets}
     # for expected_id in TEST_DERIVATIVE_DATASETS:
     #     assert expected_id in deriv_ids, f"Should discover derivative {expected_id}"
 
@@ -236,8 +235,8 @@ def test_full_workflow(test_workspace: Path) -> None:
     for dataset_id in raw_ids:
         study_id = f"study-{dataset_id}"
         # Each study should appear as: "160000 commit <sha>\tstudy-{id}"
-        assert f"160000 commit" in result.stdout, \
-            f"Parent should have gitlinks (mode 160000)"
+        assert "160000 commit" in result.stdout, \
+            "Parent should have gitlinks (mode 160000)"
         assert study_id in result.stdout, \
             f"Parent should have {study_id} gitlink in tree"
 
@@ -254,11 +253,10 @@ def test_full_workflow(test_workspace: Path) -> None:
     )
 
     # Should be completely clean - git status reports uncommitted changes in submodules too
-    if result.stdout.strip() != "":
-        print(f"Git status output:\n{result.stdout}")
+    if (status_output := result.stdout.strip()) != "":
+        print(f"Git status output:\n{status_output}")
         print(f"Exit code: {result.returncode}")
-    assert result.stdout.strip() == "", \
-        f"Git status should be clean (including all submodules), but found:\n{result.stdout}"
+        raise AssertionError(f"Git status should be clean (including all submodules), but found:\n{status_output}")
 
     print("\n=== Integration test PASSED ===")
     print(f"Workspace: {test_workspace}")
@@ -290,9 +288,7 @@ def test_persistent_test_directory() -> None:
     # Discover with test filter
     print("\n=== Discovering test datasets ===")
     discover_args = ["discover"]
-    for dataset_id in TEST_RAW_DATASETS:
-        discover_args.extend(["--test-filter", dataset_id])
-    for dataset_id in TEST_DERIVATIVE_DATASETS:
+    for dataset_id in TEST_ALL_DATASETS:
         discover_args.extend(["--test-filter", dataset_id])
 
     run_cli(discover_args, cwd=test_dir, check=True)

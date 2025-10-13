@@ -3,6 +3,7 @@
 High-level functions for organizing OpenNeuro datasets into study structures.
 """
 
+import subprocess
 from pathlib import Path
 from typing import Optional, Union
 
@@ -23,6 +24,42 @@ class OrganizationError(Exception):
     """Raised when study organization fails."""
 
     pass
+
+
+def _git_commit_gitlink(repo_path: Path, commit_message: str) -> None:
+    """Commit gitlinks without specifying paths.
+
+    IMPORTANT: Do NOT specify paths when committing gitlinks!
+    - git update-index adds the gitlink to the index (mode 160000)
+    - But there's no directory on disk (we don't clone)
+    - Committing with explicit paths fails because git looks in worktree
+    - Solution: Commit without paths - commits everything in the index
+
+    Args:
+        repo_path: Path to git repository
+        commit_message: Commit message
+
+    Raises:
+        OrganizationError: If commit fails
+    """
+    try:
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_path),
+                "commit",
+                "-m",
+                commit_message,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise OrganizationError(
+            f"Failed to commit gitlink in {repo_path}: {e.stderr if e.stderr else str(e)}"
+        ) from e
 
 
 def organize_study(
@@ -120,26 +157,10 @@ def _organize_raw_dataset(
 
     # Commit the submodule changes using git directly
     # (DataLad's save() doesn't handle gitlinks created via update-index properly)
-    # IMPORTANT: Do NOT specify paths when committing gitlinks!
-    # - git update-index adds the gitlink to the index (mode 160000)
-    # - But there's no directory on disk (we don't clone)
-    # - Committing with explicit paths fails because git looks in worktree
-    # - Solution: Commit without paths - commits everything in the index
-    import subprocess
-
-    subprocess.run(
-        [
-            "git",
-            "-C",
-            str(study_path),
-            "commit",
-            "-m",
-            f"Link raw dataset {dataset.dataset_id}\n\n"
-            f"Added sourcedata/raw submodule pointing to {dataset.url} @ {dataset.commit_sha[:8]}",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
+    _git_commit_gitlink(
+        study_path,
+        f"Link raw dataset {dataset.dataset_id}\n\n"
+        f"Added sourcedata/raw submodule pointing to {dataset.url} @ {dataset.commit_sha[:8]}",
     )
 
     # Create empty directory for the gitlink to prevent "deleted" status
@@ -281,19 +302,19 @@ def _register_study_in_parent(study_path: Path, study_id: str, github_org: str) 
     Raises:
         OrganizationError: If registration fails
     """
-    import subprocess
-
     parent_repo = study_path.parent
 
     # Get current HEAD commit SHA of the study
     try:
-        result = subprocess.run(
-            ["git", "-C", str(study_path), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        study_commit_sha = result.stdout.strip()
+        if (
+            result := subprocess.run(
+                ["git", "-C", str(study_path), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        ):
+            study_commit_sha = result.stdout.strip()
     except subprocess.CalledProcessError as e:
         raise OrganizationError(f"Failed to get study commit SHA: {e}") from e
 
@@ -302,16 +323,16 @@ def _register_study_in_parent(study_path: Path, study_id: str, github_org: str) 
 
     # Get DataLad ID from study's .datalad/config
     datalad_id = None
-    datalad_config = study_path / ".datalad" / "config"
-    if datalad_config.exists():
+    if (datalad_config := study_path / ".datalad" / "config").exists():
         try:
-            result = subprocess.run(
-                ["git", "config", "-f", str(datalad_config), "datalad.dataset.id"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if result.returncode == 0:
+            if (
+                result := subprocess.run(
+                    ["git", "config", "-f", str(datalad_config), "datalad.dataset.id"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            ).returncode == 0:
                 datalad_id = result.stdout.strip()
         except Exception:
             pass  # DataLad ID is optional
@@ -327,26 +348,11 @@ def _register_study_in_parent(study_path: Path, study_id: str, github_org: str) 
 
     # Commit the study submodule to parent
     # This commits .gitmodules and the gitlink for the study submodule
-    # IMPORTANT: Do NOT specify paths - git update-index added gitlink to index, commit it as-is
-    try:
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(parent_repo),
-                "commit",
-                "-m",
-                f"Add study dataset {study_id}\n\n"
-                f"Registered as submodule pointing to {study_url} @ {study_commit_sha[:8]}",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except subprocess.CalledProcessError as e:
-        raise OrganizationError(
-            f"Failed to commit study submodule in parent: {e.stderr if e.stderr else str(e)}"
-        ) from e
+    _git_commit_gitlink(
+        parent_repo,
+        f"Add study dataset {study_id}\n\n"
+        f"Registered as submodule pointing to {study_url} @ {study_commit_sha[:8]}",
+    )
 
     # Create empty directory for the study gitlink to prevent "deleted" status
     # Git requires the directory to exist for submodules, even if not cloned
