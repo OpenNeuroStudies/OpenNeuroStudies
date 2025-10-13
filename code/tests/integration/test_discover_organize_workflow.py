@@ -53,11 +53,13 @@ TEST_RAW_DATASETS = [
     "ds006190",
 ]
 
-# Derivative datasets to test (note: ds000212-fmriprep has no raw dataset in test set)
+# Derivative datasets to test
+# NOTE: Some derivatives (like ds006143) are in OpenNeuroDatasets, not OpenNeuroDerivatives
+# They will be discovered automatically when we search OpenNeuroDatasets
 TEST_DERIVATIVE_DATASETS = [
-    "ds000001-mriqc",
-    "ds000212-fmriprep",
-    "ds006143-mriqc",  # Derivative of ds006131
+    "ds000001-mriqc",  # From OpenNeuroDerivatives
+    "ds000212-fmriprep",  # From OpenNeuroDerivatives (raw ds000212 not in test set)
+    "ds006143",  # From OpenNeuroDatasets - derivative of ds006131
 ]
 
 # Combined list for discovery filtering

@@ -83,16 +83,21 @@ class DatasetFinder:
                     ]
 
                 # Process each repository
+                # Note: We check dataset_description.json to determine type, not just source config
+                # (e.g., OpenNeuroDatasets contains both raw and derivative datasets)
                 for repo in filtered_repos:
                     try:
-                        if source_spec.type == SourceType.RAW:
+                        # Try derivative first (checks DatasetType field)
+                        deriv_dataset = self._process_derivative_dataset(org_name, repo)
+                        if deriv_dataset:
+                            discovered["derivative"].append(deriv_dataset)
+                            continue
+
+                        # If not a derivative, try as raw dataset
+                        if source_spec.type == SourceType.RAW or source_spec.type == SourceType.DERIVATIVE:
                             dataset = self._process_raw_dataset(org_name, repo)
                             if dataset:
                                 discovered["raw"].append(dataset)
-                        elif source_spec.type == SourceType.DERIVATIVE:
-                            deriv_dataset = self._process_derivative_dataset(org_name, repo)
-                            if deriv_dataset:
-                                discovered["derivative"].append(deriv_dataset)
                     except Exception as e:
                         # Log error but continue with other datasets
                         print(f"Warning: Failed to process {repo['name']}: {e}")
