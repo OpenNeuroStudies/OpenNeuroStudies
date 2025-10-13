@@ -138,6 +138,9 @@ def _organize_raw_dataset(
 
     Returns:
         Path to study dataset
+
+    Raises:
+        OrganizationError: If linking fails; cleans up orphaned study directory
     """
     study_id = f"study-{dataset.dataset_id}"
     github_org = config.github_org
@@ -145,33 +148,41 @@ def _organize_raw_dataset(
     # Create study dataset
     study_path = create_study_dataset(study_id, github_org, parent_path)
 
-    # Link raw dataset as sourcedata/raw
-    link_submodule(
-        parent_repo=study_path,
-        submodule_path="sourcedata/raw",
-        url=str(dataset.url),
-        commit_sha=dataset.commit_sha,
-        submodule_name=f"{dataset.dataset_id}-raw",
-        datalad_id=None,  # TODO: Extract from .datalad/config if available
-    )
+    try:
+        # Link raw dataset as sourcedata/raw
+        link_submodule(
+            parent_repo=study_path,
+            submodule_path="sourcedata/raw",
+            url=str(dataset.url),
+            commit_sha=dataset.commit_sha,
+            submodule_name=f"{dataset.dataset_id}-raw",
+            datalad_id=None,  # TODO: Extract from .datalad/config if available
+        )
 
-    # Commit the submodule changes using git directly
-    # (DataLad's save() doesn't handle gitlinks created via update-index properly)
-    _git_commit_gitlink(
-        study_path,
-        f"Link raw dataset {dataset.dataset_id}\n\n"
-        f"Added sourcedata/raw submodule pointing to {dataset.url} @ {dataset.commit_sha[:8]}",
-    )
+        # Commit the submodule changes using git directly
+        # (DataLad's save() doesn't handle gitlinks created via update-index properly)
+        _git_commit_gitlink(
+            study_path,
+            f"Link raw dataset {dataset.dataset_id}\n\n"
+            f"Added sourcedata/raw submodule pointing to {dataset.url} @ {dataset.commit_sha[:8]}",
+        )
 
-    # Create empty directory for the gitlink to prevent "deleted" status
-    # Git requires the directory to exist for submodules, even if not cloned
-    (study_path / "sourcedata" / "raw").mkdir(parents=True, exist_ok=True)
+        # Create empty directory for the gitlink to prevent "deleted" status
+        # Git requires the directory to exist for submodules, even if not cloned
+        (study_path / "sourcedata" / "raw").mkdir(parents=True, exist_ok=True)
 
-    # Register the study dataset as a submodule in the parent repository
-    # IMPORTANT: Must be done AFTER committing changes in the study repo
-    _register_study_in_parent(study_path, study_id, github_org)
+        # Register the study dataset as a submodule in the parent repository
+        # IMPORTANT: Must be done AFTER committing changes in the study repo
+        _register_study_in_parent(study_path, study_id, github_org)
 
-    return study_path
+        return study_path
+
+    except Exception as e:
+        # Clean up orphaned study directory if linking failed
+        # import shutil
+        # if study_path.exists():
+        #     shutil.rmtree(study_path)
+        raise OrganizationError(f"Failed to link raw dataset for {study_id}: {e}") from e
 
 
 def _organize_single_source_derivative(
@@ -245,6 +256,9 @@ def _organize_multi_source_derivative(
 
     Returns:
         Path to study dataset
+
+    Raises:
+        OrganizationError: If linking fails; cleans up orphaned study directory
     """
     # Use dataset_id (repository name) as study ID for multi-source derivatives
     # E.g., ds006189 (not tedana-24.0.2)
@@ -254,52 +268,60 @@ def _organize_multi_source_derivative(
     # Create study dataset
     study_path = create_study_dataset(study_id, github_org, parent_path)
 
-    # Track all submodule paths for later commit
-    submodule_paths = [".gitmodules"]
+    try:
+        # Track all submodule paths for later commit
+        submodule_paths = [".gitmodules"]
 
-    # Link all source datasets under sourcedata/
-    for source_id in dataset.source_datasets:
-        source_path = f"sourcedata/{source_id}"
+        # Link all source datasets under sourcedata/
+        for source_id in dataset.source_datasets:
+            source_path = f"sourcedata/{source_id}"
+            link_submodule(
+                parent_repo=study_path,
+                submodule_path=source_path,
+                url=f"https://github.com/OpenNeuroDatasets/{source_id}",  # TODO: Get from discovery
+                commit_sha="HEAD",  # TODO: Get actual commit SHA
+                submodule_name=f"{source_id}-raw",
+                datalad_id=None,  # TODO: Extract if available
+            )
+            submodule_paths.append(source_path)
+
+        # Link derivative under derivatives/
+        derivative_path = f"derivatives/{dataset.tool_name}-{dataset.version}"
         link_submodule(
             parent_repo=study_path,
-            submodule_path=source_path,
-            url=f"https://github.com/OpenNeuroDatasets/{source_id}",  # TODO: Get from discovery
-            commit_sha="HEAD",  # TODO: Get actual commit SHA
-            submodule_name=f"{source_id}-raw",
-            datalad_id=None,  # TODO: Extract if available
+            submodule_path=derivative_path,
+            url=dataset.url,
+            commit_sha=dataset.commit_sha,
+            submodule_name=f"{dataset.dataset_id}",
+            datalad_id=dataset.datalad_uuid,
         )
-        submodule_paths.append(source_path)
+        submodule_paths.append(derivative_path)
 
-    # Link derivative under derivatives/
-    derivative_path = f"derivatives/{dataset.tool_name}-{dataset.version}"
-    link_submodule(
-        parent_repo=study_path,
-        submodule_path=derivative_path,
-        url=dataset.url,
-        commit_sha=dataset.commit_sha,
-        submodule_name=f"{dataset.dataset_id}",
-        datalad_id=dataset.datalad_uuid,
-    )
-    submodule_paths.append(derivative_path)
+        # Save changes (explicitly include .gitmodules and all submodule paths)
+        ds = dl.Dataset(str(study_path))
+        ds.save(
+            path=submodule_paths,
+            message=f"Link multi-source derivative {dataset.derivative_id}\n\n"
+            f"Added {len(dataset.source_datasets)} source datasets and derivative {dataset.tool_name}",
+        )
 
-    # Save changes (explicitly include .gitmodules and all submodule paths)
-    ds = dl.Dataset(str(study_path))
-    ds.save(
-        path=submodule_paths,
-        message=f"Link multi-source derivative {dataset.derivative_id}\n\n"
-        f"Added {len(dataset.source_datasets)} source datasets and derivative {dataset.tool_name}",
-    )
+        # Create empty directories for all gitlinks to prevent "deleted" status
+        # Git requires the directories to exist for submodules, even if not cloned
+        for source_id in dataset.source_datasets:
+            (study_path / "sourcedata" / source_id).mkdir(parents=True, exist_ok=True)
+        (study_path / derivative_path).mkdir(parents=True, exist_ok=True)
 
-    # Create empty directories for all gitlinks to prevent "deleted" status
-    # Git requires the directories to exist for submodules, even if not cloned
-    for source_id in dataset.source_datasets:
-        (study_path / "sourcedata" / source_id).mkdir(parents=True, exist_ok=True)
-    (study_path / derivative_path).mkdir(parents=True, exist_ok=True)
+        # Register the study dataset as a submodule in the parent repository
+        _register_study_in_parent(study_path, study_id, github_org)
 
-    # Register the study dataset as a submodule in the parent repository
-    _register_study_in_parent(study_path, study_id, github_org)
+        return study_path
 
-    return study_path
+    except Exception as e:
+        # Clean up orphaned study directory if linking failed
+        # import shutil
+        # if study_path.exists():
+        #     shutil.rmtree(study_path)
+        raise OrganizationError(f"Failed to link submodules for {study_id}: {e}") from e
 
 
 def _register_study_in_parent(study_path: Path, study_id: str, github_org: str) -> None:

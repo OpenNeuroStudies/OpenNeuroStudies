@@ -44,12 +44,13 @@ def run_cli(args: list[str], **kwargs) -> subprocess.CompletedProcess:
     )
 
 # Test datasets to discover (from CLAUDE.md)
-# NOTE: Only ds000001, ds005256, ds006131 are raw datasets
-# ds006185, ds006189, ds006190 are actually derivatives (discovered via DatasetType field)
+# NOTE: ds000001, ds005256, ds006131, ds006185 are raw datasets
+# ds006189, ds006190 are derivatives (discovered via DatasetType field)
 TEST_RAW_DATASETS = [
     "ds000001",
     "ds005256",
     "ds006131",
+    "ds006185",  # Needed as source for ds006189 derivative
 ]
 
 # Derivative datasets to test
