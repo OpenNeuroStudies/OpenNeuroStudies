@@ -227,11 +227,11 @@ def _organize_single_source_derivative(
         datalad_id=dataset.datalad_uuid,
     )
 
-    # Save changes (explicitly include .gitmodules and the submodule path)
-    ds = dl.Dataset(str(study_path))
-    ds.save(
-        path=[".gitmodules", derivative_path],
-        message=f"Link derivative {dataset.derivative_id}\n\n"
+    # Commit the submodule changes using git directly
+    # (DataLad's save() doesn't handle gitlinks created via update-index properly)
+    _git_commit_gitlink(
+        study_path,
+        f"Link derivative {dataset.derivative_id}\n\n"
         f"Added {derivative_path} submodule for {dataset.tool_name} {dataset.version}",
     )
 
@@ -318,11 +318,11 @@ def _organize_multi_source_derivative(
         )
         submodule_paths.append(derivative_path)
 
-        # Save changes (explicitly include .gitmodules and all submodule paths)
-        ds = dl.Dataset(str(study_path))
-        ds.save(
-            path=submodule_paths,
-            message=f"Link multi-source derivative {dataset.derivative_id}\n\n"
+        # Commit the submodule changes using git directly
+        # (DataLad's save() doesn't handle gitlinks created via update-index properly)
+        _git_commit_gitlink(
+            study_path,
+            f"Link multi-source derivative {dataset.derivative_id}\n\n"
             f"Added {len(dataset.source_datasets)} source datasets and derivative {dataset.tool_name}",
         )
 

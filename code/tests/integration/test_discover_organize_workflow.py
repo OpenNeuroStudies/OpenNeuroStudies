@@ -43,6 +43,61 @@ def run_cli(args: list[str], **kwargs) -> subprocess.CompletedProcess:
         **kwargs
     )
 
+
+def verify_gitlinks_for_submodules(repo_path: Path) -> None:
+    """Verify that all submodules in .gitmodules have gitlinks (mode 160000) in the tree.
+
+    This implements FR-004a requirement: gitlinks (mode 160000) must be present
+    in committed trees for all submodules listed in .gitmodules.
+
+    Args:
+        repo_path: Path to git repository to verify
+
+    Raises:
+        AssertionError: If any submodule is missing its gitlink in the tree
+    """
+    gitmodules_file = repo_path / ".gitmodules"
+    if not gitmodules_file.exists():
+        return  # No submodules, nothing to verify
+
+    # Parse .gitmodules to get all submodule paths
+    submodule_paths = []
+    current_submodule = None
+
+    for line in gitmodules_file.read_text().splitlines():
+        line = line.strip()
+        if line.startswith("[submodule"):
+            current_submodule = {}
+        elif line.startswith("path =") and current_submodule is not None:
+            path = line.split("=", 1)[1].strip()
+            submodule_paths.append(path)
+
+    if not submodule_paths:
+        return  # No submodules defined
+
+    # Get git ls-tree output
+    result = subprocess.run(
+        ["git", "-C", str(repo_path), "ls-tree", "-r", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    tree_output = result.stdout
+
+    # Verify each submodule path has a gitlink (mode 160000)
+    for submodule_path in submodule_paths:
+        # Look for line like: "160000 commit <sha>\t<path>"
+        gitlink_pattern = f"160000 commit"
+        path_in_tree = f"\t{submodule_path}"
+
+        assert gitlink_pattern in tree_output, \
+            f"Missing gitlink (mode 160000) in {repo_path.name} tree"
+        assert path_in_tree in tree_output, \
+            f"Submodule path '{submodule_path}' not found in {repo_path.name} tree (expected gitlink)"
+
+        print(f"    ✓ {repo_path.name}: gitlink for {submodule_path}")
+
 # Test datasets to discover (from CLAUDE.md)
 # NOTE: Only ds000001, ds005256, ds006131 are raw datasets
 # ds006185, ds006189, ds006190 are derivatives (discovered via DatasetType field)
@@ -203,19 +258,9 @@ def test_full_workflow(test_workspace: Path) -> None:
         assert "sourcedata/raw" in study_gitmodules_content, \
             f"{study_id} should have sourcedata/raw submodule"
 
-        # Verify the gitlink (mode 160000) is actually committed
-        result = subprocess.run(
-            ["git", "ls-tree", "-r", "HEAD"],
-            cwd=study_path,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        # Should have a line like: "160000 commit <sha>\tsourcedata/raw"
-        assert "160000 commit" in result.stdout, \
-            f"{study_id} should have gitlink in tree"
-        assert "sourcedata/raw" in result.stdout, \
-            f"{study_id} should have sourcedata/raw gitlink in tree"
+        # Verify gitlinks for all submodules (FR-004a)
+        print(f"  Verifying gitlinks for {study_id}...")
+        verify_gitlinks_for_submodules(study_path)
 
         # Note: We don't check `git submodule status` because we use gitlinks without
         # cloning (no git submodule init). The .gitmodules check above is sufficient.
@@ -252,6 +297,11 @@ def test_full_workflow(test_workspace: Path) -> None:
             f"Derivative directory {derivative_dir.relative_to(test_workspace)} should exist for {deriv['dataset_id']}"
         print(f"  ✓ Found {study_id}/derivatives/{deriv_path} (for {deriv['dataset_id']})")
 
+        # Verify gitlinks for this study's submodules (including derivatives)
+        if (study_path / ".gitmodules").exists():
+            print(f"  Verifying gitlinks for {study_id} (includes derivatives)...")
+            verify_gitlinks_for_submodules(study_path)
+
     # Step 5: Verify parent .gitmodules has all studies
     print("\n=== Step 5: Verify all studies in parent .gitmodules ===")
     # We already checked this in Step 4, but let's verify the count matches
@@ -263,21 +313,9 @@ def test_full_workflow(test_workspace: Path) -> None:
         f"Parent should have at least {expected_min_count} study submodules, found {study_count}"
     print(f"Found {study_count} study submodules (expected at least {expected_min_count})")
 
-    # Verify parent has gitlinks for all studies in committed tree
-    result = subprocess.run(
-        ["git", "ls-tree", "HEAD"],
-        cwd=test_workspace,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    for dataset_id in raw_ids:
-        study_id = f"study-{dataset_id}"
-        # Each study should appear as: "160000 commit <sha>\tstudy-{id}"
-        assert "160000 commit" in result.stdout, \
-            "Parent should have gitlinks (mode 160000)"
-        assert study_id in result.stdout, \
-            f"Parent should have {study_id} gitlink in tree"
+    # Verify parent has gitlinks for all studies (FR-004a)
+    print("Verifying gitlinks for parent repository...")
+    verify_gitlinks_for_submodules(test_workspace)
 
     # Note: We don't use `git submodule status` because we use gitlinks without cloning
 
@@ -301,6 +339,70 @@ def test_full_workflow(test_workspace: Path) -> None:
     print(f"Workspace: {test_workspace}")
     print(f"Raw datasets organized: {raw_count}")
     print(f"Derivatives discovered: {deriv_count}")
+
+
+@pytest.mark.integration
+@pytest.mark.datalad_install
+@pytest.mark.ai_generated
+def test_datalad_recursive_install(test_workspace: Path) -> None:
+    """Test that datalad install -r works on organized structure.
+
+    This test is marked with @pytest.mark.datalad_install and should be run explicitly:
+        pytest -m datalad_install tests/integration/test_discover_organize_workflow.py
+
+    It verifies that:
+    - datalad install -r -R2 -J5 successfully installs all subdatasets
+    - Each subdataset directory contains a .git/ directory
+    - The installation completes cleanly without errors
+
+    Note: This test takes longer (~20-30 seconds) so it's not run by default.
+
+    Args:
+        test_workspace: Temporary test workspace path from test_full_workflow fixture
+    """
+    # First run the full workflow to set up the structure
+    print("\n=== Running full workflow first ===")
+    test_full_workflow(test_workspace)
+
+    # Now perform recursive DataLad install
+    print("\n=== Running datalad install -r -R2 -J5 ===")
+    result = subprocess.run(
+        ["datalad", "install", "-r", "-R2", "-J5", "."],
+        cwd=test_workspace,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        print(f"STDOUT:\n{result.stdout}")
+        print(f"STDERR:\n{result.stderr}")
+        raise AssertionError(f"datalad install failed with exit code {result.returncode}")
+
+    print("✓ datalad install completed successfully")
+
+    # Verify each study has .git/ directories for its subdatasets
+    print("\n=== Verifying installed subdatasets ===")
+    for study_dir in sorted(test_workspace.glob("study-*")):
+        print(f"\nChecking {study_dir.name}:")
+
+        # Check sourcedata/ subdatasets
+        for subds_dir in (study_dir / "sourcedata").glob("*"):
+            if subds_dir.is_dir():
+                assert (subds_dir / ".git").exists(), \
+                    f"{subds_dir.relative_to(test_workspace)} should have .git/ after install"
+                print(f"  ✓ {subds_dir.relative_to(study_dir)} has .git/")
+
+        # Check derivatives/ subdatasets
+        derivatives_dir = study_dir / "derivatives"
+        if derivatives_dir.exists():
+            for subds_dir in derivatives_dir.glob("*"):
+                if subds_dir.is_dir():
+                    assert (subds_dir / ".git").exists(), \
+                        f"{subds_dir.relative_to(test_workspace)} should have .git/ after install"
+                    print(f"  ✓ {subds_dir.relative_to(study_dir)} has .git/")
+
+    print("\n=== DataLad install test PASSED ===")
 
 
 @pytest.mark.integration

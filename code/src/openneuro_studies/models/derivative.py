@@ -9,7 +9,9 @@ class DerivativeDataset(BaseModel):
     """Represents a processed dataset from OpenNeuroDerivatives or OpenNeuro derivatives.
 
     Attributes:
-        dataset_id: Original derivative dataset ID (e.g., "ds006185")
+        dataset_id: Repository/dataset ID (e.g., "ds006185" or "ds000001-mriqc")
+                   - OpenNeuroDatasets derivatives: numeric only (ds006185)
+                   - OpenNeuroDerivatives: includes tool suffix (ds000001-mriqc)
         derivative_id: Unique identifier for tracking (tool-version[-uuid_prefix])
         tool_name: Processing tool name (e.g., "fmriprep")
         version: Tool version
@@ -22,7 +24,7 @@ class DerivativeDataset(BaseModel):
         outdatedness: Commits behind current raw version (0 = up-to-date)
     """
 
-    dataset_id: str = Field(..., pattern=r"^ds\d+$")
+    dataset_id: str = Field(..., pattern=r"^ds\d+(-[a-z0-9]+)?$")
     derivative_id: str
     tool_name: str
     version: str
