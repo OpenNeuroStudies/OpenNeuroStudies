@@ -200,9 +200,15 @@ class DatasetFinder:
             if not source_datasets:
                 return None
 
-            # For now, use repo name as UUID (will be updated when we have access to .datalad/config)
+            # Use first source dataset as the dataset_id (following BIDS convention)
+            # For multi-source derivatives, we use the first source
+            dataset_id = source_datasets[0]
+
+            # For now, generate a placeholder UUID (36 chars) from repo name
             # In real implementation, we'd need to clone or use git API to get .datalad/config
-            datalad_uuid = f"{repo['name']}-0000-0000-0000-000000000000"
+            # Format: 8-4-4-4-12 chars (total 36 including hyphens)
+            repo_hash = abs(hash(repo["name"])) % (10**32)  # Generate numeric hash
+            datalad_uuid = f"{repo_hash:08x}-0000-0000-0000-{'0' * 12}"[:36]
 
             # Generate derivative_id
             from openneuro_studies.models import generate_derivative_id
@@ -210,7 +216,7 @@ class DatasetFinder:
             derivative_id = generate_derivative_id(tool_name, version, datalad_uuid, [])
 
             return DerivativeDataset(
-                dataset_id=repo["name"],
+                dataset_id=dataset_id,
                 derivative_id=derivative_id,
                 tool_name=tool_name,
                 version=version,
@@ -221,20 +227,28 @@ class DatasetFinder:
             print(f"Warning: Failed to process derivative dataset {repo['name']}: {e}")
             return None
 
-    def _extract_source_dataset_ids(self, source_datasets: List[str]) -> List[str]:
+    def _extract_source_dataset_ids(self, source_datasets: List[Union[str, Dict]]) -> List[str]:
         """Extract OpenNeuro dataset IDs from SourceDatasets field.
 
+        BIDS SourceDatasets can be either strings or objects with URL/DOI fields.
+
         Args:
-            source_datasets: List of source dataset references (URLs, DOIs, etc.)
+            source_datasets: List of source dataset references (strings, or dicts with URL/DOI)
 
         Returns:
             List of extracted dataset IDs (e.g., ["ds000001"])
         """
         dataset_ids = []
         for source in source_datasets:
+            # Handle both string format and dict format (BIDS spec)
+            if isinstance(source, dict):
+                # Try URL first, then DOI
+                source_str = source.get("URL") or source.get("DOI") or ""
+            else:
+                source_str = source
+
             # Try to extract ds[0-9]+ pattern from URLs or DOIs
-            match = re.search(r"(ds\d{6})", source)
-            if match:
+            if (match := re.search(r"(ds\d{6})", source_str)):
                 dataset_ids.append(match.group(1))
         return dataset_ids
 
