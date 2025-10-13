@@ -196,8 +196,9 @@ class DatasetFinder:
         if not source_datasets:
             return None
 
-        # Use first source dataset as the dataset_id (following BIDS convention)
-        dataset_id = source_datasets[0]
+        # Use repository name as dataset_id (e.g., "ds006143" for the derivative dataset)
+        # This is the actual OpenNeuro dataset ID for the derivative, not the source
+        dataset_id = repo["name"]
 
         # TODO: Fetch DataLad UUID from .datalad/config via GitHub API
         # The UUID is needed for disambiguation when multiple derivative datasets

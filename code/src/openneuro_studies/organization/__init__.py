@@ -207,7 +207,7 @@ def _organize_single_source_derivative(
         submodule_path=derivative_path,
         url=dataset.url,
         commit_sha=dataset.commit_sha,
-        submodule_name=f"{dataset.dataset_id}",
+        submodule_name=dataset.dataset_id,  # Use derivative's own dataset ID (e.g., ds006143)
         datalad_id=dataset.datalad_uuid,
     )
 
@@ -236,7 +236,7 @@ def _organize_multi_source_derivative(
 ) -> Path:
     """Organize a derivative with multiple sources.
 
-    Creates study-{deriv_id} and links all source datasets plus the derivative.
+    Creates study-{dataset_id} and links all source datasets plus the derivative.
 
     Args:
         dataset: Derivative dataset with multiple sources
@@ -246,8 +246,9 @@ def _organize_multi_source_derivative(
     Returns:
         Path to study dataset
     """
-    # Use derivative ID as study ID for multi-source derivatives
-    study_id = f"study-{dataset.derivative_id}"
+    # Use dataset_id (repository name) as study ID for multi-source derivatives
+    # E.g., ds006189 (not tedana-24.0.2)
+    study_id = f"study-{dataset.dataset_id}"
     github_org = config.github_org
 
     # Create study dataset
