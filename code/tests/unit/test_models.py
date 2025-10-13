@@ -76,6 +76,8 @@ class TestDerivativeDataset:
             derivative_id="fmriprep-21.0.1",
             tool_name="fmriprep",
             version="21.0.1",
+            url="https://github.com/OpenNeuroDerivatives/ds006185-fmriprep",
+            commit_sha="abc123def456abc123def456abc123def456abc1",
             datalad_uuid="12345678-1234-5678-1234-567812345678",
             source_datasets=["ds006131"],
         )
@@ -90,6 +92,8 @@ class TestDerivativeDataset:
             derivative_id="mriqc-23.0.0",
             tool_name="mriqc",
             version="23.0.0",
+            url="https://github.com/OpenNeuroDerivatives/ds000001-mriqc",
+            commit_sha="def456abc123def456abc123def456abc123def4",
             datalad_uuid="abcdefgh-1234-5678-1234-567812345678",
             source_datasets=["ds000001"],
         )
@@ -103,6 +107,8 @@ class TestDerivativeDataset:
                 derivative_id="test-1.0",
                 tool_name="test",
                 version="1.0",
+                url="https://github.com/test/test",
+                commit_sha="abc123def456abc123def456abc123def456abc1",
                 datalad_uuid="short-uuid",
                 source_datasets=["ds000001"],
             )
@@ -115,6 +121,8 @@ class TestDerivativeDataset:
                 derivative_id="test-1.0",
                 tool_name="test",
                 version="1.0",
+                url="https://github.com/test/test",
+                commit_sha="abc123def456abc123def456abc123def456abc1",
                 datalad_uuid="12345678-1234-5678-1234-567812345678",
                 source_datasets=[],
             )

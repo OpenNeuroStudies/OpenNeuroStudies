@@ -222,6 +222,8 @@ class DatasetFinder:
                 derivative_id=derivative_id,
                 tool_name=tool_name,
                 version=version,
+                url=repo["clone_url"],
+                commit_sha=commit_sha,
                 datalad_uuid=datalad_uuid,
                 source_datasets=source_datasets,
             )

@@ -161,9 +161,12 @@ def test_full_workflow(test_workspace: Path) -> None:
         cwd=test_workspace,
         capture_output=True,
         text=True,
-        check=True,
+        check=False,  # Don't raise - we want to see output
     )
-    assert result.returncode == 0
+    if result.returncode != 0:
+        print(f"STDOUT:\n{result.stdout}")
+        print(f"STDERR:\n{result.stderr}")
+    assert result.returncode == 0, f"Organize failed with exit code {result.returncode}"
 
     # Step 4: Verify organization structure
     print("\n=== Step 4: Verify organization ===")

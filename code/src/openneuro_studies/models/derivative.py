@@ -26,6 +26,8 @@ class DerivativeDataset(BaseModel):
     derivative_id: str
     tool_name: str
     version: str
+    url: str  # GitHub clone URL for the derivative repository
+    commit_sha: str  # Git commit SHA to reference
     datalad_uuid: Optional[str] = None  # UUID from .datalad/config (for disambiguation)
     uuid_prefix: Optional[str] = None
     size_stats: Optional[Dict[str, int]] = Field(default_factory=dict)

@@ -205,8 +205,8 @@ def _organize_single_source_derivative(
     link_submodule(
         parent_repo=study_path,
         submodule_path=derivative_path,
-        url=dataset.dataset_id,  # TODO: Get actual URL from discovery
-        commit_sha="HEAD",  # TODO: Get actual commit SHA from discovery
+        url=dataset.url,
+        commit_sha=dataset.commit_sha,
         submodule_name=f"{dataset.dataset_id}",
         datalad_id=dataset.datalad_uuid,
     )
@@ -270,8 +270,8 @@ def _organize_multi_source_derivative(
     link_submodule(
         parent_repo=study_path,
         submodule_path=derivative_path,
-        url=dataset.dataset_id,  # TODO: Get actual URL
-        commit_sha="HEAD",  # TODO: Get actual commit SHA
+        url=dataset.url,
+        commit_sha=dataset.commit_sha,
         submodule_name=f"{dataset.dataset_id}",
         datalad_id=dataset.datalad_uuid,
     )
