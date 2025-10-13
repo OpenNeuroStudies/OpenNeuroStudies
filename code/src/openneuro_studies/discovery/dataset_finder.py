@@ -204,13 +204,15 @@ class DatasetFinder:
             # For multi-source derivatives, we use the first source
             dataset_id = source_datasets[0]
 
-            # For now, generate a placeholder UUID (36 chars) from repo name
-            # In real implementation, we'd need to clone or use git API to get .datalad/config
-            # Format: 8-4-4-4-12 chars (total 36 including hyphens)
-            repo_hash = abs(hash(repo["name"])) % (10**32)  # Generate numeric hash
-            datalad_uuid = f"{repo_hash:08x}-0000-0000-0000-{'0' * 12}"[:36]
+            # TODO: Fetch DataLad UUID from .datalad/config via GitHub API
+            # The UUID is needed for disambiguation when multiple derivative datasets
+            # exist with the same tool-version combination. Without cloning, we can
+            # fetch .datalad/config using GitHub raw content API:
+            # https://raw.githubusercontent.com/{org}/{repo}/{branch}/.datalad/config
+            # Then parse: datalad.dataset.id = <uuid>
+            datalad_uuid = None
 
-            # Generate derivative_id
+            # Generate derivative_id (without UUID, uses tool-version)
             from openneuro_studies.models import generate_derivative_id
 
             derivative_id = generate_derivative_id(tool_name, version, datalad_uuid, [])

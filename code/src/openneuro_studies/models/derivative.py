@@ -26,7 +26,7 @@ class DerivativeDataset(BaseModel):
     derivative_id: str
     tool_name: str
     version: str
-    datalad_uuid: str
+    datalad_uuid: Optional[str] = None  # UUID from .datalad/config (for disambiguation)
     uuid_prefix: Optional[str] = None
     size_stats: Optional[Dict[str, int]] = Field(default_factory=dict)
     execution_metrics: Optional[Dict[str, float]] = Field(default_factory=dict)
@@ -36,31 +36,42 @@ class DerivativeDataset(BaseModel):
 
     @field_validator("datalad_uuid")
     @classmethod
-    def validate_uuid(cls, v: str) -> str:
-        """Validate that datalad_uuid is 36 characters (UUID format)."""
-        if len(v) != 36:
+    def validate_uuid(cls, v: Optional[str]) -> Optional[str]:
+        """Validate that datalad_uuid is 36 characters (UUID format) if provided.
+
+        UUID is used for disambiguation when multiple derivative datasets exist
+        with the same tool-version combination (e.g., two fmriprep-21.0.1 datasets
+        processed with different parameters).
+
+        TODO: Fetch UUID from .datalad/config via GitHub API or during cloning.
+        Without cloning, we'd need to use GitHub raw content API to read
+        .datalad/config from the repository.
+        """
+        if v is not None and len(v) != 36:
             raise ValueError("datalad_uuid must be 36 characters")
         return v
 
     @model_validator(mode="after")
     def extract_uuid_prefix(self) -> "DerivativeDataset":
-        """Extract first 8 characters of datalad_uuid as prefix if not provided."""
-        if self.uuid_prefix is None:
+        """Extract first 8 characters of datalad_uuid as prefix if available."""
+        if self.datalad_uuid is not None and self.uuid_prefix is None:
             self.uuid_prefix = self.datalad_uuid[:8]
         return self
 
 
 def generate_derivative_id(
-    tool_name: str, version: str, datalad_uuid: str, existing_ids: List[str]
+    tool_name: str, version: str, datalad_uuid: Optional[str], existing_ids: List[str]
 ) -> str:
     """Generate unique derivative_id.
 
-    If tool_name-version already exists in existing_ids, append first 8 chars of UUID.
+    If tool_name-version already exists in existing_ids, append first 8 chars of UUID
+    if available. Without UUID, returns base_id even if it exists (will need manual
+    disambiguation later when UUIDs are fetched).
 
     Args:
         tool_name: Processing tool name
         version: Tool version
-        datalad_uuid: DataLad dataset UUID
+        datalad_uuid: DataLad dataset UUID (optional, needed for disambiguation)
         existing_ids: List of already-used derivative IDs
 
     Returns:
@@ -68,6 +79,11 @@ def generate_derivative_id(
     """
     base_id = f"{tool_name}-{version}"
     if base_id not in existing_ids:
+        return base_id
+
+    # Need UUID for disambiguation
+    if datalad_uuid is None:
+        # TODO: Log warning that UUID is needed for proper disambiguation
         return base_id
 
     uuid_prefix = datalad_uuid[:8]
