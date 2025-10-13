@@ -1,12 +1,18 @@
 """GitHub API client with caching."""
 
+import logging
 import os
+import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
 from requests_cache import CachedSession
+
+# Global lock for rate limit coordination across threads
+_rate_limit_lock = threading.Lock()
 
 
 class GitHubAPIError(Exception):
@@ -94,11 +100,18 @@ class GitHubClient:
                         if not self.token:
                             token_hint = " Set GITHUB_TOKEN environment variable for higher rate limits."
 
-                        if wait_time > 300:  # Don't wait more than 5 minutes
-                            raise GitHubAPIError(
-                                f"Rate limit exceeded. Reset in {wait_time/60:.1f} minutes.{token_hint}"
-                            )
-                        time.sleep(wait_time + 1)
+                        # Use lock to coordinate waiting across threads
+                        # Only one thread should wait, others will see cache or wait their turn
+                        with _rate_limit_lock:
+                            # Check again in case another thread already waited
+                            current_wait = max(0, reset_time - time.time())
+                            if current_wait > 0:
+                                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                print(
+                                    f"[{timestamp}] Rate limit exceeded. "
+                                    f"Waiting {current_wait:.1f} seconds until reset...{token_hint}"
+                                )
+                                time.sleep(current_wait + 1)
                         continue
 
                 response.raise_for_status()

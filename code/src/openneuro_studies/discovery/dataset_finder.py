@@ -3,6 +3,7 @@
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -116,7 +117,8 @@ class DatasetFinder:
                                 progress_callback(repo["name"])
                         except Exception as e:
                             # Log error but continue with other datasets
-                            print(f"Warning: Failed to process {repo['name']}: {e}")
+                            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            print(f"[{timestamp}] Warning: Failed to process {repo['name']}: {e}")
                             if progress_callback:
                                 progress_callback(repo["name"])
 
@@ -166,7 +168,8 @@ class DatasetFinder:
                 return self._create_source_from_desc(repo, commit_sha, desc)
 
         except Exception as e:
-            print(f"Warning: Failed to process dataset {repo['name']}: {e}")
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(f"[{timestamp}] Warning: Failed to process dataset {repo['name']}: {e}")
             return None
 
     def _create_source_from_desc(
