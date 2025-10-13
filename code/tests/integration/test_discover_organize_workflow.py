@@ -222,10 +222,13 @@ def test_full_workflow(test_workspace: Path) -> None:
     # Step 5: Verify parent .gitmodules has all studies
     print("\n=== Step 5: Verify all studies in parent .gitmodules ===")
     # We already checked this in Step 4, but let's verify the count matches
+    # Note: Derivatives can create additional studies if their raw datasets
+    # aren't in the test set (e.g., ds000212-fmriprep creates study-ds000212)
     study_count = gitmodules_content.count('[submodule "study-')
-    expected_count = len(raw_ids)
-    assert study_count == expected_count, \
-        f"Parent should have {expected_count} study submodules, found {study_count}"
+    expected_min_count = len(raw_ids)
+    assert study_count >= expected_min_count, \
+        f"Parent should have at least {expected_min_count} study submodules, found {study_count}"
+    print(f"Found {study_count} study submodules (expected at least {expected_min_count})")
 
     # Verify parent has gitlinks for all studies in committed tree
     result = subprocess.run(
