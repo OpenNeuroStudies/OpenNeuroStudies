@@ -7,8 +7,17 @@ from typing import Optional
 import click
 
 from openneuro_studies.config import ConfigLoadError, load_config
-from openneuro_studies.models import DerivativeDataset, SourceDataset
+from openneuro_studies.models import (
+    DerivativeDataset,
+    SourceDataset,
+    UnorganizedDataset,
+    UnorganizedReason,
+)
 from openneuro_studies.organization import OrganizationError, organize_study
+from openneuro_studies.organization.unorganized_tracker import (
+    add_unorganized_dataset,
+    get_unorganized_summary,
+)
 
 
 @click.command()
@@ -128,6 +137,7 @@ def organize(
         # Organize datasets
         success_count = 0
         error_count = 0
+        config_dir = Path(".openneuro-studies")
 
         # Organize raw datasets first
         for raw_dataset in raw_datasets:
@@ -138,6 +148,8 @@ def organize(
             except OrganizationError as e:
                 click.echo(f"✗ Failed to organize {raw_dataset.dataset_id}: {e}", err=True)
                 error_count += 1
+                # Raw datasets typically don't need unorganized tracking
+                # (they're independent units)
 
         # Then organize derivatives
         for deriv_dataset in derivative_datasets:
@@ -149,11 +161,28 @@ def organize(
                 click.echo(f"✗ Failed to organize {deriv_dataset.dataset_id}: {e}", err=True)
                 error_count += 1
 
+                # Track unorganized derivative
+                unorganized = UnorganizedDataset.from_derivative_dataset(
+                    deriv_dataset,
+                    reason=UnorganizedReason.ORGANIZATION_ERROR,
+                    notes=str(e),
+                )
+                add_unorganized_dataset(unorganized, config_dir)
+
         # Display summary
         click.echo("\nSummary:")
-        click.echo(f"  ✓ Success: {success_count}")
+        click.echo(f"  ✓ Organized: {success_count}")
         if error_count > 0:
-            click.echo(f"  ✗ Errors: {error_count}")
+            click.echo(f"  ✗ Failed: {error_count}")
+
+            # Show unorganized summary
+            unorg_summary = get_unorganized_summary(config_dir)
+            if unorg_summary:
+                click.echo("\nUnorganized datasets by reason:")
+                for reason, count in unorg_summary.items():
+                    click.echo(f"  - {reason}: {count}")
+                click.echo(f"\nSee {config_dir}/unorganized-datasets.json for details")
+
             ctx.exit(1)
 
     except ConfigLoadError as e:
