@@ -214,7 +214,10 @@ class GitHubClient:
 
         # Try to get latest commit on default branch
         # Some repos may have empty/broken default branches, so try alternatives
-        for branch in [default_branch, "main", "master"]:
+        # Use dict.fromkeys() instead of set() to preserve order (default_branch first)
+        branches = list(dict.fromkeys([default_branch, "main", "master"]))
+
+        for branch in branches:
             try:
                 endpoint = f"/repos/{owner}/{repo}/commits/{branch}"
                 commit_data: Any = self._request(endpoint, retry=1)
@@ -228,7 +231,7 @@ class GitHubClient:
         # If all branches failed, raise error
         raise GitHubAPIError(
             f"Could not get commit SHA for {owner}/{repo}. "
-            f"Tried branches: {default_branch}, main, master"
+            f"Tried branches: {', '.join(branches)}"
         )
 
     def clear_cache(self) -> None:
