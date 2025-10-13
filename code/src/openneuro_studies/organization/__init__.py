@@ -219,6 +219,10 @@ def _organize_single_source_derivative(
         f"Added {derivative_path} submodule for {dataset.tool_name} {dataset.version}",
     )
 
+    # Create empty directory for the gitlink to prevent "deleted" status
+    # Git requires the directory to exist for submodules, even if not cloned
+    (study_path / derivative_path).mkdir(parents=True, exist_ok=True)
+
     # Register the study dataset as a submodule in the parent repository
     _register_study_in_parent(study_path, study_id, github_org)
 
@@ -284,6 +288,12 @@ def _organize_multi_source_derivative(
         message=f"Link multi-source derivative {dataset.derivative_id}\n\n"
         f"Added {len(dataset.source_datasets)} source datasets and derivative {dataset.tool_name}",
     )
+
+    # Create empty directories for all gitlinks to prevent "deleted" status
+    # Git requires the directories to exist for submodules, even if not cloned
+    for source_id in dataset.source_datasets:
+        (study_path / "sourcedata" / source_id).mkdir(parents=True, exist_ok=True)
+    (study_path / derivative_path).mkdir(parents=True, exist_ok=True)
 
     # Register the study dataset as a submodule in the parent repository
     _register_study_in_parent(study_path, study_id, github_org)

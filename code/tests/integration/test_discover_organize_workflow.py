@@ -57,6 +57,7 @@ TEST_RAW_DATASETS = [
 TEST_DERIVATIVE_DATASETS = [
     "ds000001-mriqc",
     "ds000212-fmriprep",
+    "ds006143-mriqc",  # Derivative of ds006131
 ]
 
 # Combined list for discovery filtering
@@ -218,6 +219,30 @@ def test_full_workflow(test_workspace: Path) -> None:
 
         # Note: We don't check `git submodule status` because we use gitlinks without
         # cloning (no git submodule init). The .gitmodules check above is sufficient.
+
+    # Step 4a: Verify derivative directories exist
+    print("\n=== Step 4a: Verify derivative directories ===")
+
+    # Build map of expected derivatives from discovery
+    # Each derivative should create a directory under its source study
+    for deriv in deriv_datasets:
+        source_id = deriv["source_datasets"][0]  # Single-source derivatives
+        study_id = f"study-{source_id}"
+        study_path = test_workspace / study_id
+
+        # Study might not exist if source dataset not in TEST_RAW_DATASETS
+        # (e.g., ds000212 - we create study-ds000212 for ds000212-fmriprep)
+        if not study_path.exists():
+            print(f"  Skipping {deriv['dataset_id']} (source {source_id} not in test set)")
+            continue
+
+        # Use tool_name-version for directory path (as set by organize code)
+        deriv_path = f"{deriv['tool_name']}-{deriv['version']}"
+        derivative_dir = study_path / "derivatives" / deriv_path
+
+        assert derivative_dir.exists(), \
+            f"Derivative directory {derivative_dir.relative_to(test_workspace)} should exist for {deriv['dataset_id']}"
+        print(f"  ✓ Found {study_id}/derivatives/{deriv_path} (for {deriv['dataset_id']})")
 
     # Step 5: Verify parent .gitmodules has all studies
     print("\n=== Step 5: Verify all studies in parent .gitmodules ===")
