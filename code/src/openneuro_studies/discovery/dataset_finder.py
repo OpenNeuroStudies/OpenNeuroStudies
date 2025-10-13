@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from openneuro_studies.config import OpenNeuroStudiesConfig, SourceType
+from openneuro_studies.config import OpenNeuroStudiesConfig
 from openneuro_studies.models import DerivativeDataset, SourceDataset
 from openneuro_studies.utils import GitHubAPIError, GitHubClient
 
@@ -87,16 +87,12 @@ class DatasetFinder:
                 # (e.g., OpenNeuroDatasets contains both raw and derivative datasets)
                 for repo in filtered_repos:
                     try:
-                        # Try derivative first (checks DatasetType field)
-                        deriv_dataset = self._process_derivative_dataset(org_name, repo)
-                        if deriv_dataset:
-                            discovered["derivative"].append(deriv_dataset)
-                            continue
-
-                        # If not a derivative, try as raw dataset
-                        if source_spec.type == SourceType.RAW or source_spec.type == SourceType.DERIVATIVE:
-                            dataset = self._process_raw_dataset(org_name, repo)
-                            if dataset:
+                        # Fetch dataset_description.json once and determine type
+                        dataset = self._process_dataset(org_name, repo)
+                        if dataset:
+                            if isinstance(dataset, DerivativeDataset):
+                                discovered["derivative"].append(dataset)
+                            elif isinstance(dataset, SourceDataset):
                                 discovered["raw"].append(dataset)
                     except Exception as e:
                         # Log error but continue with other datasets
@@ -108,6 +104,121 @@ class DatasetFinder:
                 ) from e
 
         return discovered
+
+    def _process_dataset(
+        self, org_name: str, repo: Dict
+    ) -> Optional[Union[SourceDataset, DerivativeDataset]]:
+        """Process a dataset repository, determining type from dataset_description.json.
+
+        This method fetches dataset_description.json ONCE and determines whether
+        the dataset is raw or derivative based on the DatasetType field, ensuring
+        efficient API usage (FR-017a).
+
+        Args:
+            org_name: GitHub organization name
+            repo: Repository dictionary from GitHub API
+
+        Returns:
+            SourceDataset or DerivativeDataset instance, or None if processing fails
+        """
+        try:
+            # Get current commit SHA
+            commit_sha = self.github_client.get_default_branch_sha(org_name, repo["name"])
+
+            # Fetch dataset_description.json once
+            try:
+                desc_json = self.github_client.get_file_content(
+                    org_name, repo["name"], "dataset_description.json", ref=commit_sha
+                )
+                desc = json.loads(desc_json)
+            except GitHubAPIError:
+                # File not found or invalid - skip this dataset
+                return None
+
+            # Check DatasetType to determine if derivative or raw
+            if desc.get("DatasetType") == "derivative":
+                # Process as derivative
+                return self._create_derivative_from_desc(repo, commit_sha, desc)
+            else:
+                # Process as raw dataset (DatasetType is optional for raw, defaults to "raw")
+                return self._create_source_from_desc(repo, commit_sha, desc)
+
+        except Exception as e:
+            print(f"Warning: Failed to process dataset {repo['name']}: {e}")
+            return None
+
+    def _create_source_from_desc(
+        self, repo: Dict, commit_sha: str, desc: Dict
+    ) -> SourceDataset:
+        """Create SourceDataset from already-fetched dataset_description.json.
+
+        Args:
+            repo: Repository dictionary from GitHub API
+            commit_sha: Git commit SHA
+            desc: Parsed dataset_description.json content
+
+        Returns:
+            SourceDataset instance
+        """
+        return SourceDataset(
+            dataset_id=repo["name"],
+            url=repo["clone_url"],
+            commit_sha=commit_sha,
+            bids_version=desc.get("BIDSVersion", "unknown"),
+            license=desc.get("License"),
+            authors=desc.get("Authors", []),
+        )
+
+    def _create_derivative_from_desc(
+        self, repo: Dict, commit_sha: str, desc: Dict
+    ) -> Optional[DerivativeDataset]:
+        """Create DerivativeDataset from already-fetched dataset_description.json.
+
+        Args:
+            repo: Repository dictionary from GitHub API
+            commit_sha: Git commit SHA
+            desc: Parsed dataset_description.json content
+
+        Returns:
+            DerivativeDataset instance or None if required fields missing
+        """
+        # Extract tool name and version from GeneratedBy
+        generated_by = desc.get("GeneratedBy", [])
+        if not generated_by:
+            return None
+
+        tool_info = generated_by[0]
+        tool_name = tool_info.get("Name", "unknown")
+        version = tool_info.get("Version", "unknown")
+
+        # Extract source datasets
+        source_datasets = self._extract_source_dataset_ids(desc.get("SourceDatasets", []))
+        if not source_datasets:
+            return None
+
+        # Use first source dataset as the dataset_id (following BIDS convention)
+        dataset_id = source_datasets[0]
+
+        # TODO: Fetch DataLad UUID from .datalad/config via GitHub API
+        # The UUID is needed for disambiguation when multiple derivative datasets
+        # exist with the same tool-version combination.
+        datalad_uuid = None
+
+        # Generate derivative_id (without UUID, uses tool-version)
+        from openneuro_studies.models import generate_derivative_id
+
+        derivative_id = generate_derivative_id(tool_name, version, datalad_uuid, [])
+
+        return DerivativeDataset(
+            dataset_id=dataset_id,
+            derivative_id=derivative_id,
+            tool_name=tool_name,
+            version=version,
+            url=repo["clone_url"],
+            commit_sha=commit_sha,
+            datalad_uuid=datalad_uuid,
+            source_datasets=source_datasets,
+        )
 
     def _filter_repos(self, repos: List[Dict], patterns: List[str]) -> List[Dict]:
         """Filter repositories by inclusion patterns.
@@ -127,114 +238,6 @@ class DatasetFinder:
             if any(re.match(pattern, repo["name"]) for pattern in patterns):
                 filtered.append(repo)
         return filtered
-
-    def _process_raw_dataset(self, org_name: str, repo: Dict) -> Optional[SourceDataset]:
-        """Process a raw dataset repository.
-
-        Args:
-            org_name: GitHub organization name
-            repo: Repository dictionary from GitHub API
-
-        Returns:
-            SourceDataset instance or None if processing fails
-        """
-        try:
-            # Get current commit SHA
-            commit_sha = self.github_client.get_default_branch_sha(org_name, repo["name"])
-
-            # Try to get dataset_description.json
-            try:
-                desc_json = self.github_client.get_file_content(
-                    org_name, repo["name"], "dataset_description.json", ref=commit_sha
-                )
-                desc = json.loads(desc_json)
-            except GitHubAPIError:
-                # File not found or invalid - skip this dataset
-                return None
-
-            return SourceDataset(
-                dataset_id=repo["name"],
-                url=repo["clone_url"],
-                commit_sha=commit_sha,
-                bids_version=desc.get("BIDSVersion", "unknown"),
-                license=desc.get("License"),
-                authors=desc.get("Authors", []),
-            )
-        except Exception as e:
-            print(f"Warning: Failed to process raw dataset {repo['name']}: {e}")
-            return None
-
-    def _process_derivative_dataset(self, org_name: str, repo: Dict) -> Optional[DerivativeDataset]:
-        """Process a derivative dataset repository.
-
-        Args:
-            org_name: GitHub organization name
-            repo: Repository dictionary from GitHub API
-
-        Returns:
-            DerivativeDataset instance or None if processing fails
-        """
-        try:
-            # Get current commit SHA
-            commit_sha = self.github_client.get_default_branch_sha(org_name, repo["name"])
-
-            # Try to get dataset_description.json
-            try:
-                desc_json = self.github_client.get_file_content(
-                    org_name, repo["name"], "dataset_description.json", ref=commit_sha
-                )
-                desc = json.loads(desc_json)
-            except GitHubAPIError:
-                return None
-
-            # Check if this is actually a derivative
-            if desc.get("DatasetType") != "derivative":
-                return None
-
-            # Extract tool name and version from GeneratedBy
-            generated_by = desc.get("GeneratedBy", [])
-            if not generated_by:
-                return None
-
-            tool_info = generated_by[0]
-            tool_name = tool_info.get("Name", "unknown")
-            version = tool_info.get("Version", "unknown")
-
-            # Extract source datasets
-            source_datasets = self._extract_source_dataset_ids(desc.get("SourceDatasets", []))
-            if not source_datasets:
-                return None
-
-            # Use first source dataset as the dataset_id (following BIDS convention)
-            # For multi-source derivatives, we use the first source
-            dataset_id = source_datasets[0]
-
-            # TODO: Fetch DataLad UUID from .datalad/config via GitHub API
-            # The UUID is needed for disambiguation when multiple derivative datasets
-            # exist with the same tool-version combination. Without cloning, we can
-            # fetch .datalad/config using GitHub raw content API:
-            # https://raw.githubusercontent.com/{org}/{repo}/{branch}/.datalad/config
-            # Then parse: datalad.dataset.id = <uuid>
-            datalad_uuid = None
-
-            # Generate derivative_id (without UUID, uses tool-version)
-            from openneuro_studies.models import generate_derivative_id
-
-            derivative_id = generate_derivative_id(tool_name, version, datalad_uuid, [])
-
-            return DerivativeDataset(
-                dataset_id=dataset_id,
-                derivative_id=derivative_id,
-                tool_name=tool_name,
-                version=version,
-                url=repo["clone_url"],
-                commit_sha=commit_sha,
-                datalad_uuid=datalad_uuid,
-                source_datasets=source_datasets,
-            )
-        except Exception as e:
-            print(f"Warning: Failed to process derivative dataset {repo['name']}: {e}")
-            return None
 
     def _extract_source_dataset_ids(self, source_datasets: List[Union[str, Dict]]) -> List[str]:
         """Extract OpenNeuro dataset IDs from SourceDatasets field.

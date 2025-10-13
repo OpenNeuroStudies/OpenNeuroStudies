@@ -44,13 +44,12 @@ def run_cli(args: list[str], **kwargs) -> subprocess.CompletedProcess:
     )
 
 # Test datasets to discover (from CLAUDE.md)
+# NOTE: Only ds000001, ds005256, ds006131 are raw datasets
+# ds006185, ds006189, ds006190 are actually derivatives (discovered via DatasetType field)
 TEST_RAW_DATASETS = [
     "ds000001",
     "ds005256",
     "ds006131",
-    "ds006185",
-    "ds006189",
-    "ds006190",
 ]
 
 # Derivative datasets to test
@@ -60,13 +59,13 @@ TEST_DERIVATIVE_DATASETS = [
     "ds000001-mriqc",  # From OpenNeuroDerivatives
     "ds000212-fmriprep",  # From OpenNeuroDerivatives (raw ds000212 not in test set)
     "ds006143",  # From OpenNeuroDatasets - derivative of ds006131
+    "ds006185",  # From OpenNeuroDatasets - derivative (not raw)
+    "ds006189",  # From OpenNeuroDatasets - derivative (not raw)
+    "ds006190",  # From OpenNeuroDatasets - multi-source derivative
 ]
 
 # Combined list for discovery filtering
 TEST_ALL_DATASETS = TEST_RAW_DATASETS + TEST_DERIVATIVE_DATASETS
-
-# Note: ds006190 is a special case - it's a multi-source derivative
-# in OpenNeuroDerivatives, but we list it here for discovery
 
 
 @pytest.fixture
@@ -145,8 +144,7 @@ def test_full_workflow(test_workspace: Path) -> None:
     # Verify all expected raw datasets were found
     raw_ids = {d["dataset_id"] for d in raw_datasets}
     for expected_id in TEST_RAW_DATASETS:
-        if expected_id != "ds006190":  # ds006190 is a derivative, not raw
-            assert expected_id in raw_ids, f"Should discover {expected_id}"
+        assert expected_id in raw_ids, f"Should discover {expected_id}"
 
     # Verify derivative datasets were discovered
     # TODO: Derivative discovery not yet implemented - skip for now

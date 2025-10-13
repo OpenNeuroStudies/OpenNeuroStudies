@@ -96,6 +96,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-015**: System MUST run bids-validator-deno on study datasets and store JSON and text outputs under derivatives/
 - **FR-016**: System MUST be idempotent (running multiple times produces the same result)
 - **FR-017**: System MUST cache API responses to avoid GitHub rate limits
+- **FR-017a**: System MUST minimize API calls during discovery by fetching dataset_description.json only once per repository and reusing the parsed content for both raw and derivative dataset determination (rather than fetching twice)
 - **FR-018**: System MUST support versioned releases using 0.YYYYMMDD.PATCH format
 - **FR-019**: System MUST generate CHANGES file entries following CPAN::Changes::Spec format
 - **FR-020**: System MUST operate on YAML specifications for sources rather than requiring hardcoded submodules
