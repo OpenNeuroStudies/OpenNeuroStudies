@@ -108,6 +108,14 @@ def organize(
         raw_datasets = [SourceDataset(**d) for d in discovered.get("raw", [])]
         derivative_datasets = [DerivativeDataset(**d) for d in discovered.get("derivative", [])]
 
+        # Build lookup dictionary for source resolution (dataset_id -> dataset)
+        # This allows multi-source derivatives to look up URL/commit info for sources
+        discovered_lookup = {}
+        for ds in raw_datasets:
+            discovered_lookup[ds.dataset_id] = ds
+        for ds in derivative_datasets:
+            discovered_lookup[ds.dataset_id] = ds
+
         # Filter targets if provided
         if targets:
             # For now, filter by dataset_id matching targets
@@ -142,7 +150,7 @@ def organize(
         # Organize raw datasets first
         for raw_dataset in raw_datasets:
             try:
-                study_path = organize_study(raw_dataset, cfg)
+                study_path = organize_study(raw_dataset, cfg, discovered_datasets=discovered_lookup)
                 click.echo(f"✓ Organized {raw_dataset.dataset_id} -> {study_path}")
                 success_count += 1
             except OrganizationError as e:
@@ -154,7 +162,7 @@ def organize(
         # Then organize derivatives
         for deriv_dataset in derivative_datasets:
             try:
-                study_path = organize_study(deriv_dataset, cfg)
+                study_path = organize_study(deriv_dataset, cfg, discovered_datasets=discovered_lookup)
                 click.echo(f"✓ Organized {deriv_dataset.dataset_id} -> {study_path}")
                 success_count += 1
             except OrganizationError as e:

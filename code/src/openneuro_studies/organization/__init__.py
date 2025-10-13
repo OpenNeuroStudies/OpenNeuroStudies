@@ -66,6 +66,7 @@ def organize_study(
     dataset: Union[SourceDataset, DerivativeDataset],
     config: OpenNeuroStudiesConfig,
     parent_path: Optional[Path] = None,
+    discovered_datasets: Optional[dict[str, Union[SourceDataset, DerivativeDataset]]] = None,
 ) -> Path:
     """Organize a dataset into study structure.
 
@@ -78,6 +79,8 @@ def organize_study(
         dataset: Dataset to organize (raw or derivative)
         config: OpenNeuroStudies configuration
         parent_path: Parent directory for study datasets (default: current dir)
+        discovered_datasets: Optional lookup dictionary (dataset_id -> dataset)
+                           for resolving source dataset URLs/commits
 
     Returns:
         Path to organized study dataset
@@ -114,7 +117,9 @@ def organize_study(
                 return _organize_single_source_derivative(dataset, config, parent_path)
             else:
                 # Multiple sources -> create study
-                return _organize_multi_source_derivative(dataset, config, parent_path)
+                return _organize_multi_source_derivative(
+                    dataset, config, parent_path, discovered_datasets
+                )
         else:
             raise OrganizationError(f"Unknown dataset type: {type(dataset)}")
 
@@ -244,6 +249,7 @@ def _organize_multi_source_derivative(
     dataset: DerivativeDataset,
     config: OpenNeuroStudiesConfig,
     parent_path: Path,
+    discovered_datasets: Optional[dict[str, Union[SourceDataset, DerivativeDataset]]] = None,
 ) -> Path:
     """Organize a derivative with multiple sources.
 
@@ -253,6 +259,7 @@ def _organize_multi_source_derivative(
         dataset: Derivative dataset with multiple sources
         config: Configuration
         parent_path: Parent directory
+        discovered_datasets: Optional lookup dictionary for resolving source info
 
     Returns:
         Path to study dataset
@@ -275,13 +282,27 @@ def _organize_multi_source_derivative(
         # Link all source datasets under sourcedata/
         for source_id in dataset.source_datasets:
             source_path = f"sourcedata/{source_id}"
+
+            # Look up source dataset info from discovered datasets
+            source_url = f"https://github.com/OpenNeuroDatasets/{source_id}"  # Default
+            source_commit = "HEAD"  # Default
+            source_datalad_id = None
+
+            if discovered_datasets and source_id in discovered_datasets:
+                source_dataset = discovered_datasets[source_id]
+                source_url = str(source_dataset.url)
+                source_commit = source_dataset.commit_sha
+                # Get datalad_uuid if it's a derivative
+                if isinstance(source_dataset, DerivativeDataset):
+                    source_datalad_id = source_dataset.datalad_uuid
+
             link_submodule(
                 parent_repo=study_path,
                 submodule_path=source_path,
-                url=f"https://github.com/OpenNeuroDatasets/{source_id}",  # TODO: Get from discovery
-                commit_sha="HEAD",  # TODO: Get actual commit SHA
-                submodule_name=f"{source_id}-raw",
-                datalad_id=None,  # TODO: Extract if available
+                url=source_url,
+                commit_sha=source_commit,
+                submodule_name=f"{source_id}",  # Use source_id directly (can be raw or derivative)
+                datalad_id=source_datalad_id,
             )
             submodule_paths.append(source_path)
 

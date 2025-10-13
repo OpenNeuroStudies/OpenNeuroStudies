@@ -44,13 +44,12 @@ def run_cli(args: list[str], **kwargs) -> subprocess.CompletedProcess:
     )
 
 # Test datasets to discover (from CLAUDE.md)
-# NOTE: ds000001, ds005256, ds006131, ds006185 are raw datasets
-# ds006189, ds006190 are derivatives (discovered via DatasetType field)
+# NOTE: Only ds000001, ds005256, ds006131 are raw datasets
+# ds006185, ds006189, ds006190 are derivatives (discovered via DatasetType field)
 TEST_RAW_DATASETS = [
     "ds000001",
     "ds005256",
     "ds006131",
-    "ds006185",  # Needed as source for ds006189 derivative
 ]
 
 # Derivative datasets to test
@@ -227,14 +226,22 @@ def test_full_workflow(test_workspace: Path) -> None:
     # Build map of expected derivatives from discovery
     # Each derivative should create a directory under its source study
     for deriv in deriv_datasets:
-        source_id = deriv["source_datasets"][0]  # Single-source derivatives
-        study_id = f"study-{source_id}"
+        # Multi-source derivatives create their own study-{dataset_id}
+        # Single-source derivatives go under study-{source_id}
+        if len(deriv["source_datasets"]) > 1:
+            # Multi-source: study-ds006189, study-ds006190
+            study_id = f"study-{deriv['dataset_id']}"
+        else:
+            # Single-source: under the source study
+            source_id = deriv["source_datasets"][0]
+            study_id = f"study-{source_id}"
+
         study_path = test_workspace / study_id
 
         # Study might not exist if source dataset not in TEST_RAW_DATASETS
         # (e.g., ds000212 - we create study-ds000212 for ds000212-fmriprep)
         if not study_path.exists():
-            print(f"  Skipping {deriv['dataset_id']} (source {source_id} not in test set)")
+            print(f"  Skipping {deriv['dataset_id']} (study {study_id} not created)")
             continue
 
         # Use tool_name-version for directory path (as set by organize code)
