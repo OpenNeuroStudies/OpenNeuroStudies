@@ -36,6 +36,7 @@ class GitHubClient:
         token: Optional[str] = None,
         cache_dir: str = ".openneuro-studies/cache",
         cache_expire_after: int = 3600,
+        max_connections: int = 50,
     ):
         """Initialize GitHub client.
 
@@ -44,13 +45,14 @@ class GitHubClient:
                    If no token provided, will use unauthenticated requests (lower rate limit).
             cache_dir: Directory for cache storage
             cache_expire_after: Cache expiration time in seconds (default: 1 hour)
+            max_connections: Maximum number of connections in pool (default: 50)
         """
         self.token = token or os.getenv("GITHUB_TOKEN")
 
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create cached session
+        # Create cached session with larger connection pool
         cache_path = self.cache_dir / "github_api_cache"
         self.session = CachedSession(
             str(cache_path),
@@ -58,6 +60,19 @@ class GitHubClient:
             allowable_methods=["GET"],
             stale_if_error=True,  # Use stale cache if API fails
         )
+
+        # Configure connection pool size for parallel workers
+        # HTTPAdapter settings: pool_connections controls number of connection pools
+        # pool_maxsize controls max connections per pool
+        from requests.adapters import HTTPAdapter
+
+        adapter = HTTPAdapter(
+            pool_connections=max_connections,
+            pool_maxsize=max_connections,
+            max_retries=0,  # We handle retries in _request()
+        )
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
 
         # Set up headers - only add Authorization if token is available
         headers = {"Accept": "application/vnd.github.v3+json"}

@@ -46,7 +46,9 @@ class DatasetFinder:
             max_workers: Maximum number of parallel workers for dataset processing (default: 10)
         """
         self.config = config
-        self.github_client = github_client or GitHubClient()
+        # Create GitHub client with connection pool sized for parallel workers
+        # Use max_workers * 2 to account for potential connection reuse patterns
+        self.github_client = github_client or GitHubClient(max_connections=max(max_workers * 2, 50))
         self.test_dataset_filter = test_dataset_filter
         self.max_workers = max_workers
 
