@@ -191,6 +191,12 @@ def organize(
                     click.echo(f"  - {reason}: {count}")
                 click.echo(f"\nSee {config_dir}/unorganized-datasets.json for details")
 
+        # Announce log file location
+        log_file = ctx.obj.get("log_file")
+        if log_file:
+            click.echo(f"\nDetailed logs: {log_file}")
+
+        if error_count > 0:
             ctx.exit(1)
 
     except ConfigLoadError as e:

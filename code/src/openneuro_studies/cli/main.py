@@ -1,6 +1,9 @@
 """Main CLI entry point for openneuro-studies."""
 
 import logging
+import os
+from datetime import datetime
+from pathlib import Path
 
 import click
 
@@ -35,16 +38,52 @@ def cli(ctx: click.Context, config: str, log_level: str) -> None:
 
     For detailed documentation, see: https://github.com/OpenNeuroStudies/OpenNeuroStudies
     """
-    # Configure logging
-    logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    # Configure dual logging (console WARNING, file user-specified level)
+    log_dir = Path("logs/openneuro-studies")
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create log file with timestamp and PID
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    pid = os.getpid()
+    log_file = log_dir / f"{timestamp}-{pid}.log"
+
+    # Root logger configuration
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)  # Capture everything
+
+    # Console handler - WARNING only (for user-facing messages)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.WARNING)
+    console_formatter = logging.Formatter(
+        "%(levelname)s: %(message)s"
+    )
+    console_handler.setFormatter(console_formatter)
+    root_logger.addHandler(console_handler)
+
+    # File handler - user-specified level
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(getattr(logging, log_level.upper()))
+    file_formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    file_handler.setFormatter(file_formatter)
+    root_logger.addHandler(file_handler)
 
-    # Ensure context object exists for subcommands
+    # Suppress datalad console output (keep in file)
+    datalad_logger = logging.getLogger("datalad")
+    datalad_logger.setLevel(logging.WARNING)  # Only show warnings/errors on console
+    # Add file handler that captures everything
+    datalad_file_handler = logging.FileHandler(log_file)
+    datalad_file_handler.setLevel(logging.DEBUG)
+    datalad_file_handler.setFormatter(file_formatter)
+    datalad_logger.addHandler(datalad_file_handler)
+    datalad_logger.propagate = False  # Don't propagate to root logger
+
+    # Store log file path in context for later reference
     ctx.ensure_object(dict)
     ctx.obj["config"] = config
+    ctx.obj["log_file"] = str(log_file)
 
 
 # Register commands
