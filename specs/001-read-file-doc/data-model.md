@@ -201,7 +201,7 @@ class SourceDataset(BaseModel):
 
 | Field | Type | Required | Description | Validation |
 |-------|------|----------|-------------|------------|
-| `dataset_id` | str | Yes | Original derivative dataset ID | Pattern: `^ds\d+$` |
+| `dataset_id` | str | Yes | Original derivative dataset ID (any string) | No pattern restriction (e.g., "ds000212-fmriprep", "myanalysis") |
 | `derivative_id` | str | Yes | Unique identifier for tracking | Format: `{tool_name}-{version}[-{uuid_prefix}]` |
 | `tool_name` | str | Yes | Processing tool name | e.g., "fmriprep", "mriqc" |
 | `version` | str | Yes | Tool version | Semantic version or date-based |
@@ -240,7 +240,7 @@ from typing import List, Optional, Dict
 from pydantic import BaseModel, Field, validator
 
 class DerivativeDataset(BaseModel):
-    dataset_id: str = Field(..., pattern=r"^ds\d+$")
+    dataset_id: str  # Can be any string (e.g., "ds000212-fmriprep", "myanalysis")
     derivative_id: str
     tool_name: str
     version: str

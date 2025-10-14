@@ -81,8 +81,8 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-001**: System MUST discover datasets from configured sources (OpenNeuroDatasets, OpenNeuroDerivatives, openfmri) without requiring full clones
 - **FR-002**: System MUST extract dataset metadata (URLs, commit SHAs, dataset_description.json) using GitHub/Forgejo tree APIs
 - **FR-003**: System MUST create study-{id} folder structures with sourcedata/ and derivatives/ subfolders
-- **FR-003a**: System MUST name all study directories using the pattern `study-ds{XXXXXX}` where XXXXXX is the numeric OpenNeuro dataset ID (e.g., `study-ds000001`, `study-ds006131`). For derivatives, the study name MUST use the derivative's own repository dataset ID (e.g., `study-ds006189` for repository ds006189), NOT the tool-version identifier
-- **FR-003b**: System MUST name git submodules for derivative datasets using the repository's dataset ID (e.g., submodule name `ds006143` for repository ds006143), NOT the source dataset ID. This ensures unique identification and prevents naming conflicts
+- **FR-003a**: System MUST name all study directories using the pattern `study-{dataset_id}` where dataset_id is the repository's dataset identifier. For raw datasets from OpenNeuro, this typically follows `ds{XXXXXX}` pattern (e.g., `study-ds000001`, `study-ds006131`). For derivatives, the study name MUST use the derivative repository's own dataset ID, which may be any valid identifier (e.g., `study-ds006189`, `study-myanalysis-results`), NOT the tool-version identifier. Source datasets are identified from dataset_description.json SourceDatasets field or from git submodules in sourcedata/ subdirectories.
+- **FR-003b**: System MUST name git submodules for derivative datasets using the repository's dataset ID (e.g., submodule name `ds006143` for OpenNeuro derivative, `myanalysis-results` for custom derivative), NOT the source dataset ID. This ensures unique identification and prevents naming conflicts. Dataset IDs can be any string; relationships are discovered through metadata and git structure, not naming patterns.
 - **FR-003c**: System MUST ensure every successfully organized study directory has at least one subdataset (either in sourcedata/ or derivatives/). Empty study directories indicate organization failure and MUST NOT be registered in parent .gitmodules
 - **FR-004**: System MUST link datasets as git submodules using git config and git update-index without cloning. System MUST create empty directories for submodule paths to ensure clean git status (gitlinks require directories to exist even if not populated)
 - **FR-004a**: After organize operations complete, System MUST ensure git status is clean across entire repository hierarchy (parent and all study submodules). All changes MUST be committed, with gitlinks (mode 160000) present in committed trees
@@ -127,7 +127,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 
 - **Source Dataset**: A raw BIDS dataset from OpenNeuroDatasets, openfmri, or other configured sources. Linked as git submodule under sourcedata/raw/ or sourcedata/{id}/. Key attributes: dataset ID, URL, commit SHA, BIDS version, license, authors.
 
-- **Derivative Dataset**: A processed dataset from OpenNeuroDerivatives or OpenNeuro derivatives. Linked as git submodule under derivatives/{toolname-version}/. Key attributes: tool name, version, DataLad UUID, size statistics, execution metrics, source datasets, processed raw version, outdatedness metric.
+- **Derivative Dataset**: A processed dataset from OpenNeuroDerivatives or OpenNeuro derivatives. Dataset IDs can be any string (e.g., "ds000212-fmriprep", "myanalysis-results"). Linked as git submodule under derivatives/{toolname-version}/. Source relationships are identified from dataset_description.json SourceDatasets field or git submodules in sourcedata/ subdirectories. Key attributes: dataset ID, tool name, version, DataLad UUID, size statistics, execution metrics, source datasets, processed raw version, outdatedness metric.
 
 - **Source Specification**: YAML configuration defining dataset sources (GitHub organizations, regex patterns, DataLad collections). Key attributes: organization/URL, inclusion patterns, access credentials.
 
@@ -159,7 +159,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - Source datasets maintain stable commit histories (no force pushes that invalidate cached SHAs)
 - BIDS specification 1.10.1 study dataset conventions are followed
 - Most datasets have single source dataset; multi-source derivatives are minority cases
-- Derivative naming follows {toolname-version} convention; UUID disambiguation needed only for same-version conflicts
+- Derivative dataset IDs can be any string (relationships discovered via metadata/git structure); derivatives are organized under {toolname-version}/ subdirectories; UUID disambiguation needed only for same-version conflicts
 - Execution metrics are available only for derivatives processed with con-duct/duct monitoring
 - Calendar-based versioning (0.YYYYMMDD.PATCH) is acceptable for project releases
 - GitHub organization (e.g., OpenNeuroStudies) is configured and accessible for publishing study repositories
