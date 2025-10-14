@@ -26,11 +26,12 @@ class TestGitHubClient:
         client = GitHubClient()
         assert client.token == "env_token"
 
-    def test_init_no_token_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test error when no token is provided."""
+    def test_init_no_token_allows_unauthenticated(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test initialization without token (unauthenticated mode)."""
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-        with pytest.raises(GitHubAPIError, match="GitHub token required"):
-            GitHubClient()
+        client = GitHubClient()
+        assert client.token is None
+        assert "Authorization" not in client.session.headers
 
     @patch("openneuro_studies.utils.github_client.CachedSession")
     def test_list_repositories(self, mock_session_class: Mock) -> None:
@@ -140,22 +141,36 @@ class TestGitHubClient:
         assert mock_session.get.call_count == 2
 
     @patch("openneuro_studies.utils.github_client.CachedSession")
-    def test_rate_limit_handling(self, mock_session_class: Mock) -> None:
-        """Test rate limit detection."""
+    @patch("time.sleep")  # Mock sleep to prevent actual waiting
+    @patch("time.time", return_value=100)  # Mock current time
+    def test_rate_limit_handling(
+        self, mock_time: Mock, mock_sleep: Mock, mock_session_class: Mock
+    ) -> None:
+        """Test rate limit wait and retry."""
         # Setup mock
         mock_session = MagicMock()
         mock_session_class.return_value = mock_session
 
-        mock_response = Mock()
-        mock_response.status_code = 403
-        mock_response.text = "API rate limit exceeded"
-        mock_response.headers = {"X-RateLimit-Reset": "9999999999"}
-        mock_session.get.return_value = mock_response
+        # First call hits rate limit, second succeeds
+        rate_limit_response = Mock()
+        rate_limit_response.status_code = 403
+        rate_limit_response.text = "API rate limit exceeded"
+        rate_limit_response.headers = {"X-RateLimit-Reset": "200"}  # Reset at time 200
+
+        success_response = Mock()
+        success_response.status_code = 200
+        success_response.json.return_value = {"data": "success"}
+        success_response.raise_for_status.return_value = None
+
+        mock_session.get.side_effect = [rate_limit_response, success_response]
 
         client = GitHubClient(token="test_token")
+        result = client._request("/test/endpoint")
 
-        with pytest.raises(GitHubAPIError, match="Rate limit exceeded"):
-            client._request("/test/endpoint")
+        # Verify it waited and retried
+        assert result == {"data": "success"}
+        assert mock_session.get.call_count == 2
+        mock_sleep.assert_called_once()  # Verify sleep was called to wait for rate limit
 
     @patch("openneuro_studies.utils.github_client.CachedSession")
     @patch("time.sleep")  # Mock sleep to speed up test
