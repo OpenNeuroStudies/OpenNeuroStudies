@@ -6,6 +6,8 @@ from typing import Optional
 
 import datalad.api as dl
 
+from .locks import parent_repo_lock
+
 
 class StudyCreationError(Exception):
     """Raised when study dataset creation fails."""
@@ -54,39 +56,45 @@ def create_study_dataset(
             raise StudyCreationError(f"Path {study_path} exists but is not a DataLad dataset")
 
     try:
-        # Create DataLad dataset without annex
-        topds.create(path=str(study_path), annex=False)
+        # Use lock to serialize parent repository modifications
+        # This prevents git index.lock conflicts when parallel workers
+        # create study datasets in the same parent repository
+        with parent_repo_lock:
+            # Create DataLad dataset without annex
+            # Use force=True to handle case where study is already registered as subdataset
+            # (can happen when derivative creates study before raw dataset does)
+            topds.create(path=str(study_path), annex=False, force=True)
 
-        # Create sourcedata and derivatives directories
-        sourcedata_dir = study_path / "sourcedata"
-        derivatives_dir = study_path / "derivatives"
-        sourcedata_dir.mkdir(exist_ok=True)
-        derivatives_dir.mkdir(exist_ok=True)
+            # Create sourcedata and derivatives directories
+            sourcedata_dir = study_path / "sourcedata"
+            derivatives_dir = study_path / "derivatives"
+            sourcedata_dir.mkdir(exist_ok=True)
+            derivatives_dir.mkdir(exist_ok=True)
 
-        # Generate initial dataset_description.json
-        dataset_description = {
-            "Name": f"Study dataset for {study_id}",
-            "BIDSVersion": "1.10.1",
-            "DatasetType": "study",
-            "License": "CC0",
-            "Authors": ["OpenNeuroStudies Contributors"],
-            "ReferencesAndLinks": [
-                "https://openneuro.org",
-                f"https://github.com/{github_org}/{study_id}",
-                "https://bids.neuroimaging.io/extensions/beps/bep_035.html",
-            ],
-        }
+            # Generate initial dataset_description.json
+            dataset_description = {
+                "Name": f"Study dataset for {study_id}",
+                "BIDSVersion": "1.10.1",
+                "DatasetType": "study",
+                "License": "CC0",
+                "Authors": ["OpenNeuroStudies Contributors"],
+                "ReferencesAndLinks": [
+                    "https://openneuro.org",
+                    f"https://github.com/{github_org}/{study_id}",
+                    "https://bids.neuroimaging.io/extensions/beps/bep_035.html",
+                ],
+            }
 
-        desc_file = study_path / "dataset_description.json"
-        desc_file.write_text(json.dumps(dataset_description, indent=2) + "\n")
+            desc_file = study_path / "dataset_description.json"
+            desc_file.write_text(json.dumps(dataset_description, indent=2) + "\n")
 
-        # Save initial commit
-        topds.save(
-            path=str(study_path),
-            recursive=True,
-            message=f"Initialize {study_id} study dataset\n\n"
-            f"Created by openneuro-studies organize command",
-        )
+            # Save initial commit
+            topds.save(
+                path=str(study_path),
+                recursive=True,
+                message=f"Initialize {study_id} study dataset\n\n"
+                f"Created by openneuro-studies organize command",
+            )
 
         return study_path
 

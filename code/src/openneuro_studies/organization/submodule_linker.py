@@ -4,6 +4,8 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+from .locks import parent_repo_lock
+
 
 class SubmoduleLinkError(Exception):
     """Raised when submodule linking fails."""
@@ -49,53 +51,21 @@ def link_submodule(
         # Use path as name, removing slashes
         submodule_name = submodule_path.replace("/", "-")
 
-    try:
-        # 1. Ensure parent directory for submodule exists
-        # (e.g., "sourcedata" must exist for "sourcedata/raw")
-        submodule_dir = parent_repo / submodule_path
-        submodule_dir.parent.mkdir(parents=True, exist_ok=True)
+    # Use lock to serialize .gitmodules modifications
+    # This prevents git index.lock conflicts when parallel workers
+    # modify the same parent repository's .gitmodules
+    with parent_repo_lock:
+        try:
+            # 1. Ensure parent directory for submodule exists
+            # (e.g., "sourcedata" must exist for "sourcedata/raw")
+            submodule_dir = parent_repo / submodule_path
+            submodule_dir.parent.mkdir(parents=True, exist_ok=True)
 
-        # Note: We do NOT create the submodule directory itself. Git handles this
-        # when the submodule is cloned. Creating an empty directory causes:
-        # "error: 'sourcedata/raw' does not have a commit checked out"
+            # Note: We do NOT create the submodule directory itself. Git handles this
+            # when the submodule is cloned. Creating an empty directory causes:
+            # "error: 'sourcedata/raw' does not have a commit checked out"
 
-        # 2. Configure .gitmodules - path
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(parent_repo),
-                "config",
-                "-f",
-                ".gitmodules",
-                f"submodule.{submodule_name}.path",
-                submodule_path,
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-
-        # Configure .gitmodules - url
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(parent_repo),
-                "config",
-                "-f",
-                ".gitmodules",
-                f"submodule.{submodule_name}.url",
-                url,
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-
-        # Add DataLad-specific fields if provided
-        if datalad_id:
-            # datalad-id
+            # 2. Configure .gitmodules - path
             subprocess.run(
                 [
                     "git",
@@ -104,15 +74,15 @@ def link_submodule(
                     "config",
                     "-f",
                     ".gitmodules",
-                    f"submodule.{submodule_name}.datalad-id",
-                    datalad_id,
+                    f"submodule.{submodule_name}.path",
+                    submodule_path,
                 ],
                 check=True,
                 capture_output=True,
                 text=True,
             )
 
-            # datalad-url (same as url for GitHub datasets)
+            # Configure .gitmodules - url
             subprocess.run(
                 [
                     "git",
@@ -121,7 +91,7 @@ def link_submodule(
                     "config",
                     "-f",
                     ".gitmodules",
-                    f"submodule.{submodule_name}.datalad-url",
+                    f"submodule.{submodule_name}.url",
                     url,
                 ],
                 check=True,
@@ -129,38 +99,74 @@ def link_submodule(
                 text=True,
             )
 
-        # 3. Stage .gitmodules
-        subprocess.run(
-            ["git", "-C", str(parent_repo), "add", ".gitmodules"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
+            # Add DataLad-specific fields if provided
+            if datalad_id:
+                # datalad-id
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(parent_repo),
+                        "config",
+                        "-f",
+                        ".gitmodules",
+                        f"submodule.{submodule_name}.datalad-id",
+                        datalad_id,
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
 
-        # 4. Add gitlink with specific commit SHA
-        # Mode 160000 = gitlink (submodule reference)
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(parent_repo),
-                "update-index",
-                "--add",
-                "--cacheinfo",
-                f"160000,{commit_sha},{submodule_path}",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
+                # datalad-url (same as url for GitHub datasets)
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(parent_repo),
+                        "config",
+                        "-f",
+                        ".gitmodules",
+                        f"submodule.{submodule_name}.datalad-url",
+                        url,
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
 
-    except subprocess.CalledProcessError as e:
-        raise SubmoduleLinkError(
-            f"Failed to link submodule {submodule_name} at {submodule_path}: "
-            f"{e.stderr if e.stderr else str(e)}"
-        ) from e
-    except Exception as e:
-        raise SubmoduleLinkError(f"Unexpected error linking submodule {submodule_name}: {e}") from e
+            # 3. Stage .gitmodules
+            subprocess.run(
+                ["git", "-C", str(parent_repo), "add", ".gitmodules"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            # 4. Add gitlink with specific commit SHA
+            # Mode 160000 = gitlink (submodule reference)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(parent_repo),
+                    "update-index",
+                    "--add",
+                    "--cacheinfo",
+                    f"160000,{commit_sha},{submodule_path}",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        except subprocess.CalledProcessError as e:
+            raise SubmoduleLinkError(
+                f"Failed to link submodule {submodule_name} at {submodule_path}: "
+                f"{e.stderr if e.stderr else str(e)}"
+            ) from e
+        except Exception as e:
+            raise SubmoduleLinkError(f"Unexpected error linking submodule {submodule_name}: {e}") from e
 
 
 def is_submodule_linked(parent_repo: Path, submodule_path: str) -> bool:

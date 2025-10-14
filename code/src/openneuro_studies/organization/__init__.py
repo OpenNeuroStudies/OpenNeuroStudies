@@ -348,6 +348,10 @@ def _organize_multi_source_derivative(
 def _register_study_in_parent(study_path: Path, study_id: str, github_org: str) -> None:
     """Register a study dataset as a submodule in the parent repository.
 
+    NOTE: This only adds the submodule to .gitmodules and git index.
+    The parent repository commit should be done separately in a batch operation
+    to avoid git index.lock conflicts with parallel workers.
+
     Args:
         study_path: Path to the study dataset
         study_id: Study identifier (e.g., "study-ds000001")
@@ -398,14 +402,6 @@ def _register_study_in_parent(study_path: Path, study_id: str, github_org: str) 
         commit_sha=study_commit_sha,
         submodule_name=study_id,
         datalad_id=datalad_id,
-    )
-
-    # Commit the study submodule to parent
-    # This commits .gitmodules and the gitlink for the study submodule
-    _git_commit_gitlink(
-        parent_repo,
-        f"Add study dataset {study_id}\n\n"
-        f"Registered as submodule pointing to {study_url} @ {study_commit_sha[:8]}",
     )
 
     # Create empty directory for the study gitlink to prevent "deleted" status

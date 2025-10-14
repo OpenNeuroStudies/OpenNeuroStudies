@@ -219,11 +219,13 @@ def organize(
                         else:
                             pbar.set_postfix_str(f"✗ {ds_id}")
 
-        # Process results
+        # Process results and collect successful studies
+        successful_studies = []
         for status, ds_id, path, error in results:
             if status == "success":
                 click.echo(f"✓ Organized {ds_id} -> {path}")
                 success_count += 1
+                successful_studies.append(path)
             else:
                 click.echo(f"✗ Failed to organize {ds_id}: {error}", err=True)
                 error_count += 1
@@ -238,6 +240,27 @@ def organize(
                         notes=str(error),
                     )
                     add_unorganized_dataset(unorganized, config_dir)
+
+        # Commit all organized studies to parent repository in a single batch operation
+        # This avoids git index.lock conflicts from parallel workers
+        if successful_studies:
+            click.echo(f"\nCommitting {len(successful_studies)} organized studies to parent repository...")
+            try:
+                import datalad.api as dl
+                from openneuro_studies import __version__
+
+                # Use dataset="^" to save from top dataset
+                dl.save(
+                    dataset="^",
+                    message=f"Organize {len(successful_studies)} study datasets\n\n"
+                    f"Added/updated {len(successful_studies)} study submodules\n"
+                    f"Updated by openneuro-studies {__version__} organize command"
+                )
+                click.echo("✓ Committed all studies to parent repository")
+            except Exception as e:
+                click.echo(f"✗ Failed to commit studies to parent: {e}", err=True)
+                logger.error(f"Failed to commit parent repository: {e}")
+                # Don't exit with error - studies were organized successfully
 
         # Display summary
         click.echo("\nSummary:")
