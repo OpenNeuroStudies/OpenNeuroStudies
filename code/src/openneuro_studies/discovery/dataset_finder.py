@@ -1,15 +1,17 @@
 """Dataset discovery from GitHub/Forgejo organizations."""
 
 import json
+import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from openneuro_studies.config import OpenNeuroStudiesConfig
 from openneuro_studies.models import DerivativeDataset, SourceDataset
 from openneuro_studies.utils import GitHubAPIError, GitHubClient
+
+logger = logging.getLogger(__name__)
 
 
 class DatasetDiscoveryError(Exception):
@@ -117,8 +119,7 @@ class DatasetFinder:
                                 progress_callback(repo["name"])
                         except Exception as e:
                             # Log error but continue with other datasets
-                            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            print(f"[{timestamp}] Warning: Failed to process {repo['name']}: {e}")
+                            logger.warning("Failed to process dataset %s: %s", repo["name"], e)
                             if progress_callback:
                                 progress_callback(repo["name"])
 
@@ -168,8 +169,7 @@ class DatasetFinder:
                 return self._create_source_from_desc(repo, commit_sha, desc)
 
         except Exception as e:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            print(f"[{timestamp}] Warning: Failed to process dataset {repo['name']}: {e}")
+            logger.debug("Failed to process dataset %s: %s", repo["name"], e)
             return None
 
     def _create_source_from_desc(

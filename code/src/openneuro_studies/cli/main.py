@@ -1,5 +1,7 @@
 """Main CLI entry point for openneuro-studies."""
 
+import logging
+
 import click
 
 from openneuro_studies import __version__
@@ -17,8 +19,15 @@ from openneuro_studies.cli.organize import organize as organize_cmd
     help="Configuration file path",
     show_default=True,
 )
+@click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    default="INFO",
+    help="Logging level",
+    show_default=True,
+)
 @click.pass_context
-def cli(ctx: click.Context, config: str) -> None:
+def cli(ctx: click.Context, config: str, log_level: str) -> None:
     """OpenNeuroStudies: Infrastructure for organizing OpenNeuro datasets.
 
     Discover, organize, and maintain OpenNeuro datasets as BIDS study structures
@@ -26,6 +35,13 @@ def cli(ctx: click.Context, config: str) -> None:
 
     For detailed documentation, see: https://github.com/OpenNeuroStudies/OpenNeuroStudies
     """
+    # Configure logging
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
     # Ensure context object exists for subcommands
     ctx.ensure_object(dict)
     ctx.obj["config"] = config

@@ -4,12 +4,13 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
 from requests_cache import CachedSession
+
+logger = logging.getLogger(__name__)
 
 # Global lock for rate limit coordination across threads
 _rate_limit_lock = threading.Lock()
@@ -106,10 +107,10 @@ class GitHubClient:
                             # Check again in case another thread already waited
                             current_wait = max(0, reset_time - time.time())
                             if current_wait > 0:
-                                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                print(
-                                    f"[{timestamp}] Rate limit exceeded. "
-                                    f"Waiting {current_wait:.1f} seconds until reset...{token_hint}"
+                                logger.warning(
+                                    "Rate limit exceeded. Waiting %.1f seconds until reset...%s",
+                                    current_wait,
+                                    token_hint,
                                 )
                                 time.sleep(current_wait + 1)
                         continue
