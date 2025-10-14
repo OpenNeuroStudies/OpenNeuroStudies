@@ -39,7 +39,7 @@ class UnorganizedDataset(BaseModel):
         notes: Additional context or error details
     """
 
-    dataset_id: str = Field(..., pattern=r"^ds\d+$")
+    dataset_id: str = Field(..., pattern=r"^ds\d+(-[a-z0-9]+)?$")
     derivative_id: Optional[str] = None
     tool_name: Optional[str] = None
     version: Optional[str] = None
