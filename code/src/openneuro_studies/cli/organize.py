@@ -1,10 +1,13 @@
 """Organize CLI command implementation."""
 
 import json
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
 
 import click
+from tqdm import tqdm
 
 from openneuro_studies.config import ConfigLoadError, load_config
 from openneuro_studies.models import (
@@ -42,6 +45,17 @@ from openneuro_studies.organization.unorganized_tracker import (
     is_flag=True,
     help="Recreate existing studies (DESTRUCTIVE - use with caution)",
 )
+@click.option(
+    "--workers",
+    type=int,
+    default=1,
+    help="Number of parallel workers for organizing datasets (default: 1 for serial processing)",
+)
+@click.option(
+    "--no-progress",
+    is_flag=True,
+    help="Disable progress bar display",
+)
 @click.pass_context
 def organize(
     ctx: click.Context,
@@ -50,6 +64,8 @@ def organize(
     dry_run: bool,
     no_publish: bool,
     force: bool,
+    workers: int,
+    no_progress: bool,
 ) -> None:
     """Organize datasets into BIDS study structures.
 
@@ -79,6 +95,9 @@ def organize(
 
         # Add/update specific derivative from URL
         openneuro-studies organize https://github.com/OpenNeuroDerivatives/ds001761-fmriprep
+
+        # Organize with parallel workers
+        openneuro-studies organize --workers 10
 
         # Dry run to see what would be created
         openneuro-studies organize --dry-run study-ds000001
@@ -146,36 +165,79 @@ def organize(
         success_count = 0
         error_count = 0
         config_dir = Path(".openneuro-studies")
+        logger = logging.getLogger(__name__)
 
-        # Organize raw datasets first
-        for raw_dataset in raw_datasets:
+        # Combine all datasets for processing
+        all_datasets = list(raw_datasets) + list(derivative_datasets)
+
+        def organize_single_dataset(dataset):
+            """Organize a single dataset (raw or derivative)."""
             try:
-                study_path = organize_study(raw_dataset, cfg, discovered_datasets=discovered_lookup)
-                click.echo(f"✓ Organized {raw_dataset.dataset_id} -> {study_path}")
-                success_count += 1
+                study_path = organize_study(dataset, cfg, discovered_datasets=discovered_lookup)
+                logger.info(f"Organized {dataset.dataset_id} -> {study_path}")
+                return ("success", dataset.dataset_id, study_path, None)
             except OrganizationError as e:
-                click.echo(f"✗ Failed to organize {raw_dataset.dataset_id}: {e}", err=True)
-                error_count += 1
-                # Raw datasets typically don't need unorganized tracking
-                # (they're independent units)
+                logger.error(f"Failed to organize {dataset.dataset_id}: {e}")
+                return ("error", dataset.dataset_id, None, e)
 
-        # Then organize derivatives
-        for deriv_dataset in derivative_datasets:
-            try:
-                study_path = organize_study(deriv_dataset, cfg, discovered_datasets=discovered_lookup)
-                click.echo(f"✓ Organized {deriv_dataset.dataset_id} -> {study_path}")
+        # Process datasets with parallelization
+        if workers == 1:
+            # Serial processing (no threading overhead)
+            results = []
+            iterator = tqdm(all_datasets, desc="Organizing", unit="dataset", disable=no_progress)
+            for dataset in iterator:
+                result = organize_single_dataset(dataset)
+                results.append(result)
+                # Update progress description
+                status, ds_id, path, error = result
+                if status == "success":
+                    iterator.set_postfix_str(f"✓ {ds_id}")
+                else:
+                    iterator.set_postfix_str(f"✗ {ds_id}")
+        else:
+            # Parallel processing with ThreadPoolExecutor
+            results = []
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {
+                    executor.submit(organize_single_dataset, dataset): dataset
+                    for dataset in all_datasets
+                }
+
+                with tqdm(
+                    total=len(all_datasets),
+                    desc="Organizing",
+                    unit="dataset",
+                    disable=no_progress,
+                ) as pbar:
+                    for future in as_completed(futures):
+                        result = future.result()
+                        results.append(result)
+                        status, ds_id, path, error = result
+                        pbar.update(1)
+                        if status == "success":
+                            pbar.set_postfix_str(f"✓ {ds_id}")
+                        else:
+                            pbar.set_postfix_str(f"✗ {ds_id}")
+
+        # Process results
+        for status, ds_id, path, error in results:
+            if status == "success":
+                click.echo(f"✓ Organized {ds_id} -> {path}")
                 success_count += 1
-            except OrganizationError as e:
-                click.echo(f"✗ Failed to organize {deriv_dataset.dataset_id}: {e}", err=True)
+            else:
+                click.echo(f"✗ Failed to organize {ds_id}: {error}", err=True)
                 error_count += 1
 
-                # Track unorganized derivative
-                unorganized = UnorganizedDataset.from_derivative_dataset(
-                    deriv_dataset,
-                    reason=UnorganizedReason.ORGANIZATION_ERROR,
-                    notes=str(e),
-                )
-                add_unorganized_dataset(unorganized, config_dir)
+                # Track unorganized derivative (only for derivatives, not raw datasets)
+                # Find the original dataset object to check if it's a derivative
+                dataset = next((d for d in derivative_datasets if d.dataset_id == ds_id), None)
+                if dataset:
+                    unorganized = UnorganizedDataset.from_derivative_dataset(
+                        dataset,
+                        reason=UnorganizedReason.ORGANIZATION_ERROR,
+                        notes=str(error),
+                    )
+                    add_unorganized_dataset(unorganized, config_dir)
 
         # Display summary
         click.echo("\nSummary:")

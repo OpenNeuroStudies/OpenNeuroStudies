@@ -210,10 +210,12 @@ def test_full_workflow(test_workspace: Path) -> None:
     # TODO: Future work - implement derivative discovery and unorganized-datasets.json tracking
     # For example, ds000212-fmriprep should be tracked as unorganized since ds000212 is not in test set
 
-    # Step 3: Organize datasets
+    # Step 3: Organize datasets (with parallel workers if specified)
     print("\n=== Step 3: Organize datasets ===")
+    # Test with parallel workers to verify --workers functionality
+    organize_args = ["organize", "--workers", "5"]
     result = run_cli(
-        ["organize"],
+        organize_args,
         cwd=test_workspace,
         capture_output=True,
         text=True,
