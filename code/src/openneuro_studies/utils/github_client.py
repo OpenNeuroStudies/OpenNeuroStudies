@@ -234,7 +234,8 @@ class GitHubClient:
         for branch in branches:
             try:
                 endpoint = f"/repos/{owner}/{repo}/commits/{branch}"
-                commit_data: Any = self._request(endpoint, retry=1)
+                # Use retry=3 to allow for rate limit wait + retry
+                commit_data: Any = self._request(endpoint, retry=3)
 
                 if isinstance(commit_data, dict) and "sha" in commit_data:
                     return str(commit_data["sha"])
