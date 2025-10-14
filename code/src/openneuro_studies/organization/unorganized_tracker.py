@@ -62,11 +62,12 @@ def save_unorganized_datasets(
         json.dump(data, f, indent=2)
 
     # Commit to .openneuro-studies subdataset (FR-020a)
+    # Use datalad save from top dataset - it will figure out which subdataset changed
     if commit:
         try:
+            unorganized_file_abs = unorganized_file.resolve()
             dl.save(
-                dataset=str(config_dir),
-                path="unorganized-datasets.json",
+                path=str(unorganized_file_abs),
                 message=f"Update unorganized datasets\n\n"
                 f"Tracked {len(unorganized_sorted)} unorganized datasets\n"
                 f"Updated by openneuro-studies organize command"

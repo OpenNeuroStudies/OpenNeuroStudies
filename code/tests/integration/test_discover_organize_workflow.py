@@ -131,10 +131,10 @@ def test_workspace(tmp_path: Path) -> Path:
         tmp_path: pytest temporary directory fixture
 
     Returns:
-        Path to test workspace
+        Path to test workspace (directory will be created by init command)
     """
     workspace = tmp_path / "openneuro-test"
-    workspace.mkdir(parents=True, exist_ok=True)
+    # Don't create the directory - let init command create it
     return workspace
 
 
@@ -152,11 +152,16 @@ def test_full_workflow(test_workspace: Path) -> None:
     Args:
         test_workspace: Temporary test workspace path
     """
+    # Check for GITHUB_TOKEN - required to avoid rate limits during testing
+    import os
+    if not os.environ.get("GITHUB_TOKEN"):
+        pytest.skip("GITHUB_TOKEN environment variable required for integration tests")
+
     # Step 1: Initialize repository
     print("\n=== Step 1: Initialize repository ===")
     result = run_cli(
-        ["init"],
-        cwd=test_workspace,
+        ["init", str(test_workspace)],
+        cwd=test_workspace.parent,  # Run from parent, pass path as argument
         capture_output=True,
         text=True,
         check=True,

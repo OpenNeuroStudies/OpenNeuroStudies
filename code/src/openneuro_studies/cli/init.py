@@ -44,7 +44,7 @@ def init(path: str, github_org: str, force: bool) -> None:
 
     click.echo(f"Initializing OpenNeuroStudies repository at {repo_path}...")
 
-    # Create directory if it doesn't exist
+    # Ensure directory exists (DataLad is fine with empty existing directories)
     repo_path.mkdir(parents=True, exist_ok=True)
 
     # Change to the directory
@@ -52,14 +52,14 @@ def init(path: str, github_org: str, force: bool) -> None:
     os.chdir(repo_path)
 
     try:
-        # Create DataLad dataset without annex
+        # Create DataLad dataset without annex (current directory)
         click.echo("Creating DataLad dataset (no annex)...")
         dl.create(path=".", annex=False, force=force)
 
-        # Create .openneuro-studies as a DataLad subdataset (FR-020a)
+        # Create .openneuro-studies as a DataLad subdataset RIGHT AWAY before adding any content (FR-020a)
         click.echo("Creating .openneuro-studies subdataset...")
         config_dir = repo_path / ".openneuro-studies"
-        dl.create(path=".openneuro-studies", dataset=".", annex=False, force=force)
+        dl.create(path=".openneuro-studies", dataset=".", annex=False)
 
         # Create config.yaml
         config_file = config_dir / "config.yaml"

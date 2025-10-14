@@ -118,11 +118,14 @@ def discover(
         finder.save_discovered(discovered, output)
         click.echo(f"✓ Saved to {output}")
 
-        # Commit the discovered datasets in .openneuro-studies subdataset (FR-020a)
+        # Commit the discovered datasets (FR-020a)
+        # Use datalad save from top dataset - it will figure out which subdataset changed
         click.echo("Committing discovered datasets...")
+        from pathlib import Path
+        output_path = Path(output).resolve()
+
         dl.save(
-            dataset=".openneuro-studies",
-            path="discovered-datasets.json",
+            path=str(output_path),
             message=f"Update discovered datasets\n\n"
             f"Found {raw_count} raw and {deriv_count} derivative datasets\n"
             f"Updated by openneuro-studies discover command"
