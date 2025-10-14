@@ -26,20 +26,22 @@ class UnorganizedDataset(BaseModel):
     """Represents a discovered dataset that could not be organized.
 
     Attributes:
-        dataset_id: Original dataset ID (e.g., "ds000212")
+        dataset_id: Original dataset ID (can be any string, e.g., "ds000212",
+                    "ds000212-fmriprep", "myanalysis-results")
         derivative_id: Derivative identifier if applicable (e.g., "fmriprep-21.0.1")
         tool_name: Processing tool name if derivative
         version: Tool version if derivative
         url: Repository URL
         commit_sha: Git commit SHA
         datalad_uuid: DataLad dataset UUID if available
-        source_datasets: List of source dataset IDs
+        source_datasets: List of source dataset IDs (discovered from dataset_description.json
+                        SourceDatasets field or git submodules in sourcedata/)
         reason: Why this dataset could not be organized
         discovered_at: ISO 8601 timestamp when dataset was discovered
         notes: Additional context or error details
     """
 
-    dataset_id: str = Field(..., pattern=r"^ds\d+(-[a-z0-9]+)?$")
+    dataset_id: str
     derivative_id: Optional[str] = None
     tool_name: Optional[str] = None
     version: Optional[str] = None
