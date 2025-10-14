@@ -30,8 +30,16 @@ This feature implements infrastructure to discover, organize, and maintain OpenN
 **Testing**: pytest with tox for test environments; marks: unit, integration, ai_generated
 **Target Platform**: Linux server (primary), macOS (development)
 **Project Type**: Single Python project with CLI entry point
+**Logging Design**:
+- Standard Python `logging` module with `logging.getLogger(__name__)` pattern
+- Configured in CLI main entry point via `logging.basicConfig()`
+- User-controllable via `--log-level` option (DEBUG, INFO, WARNING, ERROR)
+- Format: `%(asctime)s - %(name)s - %(levelname)s - %(message)s`
+- Thread-safe for parallel operations (ThreadPoolExecutor)
+- Usage: DEBUG for detailed traces, INFO for user feedback, WARNING for recoverable issues, ERROR for failures
 **Performance Goals**:
 - Discover 1000+ datasets in <30 minutes with API caching
+- Parallel discovery with ThreadPoolExecutor (default: 10 workers, configurable via `--workers`)
 - Organize individual study in <30 seconds
 - Metadata generation for all studies in <2 hours
 
