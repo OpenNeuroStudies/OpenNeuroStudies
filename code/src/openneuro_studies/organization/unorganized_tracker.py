@@ -32,6 +32,9 @@ def save_unorganized_datasets(
 ) -> None:
     """Save unorganized datasets to JSON file.
 
+    Datasets are sorted by dataset_id (primary) and url (secondary) for
+    deterministic output (FR-038).
+
     Args:
         unorganized: List of UnorganizedDataset instances to save
         config_dir: Configuration directory for output file
@@ -39,10 +42,13 @@ def save_unorganized_datasets(
     config_dir.mkdir(parents=True, exist_ok=True)
     unorganized_file = config_dir / "unorganized-datasets.json"
 
+    # Sort by dataset_id, then url (FR-038)
+    unorganized_sorted = sorted(unorganized, key=lambda d: (d.dataset_id, d.url))
+
     # Convert to serializable format
     data = {
-        "unorganized": [u.model_dump(mode="json") for u in unorganized],
-        "count": len(unorganized),
+        "unorganized": [u.model_dump(mode="json") for u in unorganized_sorted],
+        "count": len(unorganized_sorted),
     }
 
     with open(unorganized_file, "w") as f:

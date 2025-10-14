@@ -120,6 +120,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-035**: System MUST track all discovered but unorganized datasets in `.openneuro-studies/unorganized-datasets.json` with reason codes (e.g., `raw_dataset_not_found`, `invalid_source_reference`, `multi_source_incomplete`)
 - **FR-036**: System MUST report counts of organized vs unorganized datasets during organize operations, directing users to unorganized-datasets.json for details
 - **FR-037**: System MUST support periodic re-evaluation of unorganized datasets when new datasets are discovered, attempting to organize previously unorganizable derivatives
+- **FR-038**: System MUST maintain sorted order for all stored dataset lists in JSON files (discovered-datasets.json, unorganized-datasets.json). Within each category (e.g., "raw", "derivative", "unorganized"), datasets MUST be sorted by dataset_id as primary key, then by url as secondary key. This ensures deterministic output and facilitates diff-based change tracking in version control.
 
 ### Key Entities
 

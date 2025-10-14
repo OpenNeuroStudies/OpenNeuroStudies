@@ -297,6 +297,9 @@ class DatasetFinder:
     ) -> None:
         """Save discovered datasets to JSON file.
 
+        Datasets are sorted by dataset_id (primary) and url (secondary) within
+        each category (raw, derivative) for deterministic output (FR-038).
+
         Args:
             discovered: Dictionary with 'raw' and 'derivative' datasets
             output_path: Path to output file
@@ -304,10 +307,14 @@ class DatasetFinder:
         output_file = Path(output_path)
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
+        # Sort datasets by dataset_id, then url (FR-038)
+        raw_sorted = sorted(discovered["raw"], key=lambda d: (d.dataset_id, d.url))
+        derivative_sorted = sorted(discovered["derivative"], key=lambda d: (d.dataset_id, d.url))
+
         # Convert to serializable format (mode='json' handles Pydantic types like HttpUrl)
         serializable = {
-            "raw": [d.model_dump(mode="json") for d in discovered["raw"]],
-            "derivative": [d.model_dump(mode="json") for d in discovered["derivative"]],
+            "raw": [d.model_dump(mode="json") for d in raw_sorted],
+            "derivative": [d.model_dump(mode="json") for d in derivative_sorted],
         }
 
         with open(output_file, "w") as f:
