@@ -39,7 +39,8 @@ def cli(ctx: click.Context, config: str, log_level: str) -> None:
     For detailed documentation, see: https://github.com/OpenNeuroStudies/OpenNeuroStudies
     """
     # Configure dual logging (console WARNING, file user-specified level)
-    log_dir = Path("logs/openneuro-studies")
+    # Logs go in .openneuro-studies subdataset for versioned tracking
+    log_dir = Path(".openneuro-studies/logs")
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # Create log file with timestamp and PID

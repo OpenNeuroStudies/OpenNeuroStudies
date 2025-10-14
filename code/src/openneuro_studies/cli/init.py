@@ -170,9 +170,9 @@ env/
 htmlcov/
 .coverage
 
-# Logs
+# Logs (now in .openneuro-studies subdataset)
+# Keep *.log pattern for any stray logs outside subdataset
 *.log
-logs/*.log
 
 # Temporary files
 *.tmp
@@ -231,7 +231,6 @@ cache/
 
 study-*
 .openneuro-studies/
-logs/
 """
             bidsignore_file.write_text(bidsignore_content)
 

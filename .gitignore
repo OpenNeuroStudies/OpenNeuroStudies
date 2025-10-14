@@ -48,9 +48,9 @@ htmlcov/
 *~
 .DS_Store
 
-# Logs
+# Logs (now in .openneuro-studies subdataset)
+# Keep *.log pattern for any stray logs outside subdataset
 *.log
-logs/*.log
 
 # Temporary files
 *.tmp
