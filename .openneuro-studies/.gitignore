@@ -1,0 +1,4 @@
+# .openneuro-studies subdataset .gitignore
+
+# Cache directory (API responses)
+cache/

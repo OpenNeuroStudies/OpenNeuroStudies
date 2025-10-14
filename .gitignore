@@ -1,7 +1,6 @@
 # OpenNeuroStudies .gitignore
 
-# Configuration and cache (hidden directory)
-.openneuro-studies/cache/
+# Cache directories
 .cache/
 
 # Python
@@ -56,7 +55,6 @@ logs/*.log
 # Temporary files
 *.tmp
 *.bak
-discovered-datasets.json
 
 # Git annex
 .git/annex/tmp/

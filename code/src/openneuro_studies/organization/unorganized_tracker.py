@@ -1,10 +1,15 @@
 """Tracking for datasets that could not be organized."""
 
 import json
+import logging
 from pathlib import Path
 from typing import Dict, List
 
+import datalad.api as dl
+
 from openneuro_studies.models import UnorganizedDataset
+
+logger = logging.getLogger(__name__)
 
 
 def load_unorganized_datasets(config_dir: Path = Path(".openneuro-studies")) -> List[UnorganizedDataset]:
@@ -29,6 +34,7 @@ def load_unorganized_datasets(config_dir: Path = Path(".openneuro-studies")) -> 
 def save_unorganized_datasets(
     unorganized: List[UnorganizedDataset],
     config_dir: Path = Path(".openneuro-studies"),
+    commit: bool = True,
 ) -> None:
     """Save unorganized datasets to JSON file.
 
@@ -38,6 +44,7 @@ def save_unorganized_datasets(
     Args:
         unorganized: List of UnorganizedDataset instances to save
         config_dir: Configuration directory for output file
+        commit: Whether to commit changes to .openneuro-studies subdataset (default: True)
     """
     config_dir.mkdir(parents=True, exist_ok=True)
     unorganized_file = config_dir / "unorganized-datasets.json"
@@ -53,6 +60,20 @@ def save_unorganized_datasets(
 
     with open(unorganized_file, "w") as f:
         json.dump(data, f, indent=2)
+
+    # Commit to .openneuro-studies subdataset (FR-020a)
+    if commit:
+        try:
+            dl.save(
+                dataset=str(config_dir),
+                path="unorganized-datasets.json",
+                message=f"Update unorganized datasets\n\n"
+                f"Tracked {len(unorganized_sorted)} unorganized datasets\n"
+                f"Updated by openneuro-studies organize command"
+            )
+            logger.info("Committed unorganized-datasets.json to .openneuro-studies subdataset")
+        except Exception as e:
+            logger.warning(f"Failed to commit unorganized-datasets.json: {e}")
 
 
 def add_unorganized_dataset(

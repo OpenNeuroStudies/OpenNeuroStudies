@@ -56,9 +56,10 @@ def init(path: str, github_org: str, force: bool) -> None:
         click.echo("Creating DataLad dataset (no annex)...")
         dl.create(path=".", annex=False, force=force)
 
-        # Create .openneuro-studies directory
+        # Create .openneuro-studies as a DataLad subdataset (FR-020a)
+        click.echo("Creating .openneuro-studies subdataset...")
         config_dir = repo_path / ".openneuro-studies"
-        config_dir.mkdir(exist_ok=True)
+        dl.create(path=".openneuro-studies", dataset=".", annex=False, force=force)
 
         # Create config.yaml
         config_file = config_dir / "config.yaml"
@@ -137,9 +138,9 @@ echo "  Derivatives:  ds006185, ds006189, ds006190"
         if not gitignore_file.exists() or force:
             click.echo("Creating .gitignore...")
             gitignore_content = """# OpenNeuroStudies
-.openneuro-studies/cache/
-.openneuro-studies/discovered-datasets.json
-logs/
+
+# Cache directories
+.cache/
 
 # Study datasets (managed as submodules)
 study-*/
@@ -168,8 +169,30 @@ env/
 .pytest_cache/
 htmlcov/
 .coverage
+
+# Logs
+*.log
+logs/*.log
+
+# Temporary files
+*.tmp
+*.bak
+
+# Git annex
+.git/annex/tmp/
 """
             gitignore_file.write_text(gitignore_content)
+
+        # Create .gitignore in .openneuro-studies subdataset (FR-020a)
+        subds_gitignore = config_dir / ".gitignore"
+        if not subds_gitignore.exists() or force:
+            click.echo("Creating .openneuro-studies/.gitignore...")
+            subds_gitignore_content = """# .openneuro-studies subdataset .gitignore
+
+# Cache directory (API responses)
+cache/
+"""
+            subds_gitignore.write_text(subds_gitignore_content)
 
         # Create dataset_description.json
         desc_file = repo_path / "dataset_description.json"
@@ -270,7 +293,15 @@ CC0 - Data is from OpenNeuro under various licenses. Check individual datasets.
             readme_file.write_text(readme_content)
 
         # Add files and create initial commit
-        click.echo("Creating initial commit...")
+        click.echo("Creating initial commit in .openneuro-studies subdataset...")
+        dl.save(
+            dataset=".openneuro-studies",
+            message="Initialize .openneuro-studies subdataset\n\n"
+            "Contains configuration and tracking files\n"
+            "Created by openneuro-studies init command"
+        )
+
+        click.echo("Creating initial commit in parent dataset...")
         dl.save(
             message="Initialize OpenNeuroStudies repository\n\n"
             f"GitHub organization: {github_org}\n"

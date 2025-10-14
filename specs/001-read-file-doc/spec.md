@@ -103,6 +103,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-018**: System MUST support versioned releases using 0.YYYYMMDD.PATCH format
 - **FR-019**: System MUST generate CHANGES file entries following CPAN::Changes::Spec format
 - **FR-020**: System MUST operate on YAML specifications for sources rather than requiring hardcoded submodules
+- **FR-020a**: System MUST create `.openneuro-studies/` as a DataLad subdataset (git submodule) without annex using `datalad create --no-annex -d . .openneuro-studies`. All JSON files (config.yaml, discovered-datasets.json, unorganized-datasets.json) MUST be committed within this subdataset. The subdataset MUST contain its own .gitignore for cache/ directory exclusions. This enables versioned tracking of discovery/organization state independently from study datasets.
 - **FR-021**: System MUST create each study-{id} as a DataLad dataset without annex using `datalad create --no-annex -d . study-{id}`
 - **FR-022**: System MUST link each study-{id} repository as a git submodule in the top-level repository's .gitmodules
 - **FR-023**: System MUST configure study submodule URLs to point to a configured GitHub organization (e.g., https://github.com/OpenNeuroStudies/study-ds000001)
