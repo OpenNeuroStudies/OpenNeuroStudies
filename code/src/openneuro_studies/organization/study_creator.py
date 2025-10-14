@@ -41,6 +41,7 @@ def create_study_dataset(
     """
     if parent_path is None:
         parent_path = Path.cwd()
+    topds = dl.Dataset(parent_path)
 
     study_path = parent_path / study_id
 
@@ -54,7 +55,7 @@ def create_study_dataset(
 
     try:
         # Create DataLad dataset without annex
-        dl.create(path=str(study_path), annex=False)
+        topds.create(path=str(study_path), annex=False)
 
         # Create sourcedata and derivatives directories
         sourcedata_dir = study_path / "sourcedata"
@@ -80,8 +81,9 @@ def create_study_dataset(
         desc_file.write_text(json.dumps(dataset_description, indent=2) + "\n")
 
         # Save initial commit
-        dl.save(
+        topds.save(
             path=str(study_path),
+            recursive=True,
             message=f"Initialize {study_id} study dataset\n\n"
             f"Created by openneuro-studies organize command",
         )

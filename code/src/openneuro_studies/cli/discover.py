@@ -5,6 +5,7 @@ from typing import Optional
 import click
 import datalad.api as dl
 
+from openneuro_studies import __version__
 from openneuro_studies.config import ConfigLoadError, load_config
 from openneuro_studies.discovery import DatasetDiscoveryError, DatasetFinder
 
@@ -125,10 +126,10 @@ def discover(
         output_path = Path(output).resolve()
 
         dl.save(
+            dataset="^",  # save all the way from the top dataset
             path=str(output_path),
-            message=f"Update discovered datasets\n\n"
-            f"Found {raw_count} raw and {deriv_count} derivative datasets\n"
-            f"Updated by openneuro-studies discover command"
+            message=f"Update discovered datasets: {raw_count} raw and {deriv_count} derivative datasets\n\n"
+            f"Updated by openneuro-studies {__version__} discover command"
         )
         click.echo("✓ Committed to .openneuro-studies subdataset")
 

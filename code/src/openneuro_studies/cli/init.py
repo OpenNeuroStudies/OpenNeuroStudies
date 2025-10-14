@@ -6,6 +6,9 @@ from pathlib import Path
 import click
 import datalad.api as dl
 
+from openneuro_studies import __version__
+
+created_by = f"Created by openneuro-studies {__version__} init command"
 
 @click.command()
 @click.argument("path", type=click.Path(), default=".", required=False)
@@ -54,12 +57,12 @@ def init(path: str, github_org: str, force: bool) -> None:
     try:
         # Create DataLad dataset without annex (current directory)
         click.echo("Creating DataLad dataset (no annex)...")
-        dl.create(path=".", annex=False, force=force)
+        ds = dl.create(path=".", annex=False, force=force)
 
         # Create .openneuro-studies as a DataLad subdataset RIGHT AWAY before adding any content (FR-020a)
         click.echo("Creating .openneuro-studies subdataset...")
         config_dir = repo_path / ".openneuro-studies"
-        dl.create(path=".openneuro-studies", dataset=".", annex=False)
+        ons_ds = ds.create(path=".openneuro-studies", annex=False)
 
         # Create config.yaml
         config_file = config_dir / "config.yaml"
@@ -142,9 +145,6 @@ echo "  Derivatives:  ds006185, ds006189, ds006190"
 # Cache directories
 .cache/
 
-# Study datasets (managed as submodules)
-study-*/
-
 # Python
 __pycache__/
 *.py[cod]
@@ -191,6 +191,8 @@ htmlcov/
 
 # Cache directory (API responses)
 cache/
+# Logs also we will not bother saving for now
+logs/
 """
             subds_gitignore.write_text(subds_gitignore_content)
 
@@ -292,19 +294,12 @@ CC0 - Data is from OpenNeuro under various licenses. Check individual datasets.
             readme_file.write_text(readme_content)
 
         # Add files and create initial commit
-        click.echo("Creating initial commit in .openneuro-studies subdataset...")
-        dl.save(
-            dataset=".openneuro-studies",
-            message="Initialize .openneuro-studies subdataset\n\n"
+        ds.save(
+            recursive=True,
+            message="Initialize OpenNeuroStudies dataset with .openneuro-studies subdataset\n\n"
             "Contains configuration and tracking files\n"
-            "Created by openneuro-studies init command"
-        )
-
-        click.echo("Creating initial commit in parent dataset...")
-        dl.save(
-            message="Initialize OpenNeuroStudies repository\n\n"
-            f"GitHub organization: {github_org}\n"
-            "Created by openneuro-studies init command"
+            f"Aiming for GitHub organization: {github_org}\n"
+            +created_by
         )
 
         click.echo(f"✓ Successfully initialized OpenNeuroStudies repository at {repo_path}")

@@ -67,6 +67,7 @@ def save_unorganized_datasets(
         try:
             unorganized_file_abs = unorganized_file.resolve()
             dl.save(
+                dataset="^",
                 path=str(unorganized_file_abs),
                 message=f"Update unorganized datasets\n\n"
                 f"Tracked {len(unorganized_sorted)} unorganized datasets\n"

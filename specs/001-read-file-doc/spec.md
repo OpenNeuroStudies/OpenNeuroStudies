@@ -103,7 +103,8 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-018**: System MUST support versioned releases using 0.YYYYMMDD.PATCH format
 - **FR-019**: System MUST generate CHANGES file entries following CPAN::Changes::Spec format
 - **FR-020**: System MUST operate on YAML specifications for sources rather than requiring hardcoded submodules
-- **FR-020a**: System MUST create `.openneuro-studies/` as a DataLad subdataset (git submodule) without annex using `datalad create --no-annex -d . .openneuro-studies`. All JSON files (config.yaml, discovered-datasets.json, unorganized-datasets.json) MUST be committed within this subdataset. The subdataset MUST contain its own .gitignore for cache/ directory exclusions. This enables versioned tracking of discovery/organization state independently from study datasets.
+- **FR-020a**: System MUST create `.openneuro-studies/` as a DataLad subdataset (git submodule) without annex using `datalad create --no-annex -d . .openneuro-studies`. All JSON files (config.yaml, discovered-datasets.json, unorganized-datasets.json) MUST be committed within this subdataset. The subdataset MUST contain its own .gitignore for cache/ and logs/ directory exclusions. This enables versioned tracking of discovery/organization state independently from study datasets.
+- **FR-020b**: System MUST store execution logs in `.openneuro-studies/logs/` directory within the subdataset. Log files are excluded from commits (cache-like data) but stored in subdataset location for organizational clarity. Log file naming MUST follow pattern `YYYYMMDD-HHMMSS-{PID}.log` for timestamp-based identification.
 - **FR-021**: System MUST create each study-{id} as a DataLad dataset without annex using `datalad create --no-annex -d . study-{id}`
 - **FR-022**: System MUST link each study-{id} repository as a git submodule in the top-level repository's .gitmodules
 - **FR-023**: System MUST configure study submodule URLs to point to a configured GitHub organization (e.g., https://github.com/OpenNeuroStudies/study-ds000001)
@@ -157,6 +158,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - GitHub API tokens are available via GITHUB_TOKEN environment variable with sufficient rate limits for batch operations
 - DataLad is installed and functional for git-annex operations and provenance capture
 - DataLad command-line commands have Python API counterparts in `datalad.api` package (e.g., `datalad.api.create`); convention is to import as `import datalad.api as dl`
+- DataLad API best practices: (1) Use dataset object methods (`ds = dl.create(); ds.create(path="subdir")`) instead of standalone API calls with `dataset` parameter - this properly establishes parent-child relationships; (2) Use `ds.save(recursive=True)` for atomic commits across subdataset hierarchy; (3) Use `dataset="^"` (superdataset) in `dl.save()` calls to automatically determine correct subdataset for file paths and update gitlinks in parent
 - bids-validator-deno version 2.1.0 or later is available for BIDS validation
 - Source datasets maintain stable commit histories (no force pushes that invalidate cached SHAs)
 - BIDS specification 1.10.1 study dataset conventions are followed
