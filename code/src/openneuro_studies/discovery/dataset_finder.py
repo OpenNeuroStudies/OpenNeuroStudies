@@ -174,9 +174,7 @@ class DatasetFinder:
             logger.debug("Failed to process dataset %s: %s", repo["name"], e)
             return None
 
-    def _create_source_from_desc(
-        self, repo: Dict, commit_sha: str, desc: Dict
-    ) -> SourceDataset:
+    def _create_source_from_desc(self, repo: Dict, commit_sha: str, desc: Dict) -> SourceDataset:
         """Create SourceDataset from already-fetched dataset_description.json.
 
         Args:
@@ -288,12 +286,15 @@ class DatasetFinder:
                 source_str = source
 
             # Try to extract ds[0-9]+ pattern from URLs or DOIs
-            if (match := re.search(r"(ds\d{6})", source_str)):
+            if match := re.search(r"(ds\d{6})", source_str):
                 dataset_ids.append(match.group(1))
         return dataset_ids
 
     def save_discovered(
-        self, discovered: Dict[str, List], output_path: str = "discovered-datasets.json"
+        self,
+        discovered: Dict[str, List],
+        output_path: str = "discovered-datasets.json",
+        mode: str = "update",
     ) -> None:
         """Save discovered datasets to JSON file.
 
@@ -303,13 +304,49 @@ class DatasetFinder:
         Args:
             discovered: Dictionary with 'raw' and 'derivative' datasets
             output_path: Path to output file
+            mode: Save mode - 'update' merges with existing, 'overwrite' replaces all
         """
         output_file = Path(output_path)
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
+        # If update mode and file exists, load and merge with existing
+        if mode == "update" and output_file.exists():
+            with open(output_file, "r") as f:
+                existing = json.load(f)
+
+            # Merge new datasets with existing, deduplicating by (dataset_id, url) tuple
+            # Convert existing JSON to dataset objects for consistent handling
+            existing_raw = [SourceDataset(**d) for d in existing.get("raw", [])]
+            existing_derivative = [DerivativeDataset(**d) for d in existing.get("derivative", [])]
+
+            # Create sets of (dataset_id, url) tuples for efficient deduplication
+            existing_raw_keys = {(d.dataset_id, str(d.url)) for d in existing_raw}
+            existing_deriv_keys = {(d.dataset_id, str(d.url)) for d in existing_derivative}
+
+            # Add only truly new datasets
+            merged_raw = existing_raw.copy()
+            for dataset in discovered["raw"]:
+                key = (dataset.dataset_id, str(dataset.url))
+                if key not in existing_raw_keys:
+                    merged_raw.append(dataset)
+
+            merged_derivative = existing_derivative.copy()
+            for dataset in discovered["derivative"]:
+                key = (dataset.dataset_id, str(dataset.url))
+                if key not in existing_deriv_keys:
+                    merged_derivative.append(dataset)
+
+            # Use merged datasets
+            raw_to_save = merged_raw
+            derivative_to_save = merged_derivative
+        else:
+            # Overwrite mode or no existing file - use only newly discovered
+            raw_to_save = discovered["raw"]
+            derivative_to_save = discovered["derivative"]
+
         # Sort datasets by dataset_id, then url (FR-038)
-        raw_sorted = sorted(discovered["raw"], key=lambda d: (d.dataset_id, d.url))
-        derivative_sorted = sorted(discovered["derivative"], key=lambda d: (d.dataset_id, d.url))
+        raw_sorted = sorted(raw_to_save, key=lambda d: (d.dataset_id, str(d.url)))
+        derivative_sorted = sorted(derivative_to_save, key=lambda d: (d.dataset_id, str(d.url)))
 
         # Convert to serializable format (mode='json' handles Pydantic types like HttpUrl)
         serializable = {

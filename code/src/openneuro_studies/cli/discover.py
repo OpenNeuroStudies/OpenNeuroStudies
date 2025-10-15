@@ -40,6 +40,13 @@ from openneuro_studies.discovery import DatasetDiscoveryError, DatasetFinder
     help="Show progress bar",
     show_default=True,
 )
+@click.option(
+    "--mode",
+    type=click.Choice(["update", "overwrite"], case_sensitive=False),
+    default="update",
+    help="Discovery mode: 'update' merges with existing results, 'overwrite' replaces all",
+    show_default=True,
+)
 @click.pass_context
 def discover(
     ctx: click.Context,
@@ -48,11 +55,15 @@ def discover(
     test_filter: tuple[str, ...],
     workers: int,
     progress: bool,
+    mode: str,
 ) -> None:
     """Discover datasets from configured sources.
 
     Queries GitHub/Forgejo APIs to identify available raw and derivative datasets
     without cloning. Results are cached to the specified output file.
+
+    By default, newly discovered datasets are merged with existing results (update mode).
+    Use --mode overwrite to replace all previous results.
 
     Datasets are processed in parallel using multiple workers for faster discovery.
 
@@ -61,6 +72,7 @@ def discover(
         openneuro-studies discover
         openneuro-studies discover --test-filter ds000001 --test-filter ds005256
         openneuro-studies discover --workers 20 --no-progress
+        openneuro-studies discover --mode overwrite  # Replace all existing results
     """
     try:
         # Load configuration (don't require tokens - will work without until rate limits)
@@ -86,13 +98,21 @@ def discover(
             for source_spec in cfg.sources:
                 org_path = source_spec.organization_url.path
                 org_name = str(org_path).strip("/")
-                repos = finder.github_client.list_repositories(org_name, dataset_filter=test_dataset_filter)
+                repos = finder.github_client.list_repositories(
+                    org_name, dataset_filter=test_dataset_filter
+                )
                 # Apply same filtering as discover_all
                 from openneuro_studies.discovery.dataset_finder import DatasetFinder as _DF
+
                 filtered = _DF._filter_repos(finder, repos, source_spec.inclusion_patterns)
                 if source_spec.exclusion_patterns:
                     import re
-                    filtered = [r for r in filtered if not any(re.match(p, r["name"]) for p in source_spec.exclusion_patterns)]
+
+                    filtered = [
+                        r
+                        for r in filtered
+                        if not any(re.match(p, r["name"]) for p in source_spec.exclusion_patterns)
+                    ]
                 total_repos += len(filtered)
 
             pbar = click.progressbar(length=total_repos, label="Processing datasets")
@@ -115,21 +135,25 @@ def discover(
         click.echo(f"\n✓ Found {raw_count} raw datasets")
         click.echo(f"✓ Found {deriv_count} derivative datasets")
 
-        # Save results
-        finder.save_discovered(discovered, output)
-        click.echo(f"✓ Saved to {output}")
+        # Save results with specified mode (update or overwrite)
+        finder.save_discovered(discovered, output, mode=mode)
+        if mode == "update":
+            click.echo(f"✓ Updated {output} (merged with existing datasets)")
+        else:
+            click.echo(f"✓ Saved to {output} (overwrote existing)")
 
         # Commit the discovered datasets (FR-020a)
         # Use datalad save from top dataset - it will figure out which subdataset changed
         click.echo("Committing discovered datasets...")
         from pathlib import Path
+
         output_path = Path(output).resolve()
 
         dl.save(
             dataset="^",  # save all the way from the top dataset
             path=str(output_path),
             message=f"Update discovered datasets: {raw_count} raw and {deriv_count} derivative datasets\n\n"
-            f"Updated by openneuro-studies {__version__} discover command"
+            f"Updated by openneuro-studies {__version__} discover command",
         )
         click.echo("✓ Committed to .openneuro-studies subdataset")
 
