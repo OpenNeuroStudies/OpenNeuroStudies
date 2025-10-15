@@ -12,7 +12,9 @@ from openneuro_studies.models import UnorganizedDataset
 logger = logging.getLogger(__name__)
 
 
-def load_unorganized_datasets(config_dir: Path = Path(".openneuro-studies")) -> List[UnorganizedDataset]:
+def load_unorganized_datasets(
+    config_dir: Path = Path(".openneuro-studies")
+) -> List[UnorganizedDataset]:
     """Load unorganized datasets from JSON file.
 
     Args:
@@ -71,7 +73,7 @@ def save_unorganized_datasets(
                 path=str(unorganized_file_abs),
                 message=f"Update unorganized datasets\n\n"
                 f"Tracked {len(unorganized_sorted)} unorganized datasets\n"
-                f"Updated by openneuro-studies organize command"
+                f"Updated by openneuro-studies organize command",
             )
             logger.info("Committed unorganized-datasets.json to .openneuro-studies subdataset")
         except Exception as e:

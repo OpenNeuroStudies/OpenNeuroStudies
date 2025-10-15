@@ -38,10 +38,7 @@ def run_cli(args: list[str], **kwargs) -> subprocess.CompletedProcess:
 
     This ensures the CLI is accessible regardless of PATH configuration.
     """
-    return subprocess.run(
-        [sys.executable, "-m", "openneuro_studies.cli.main"] + args,
-        **kwargs
-    )
+    return subprocess.run([sys.executable, "-m", "openneuro_studies.cli.main"] + args, **kwargs)
 
 
 def verify_gitlinks_for_submodules(repo_path: Path) -> None:
@@ -88,15 +85,18 @@ def verify_gitlinks_for_submodules(repo_path: Path) -> None:
     # Verify each submodule path has a gitlink (mode 160000)
     for submodule_path in submodule_paths:
         # Look for line like: "160000 commit <sha>\t<path>"
-        gitlink_pattern = f"160000 commit"
+        gitlink_pattern = "160000 commit"
         path_in_tree = f"\t{submodule_path}"
 
-        assert gitlink_pattern in tree_output, \
-            f"Missing gitlink (mode 160000) in {repo_path.name} tree"
-        assert path_in_tree in tree_output, \
-            f"Submodule path '{submodule_path}' not found in {repo_path.name} tree (expected gitlink)"
+        assert (
+            gitlink_pattern in tree_output
+        ), f"Missing gitlink (mode 160000) in {repo_path.name} tree"
+        assert (
+            path_in_tree in tree_output
+        ), f"Submodule path '{submodule_path}' not found in {repo_path.name} tree (expected gitlink)"
 
         print(f"    ✓ {repo_path.name}: gitlink for {submodule_path}")
+
 
 # Test datasets to discover (from CLAUDE.md)
 # NOTE: Only ds000001, ds005256, ds006131 are raw datasets
@@ -154,6 +154,7 @@ def test_full_workflow(test_workspace: Path) -> None:
     """
     # Check for GITHUB_TOKEN - required to avoid rate limits during testing
     import os
+
     if not os.environ.get("GITHUB_TOKEN"):
         pytest.skip("GITHUB_TOKEN environment variable required for integration tests")
 
@@ -252,18 +253,21 @@ def test_full_workflow(test_workspace: Path) -> None:
         assert (study_path / ".git").exists(), f"{study_id} should be a git repo"
 
         # Study should be registered in parent .gitmodules
-        assert f'[submodule "{study_id}"]' in gitmodules_content, \
-            f"{study_id} should be in parent .gitmodules"
-        assert f"https://github.com/OpenNeuroStudies/{study_id}.git" in gitmodules_content, \
-            f"{study_id} should point to OpenNeuroStudies organization"
+        assert (
+            f'[submodule "{study_id}"]' in gitmodules_content
+        ), f"{study_id} should be in parent .gitmodules"
+        assert (
+            f"https://github.com/OpenNeuroStudies/{study_id}.git" in gitmodules_content
+        ), f"{study_id} should point to OpenNeuroStudies organization"
 
         # Study should have its own .gitmodules with raw dataset
         study_gitmodules = study_path / ".gitmodules"
         assert study_gitmodules.exists(), f"{study_id} should have .gitmodules"
 
         study_gitmodules_content = study_gitmodules.read_text()
-        assert "sourcedata/raw" in study_gitmodules_content, \
-            f"{study_id} should have sourcedata/raw submodule"
+        assert (
+            "sourcedata/raw" in study_gitmodules_content
+        ), f"{study_id} should have sourcedata/raw submodule"
 
         # Verify gitlinks for all submodules (FR-004a)
         print(f"  Verifying gitlinks for {study_id}...")
@@ -300,8 +304,7 @@ def test_full_workflow(test_workspace: Path) -> None:
         deriv_path = f"{deriv['tool_name']}-{deriv['version']}"
         derivative_dir = study_path / "derivatives" / deriv_path
 
-        assert derivative_dir.exists(), \
-            f"Derivative directory {derivative_dir.relative_to(test_workspace)} should exist for {deriv['dataset_id']}"
+        assert derivative_dir.exists(), f"Derivative directory {derivative_dir.relative_to(test_workspace)} should exist for {deriv['dataset_id']}"
         print(f"  ✓ Found {study_id}/derivatives/{deriv_path} (for {deriv['dataset_id']})")
 
         # Verify gitlinks for this study's submodules (including derivatives)
@@ -316,8 +319,9 @@ def test_full_workflow(test_workspace: Path) -> None:
     # aren't in the test set (e.g., ds000212-fmriprep creates study-ds000212)
     study_count = gitmodules_content.count('[submodule "study-')
     expected_min_count = len(raw_ids)
-    assert study_count >= expected_min_count, \
-        f"Parent should have at least {expected_min_count} study submodules, found {study_count}"
+    assert (
+        study_count >= expected_min_count
+    ), f"Parent should have at least {expected_min_count} study submodules, found {study_count}"
     print(f"Found {study_count} study submodules (expected at least {expected_min_count})")
 
     # Verify parent has gitlinks for all studies (FR-004a)
@@ -340,7 +344,9 @@ def test_full_workflow(test_workspace: Path) -> None:
     if (status_output := result.stdout.strip()) != "":
         print(f"Git status output:\n{status_output}")
         print(f"Exit code: {result.returncode}")
-        raise AssertionError(f"Git status should be clean (including all submodules), but found:\n{status_output}")
+        raise AssertionError(
+            f"Git status should be clean (including all submodules), but found:\n{status_output}"
+        )
 
     print("\n=== Integration test PASSED ===")
     print(f"Workspace: {test_workspace}")
@@ -396,8 +402,11 @@ def test_datalad_recursive_install(test_workspace: Path) -> None:
         # Check sourcedata/ subdatasets
         for subds_dir in (study_dir / "sourcedata").glob("*"):
             if subds_dir.is_dir():
-                assert (subds_dir / ".git").exists(), \
+                assert (
+                    subds_dir / ".git"
+                ).exists(), (
                     f"{subds_dir.relative_to(test_workspace)} should have .git/ after install"
+                )
                 print(f"  ✓ {subds_dir.relative_to(study_dir)} has .git/")
 
         # Check derivatives/ subdatasets
@@ -405,8 +414,11 @@ def test_datalad_recursive_install(test_workspace: Path) -> None:
         if derivatives_dir.exists():
             for subds_dir in derivatives_dir.glob("*"):
                 if subds_dir.is_dir():
-                    assert (subds_dir / ".git").exists(), \
+                    assert (
+                        subds_dir / ".git"
+                    ).exists(), (
                         f"{subds_dir.relative_to(test_workspace)} should have .git/ after install"
+                    )
                     print(f"  ✓ {subds_dir.relative_to(study_dir)} has .git/")
 
     print("\n=== DataLad install test PASSED ===")

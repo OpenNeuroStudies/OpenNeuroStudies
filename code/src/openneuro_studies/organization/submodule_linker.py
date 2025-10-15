@@ -166,7 +166,9 @@ def link_submodule(
                 f"{e.stderr if e.stderr else str(e)}"
             ) from e
         except Exception as e:
-            raise SubmoduleLinkError(f"Unexpected error linking submodule {submodule_name}: {e}") from e
+            raise SubmoduleLinkError(
+                f"Unexpected error linking submodule {submodule_name}: {e}"
+            ) from e
 
 
 def is_submodule_linked(parent_repo: Path, submodule_path: str) -> bool:

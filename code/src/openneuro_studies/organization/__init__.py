@@ -7,8 +7,6 @@ import subprocess
 from pathlib import Path
 from typing import Optional, Union
 
-import datalad.api as dl
-
 from openneuro_studies.config import OpenNeuroStudiesConfig
 from openneuro_studies.models import DerivativeDataset, SourceDataset
 from openneuro_studies.organization.locks import study_lock
@@ -373,13 +371,11 @@ def _register_study_in_parent(study_path: Path, study_id: str, github_org: str) 
 
     # Get current HEAD commit SHA of the study
     try:
-        if (
-            result := subprocess.run(
-                ["git", "-C", str(study_path), "rev-parse", "HEAD"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
+        if result := subprocess.run(
+            ["git", "-C", str(study_path), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
         ):
             study_commit_sha = result.stdout.strip()
     except subprocess.CalledProcessError as e:

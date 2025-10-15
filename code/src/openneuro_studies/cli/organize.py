@@ -244,9 +244,12 @@ def organize(
         # Commit all organized studies to parent repository in a single batch operation
         # This avoids git index.lock conflicts from parallel workers
         if successful_studies:
-            click.echo(f"\nCommitting {len(successful_studies)} organized studies to parent repository...")
+            click.echo(
+                f"\nCommitting {len(successful_studies)} organized studies to parent repository..."
+            )
             try:
                 import datalad.api as dl
+
                 from openneuro_studies import __version__
 
                 # Use dataset="^" to save from top dataset
@@ -254,7 +257,7 @@ def organize(
                     dataset="^",
                     message=f"Organize {len(successful_studies)} study datasets\n\n"
                     f"Added/updated {len(successful_studies)} study submodules\n"
-                    f"Updated by openneuro-studies {__version__} organize command"
+                    f"Updated by openneuro-studies {__version__} organize command",
                 )
                 click.echo("✓ Committed all studies to parent repository")
             except Exception as e:

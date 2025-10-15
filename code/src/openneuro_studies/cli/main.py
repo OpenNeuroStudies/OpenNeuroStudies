@@ -55,9 +55,7 @@ def cli(ctx: click.Context, config: str, log_level: str) -> None:
     # Console handler - WARNING only (for user-facing messages)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.WARNING)
-    console_formatter = logging.Formatter(
-        "%(levelname)s: %(message)s"
-    )
+    console_formatter = logging.Formatter("%(levelname)s: %(message)s")
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
 

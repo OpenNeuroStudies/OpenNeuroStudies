@@ -10,6 +10,7 @@ from openneuro_studies import __version__
 
 created_by = f"Created by openneuro-studies {__version__} init command"
 
+
 @click.command()
 @click.argument("path", type=click.Path(), default=".", required=False)
 @click.option(
@@ -62,7 +63,7 @@ def init(path: str, github_org: str, force: bool) -> None:
         # Create .openneuro-studies as a DataLad subdataset RIGHT AWAY before adding any content (FR-020a)
         click.echo("Creating .openneuro-studies subdataset...")
         config_dir = repo_path / ".openneuro-studies"
-        ons_ds = ds.create(path=".openneuro-studies", annex=False)
+        ds.create(path=".openneuro-studies", annex=False)
 
         # Create config.yaml
         config_file = config_dir / "config.yaml"
@@ -298,8 +299,7 @@ CC0 - Data is from OpenNeuro under various licenses. Check individual datasets.
             recursive=True,
             message="Initialize OpenNeuroStudies dataset with .openneuro-studies subdataset\n\n"
             "Contains configuration and tracking files\n"
-            f"Aiming for GitHub organization: {github_org}\n"
-            +created_by
+            f"Aiming for GitHub organization: {github_org}\n" + created_by,
         )
 
         click.echo(f"✓ Successfully initialized OpenNeuroStudies repository at {repo_path}")

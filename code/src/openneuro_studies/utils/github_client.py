@@ -109,12 +109,14 @@ class GitHubClient:
                 if response.status_code == 403 and "rate limit" in response.text.lower():
                     reset_time = int(response.headers.get("X-RateLimit-Reset", 0))
                     if reset_time:
-                        wait_time = max(0, reset_time - time.time())
+                        max(0, reset_time - time.time())
 
                         # Provide helpful message if no token is set
                         token_hint = ""
                         if not self.token:
-                            token_hint = " Set GITHUB_TOKEN environment variable for higher rate limits."
+                            token_hint = (
+                                " Set GITHUB_TOKEN environment variable for higher rate limits."
+                            )
 
                         # Use lock to coordinate waiting across threads
                         # Only one thread should wait, others will see cache or wait their turn

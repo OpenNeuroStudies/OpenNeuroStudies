@@ -1,7 +1,6 @@
 """Shared locks for preventing race conditions in parallel operations."""
 
 import threading
-from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict
