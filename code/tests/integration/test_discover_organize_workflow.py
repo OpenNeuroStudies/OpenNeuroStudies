@@ -426,7 +426,7 @@ def test_datalad_recursive_install(test_workspace: Path) -> None:
 
 @pytest.mark.integration
 @pytest.mark.ai_generated
-def test_persistent_test_directory() -> None:
+def _test_persistent_test_directory() -> None:
     """Create/update persistent test directory at /tmp/openneuro-test-discover.
 
     This is not a typical test - it's a helper to maintain a persistent
