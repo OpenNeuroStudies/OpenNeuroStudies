@@ -202,19 +202,10 @@ def test_full_workflow(test_workspace: Path) -> None:
     print(f"Discovered: {raw_count} raw, {deriv_count} derivatives")
     assert raw_count > 0, "Should discover at least one raw dataset"
 
-    # Verify expected raw datasets were found
-    # NOTE: Some datasets may have changed DatasetType or been removed from OpenNeuro
-    # We verify we found the expected datasets, but allow for flexibility
+    # Verify all expected raw datasets were found
     raw_ids = {d["dataset_id"] for d in raw_datasets}
-    print(f"  Raw datasets found: {sorted(raw_ids)}")
-
-    missing_raw = set(TEST_RAW_DATASETS) - raw_ids
-    if missing_raw:
-        print(f"  WARNING: Expected raw datasets not found: {sorted(missing_raw)}")
-        print(f"  This may indicate datasets changed to derivatives or were removed")
-        # For now, just require we found at least 2 of the expected raw datasets
-        found_expected = len(raw_ids & set(TEST_RAW_DATASETS))
-        assert found_expected >= 2, f"Should find at least 2 of {TEST_RAW_DATASETS}, found {found_expected}"
+    for expected_id in TEST_RAW_DATASETS:
+        assert expected_id in raw_ids, f"Should discover {expected_id}"
 
     # Verify derivative datasets were discovered
     # TODO: Derivative discovery not yet implemented - skip for now
