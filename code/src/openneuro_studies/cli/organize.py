@@ -4,10 +4,10 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional, Union
 
 import click
-from tqdm import tqdm
+from tqdm import tqdm  # type: ignore[import-untyped]
 
 from openneuro_studies.config import ConfigLoadError, load_config
 from openneuro_studies.models import (
@@ -129,11 +129,14 @@ def organize(
 
         # Build lookup dictionary for source resolution (dataset_id -> dataset)
         # This allows multi-source derivatives to look up URL/commit info for sources
-        discovered_lookup = {}
-        for ds in raw_datasets:
-            discovered_lookup[ds.dataset_id] = ds
-        for ds in derivative_datasets:
-            discovered_lookup[ds.dataset_id] = ds
+        # Note: mypy has issues with Union assignment, so we build from combined list
+        all_datasets_for_lookup: list[Union[SourceDataset, DerivativeDataset]] = [
+            *raw_datasets,
+            *derivative_datasets,
+        ]
+        discovered_lookup: Dict[str, Union[SourceDataset, DerivativeDataset]] = {
+            ds.dataset_id: ds for ds in all_datasets_for_lookup
+        }
 
         # Filter targets if provided
         if targets:
@@ -170,7 +173,9 @@ def organize(
         # Combine all datasets for processing
         all_datasets = list(raw_datasets) + list(derivative_datasets)
 
-        def organize_single_dataset(dataset):
+        def organize_single_dataset(
+            dataset: Union[SourceDataset, DerivativeDataset],
+        ) -> tuple[str, str, Optional[Path], Optional[Exception]]:
             """Organize a single dataset (raw or derivative)."""
             try:
                 study_path = organize_study(dataset, cfg, discovered_datasets=discovered_lookup)

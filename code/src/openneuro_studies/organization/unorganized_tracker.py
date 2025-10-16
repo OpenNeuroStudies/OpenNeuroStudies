@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def load_unorganized_datasets(
-    config_dir: Path = Path(".openneuro-studies")
+    config_dir: Path = Path(".openneuro-studies"),
 ) -> List[UnorganizedDataset]:
     """Load unorganized datasets from JSON file.
 

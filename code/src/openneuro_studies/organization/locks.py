@@ -3,7 +3,7 @@
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Generator
 
 # Global lock for serializing parent repository modifications
 # Used to prevent git index.lock conflicts when parallel workers:
@@ -18,7 +18,7 @@ _study_locks_lock = threading.Lock()  # Lock for managing the locks dictionary
 
 
 @contextmanager
-def study_lock(study_path: Path):
+def study_lock(study_path: Path) -> Generator[None, None, None]:
     """Context manager for per-study locking.
 
     Ensures that only one thread at a time can modify a specific study dataset.

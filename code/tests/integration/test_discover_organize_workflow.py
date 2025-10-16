@@ -304,7 +304,9 @@ def test_full_workflow(test_workspace: Path) -> None:
         deriv_path = f"{deriv['tool_name']}-{deriv['version']}"
         derivative_dir = study_path / "derivatives" / deriv_path
 
-        assert derivative_dir.exists(), f"Derivative directory {derivative_dir.relative_to(test_workspace)} should exist for {deriv['dataset_id']}"
+        assert (
+            derivative_dir.exists()
+        ), f"Derivative directory {derivative_dir.relative_to(test_workspace)} should exist for {deriv['dataset_id']}"
         print(f"  ✓ Found {study_id}/derivatives/{deriv_path} (for {deriv['dataset_id']})")
 
         # Verify gitlinks for this study's submodules (including derivatives)
