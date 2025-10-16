@@ -56,19 +56,21 @@ def create_study_dataset(
 
     study_path = parent_path / study_id
 
-    # Check if already exists (idempotency)
-    if study_path.exists():
-        if (study_path / ".datalad").exists():
-            # Already a DataLad dataset - this is fine (idempotent)
-            return study_path
-        else:
-            raise StudyCreationError(f"Path {study_path} exists but is not a DataLad dataset")
-
     try:
         # Use lock to prevent race conditions when parallel workers
         # try to create the same study dataset simultaneously
         # Keep ALL creation steps under lock to ensure atomicity
+        # IMPORTANT: Idempotency check must be INSIDE lock to prevent race conditions
         with _study_creation_lock:
+            # Check if already exists (idempotency check inside lock)
+            if study_path.exists():
+                if (study_path / ".datalad").exists():
+                    # Already a DataLad dataset - this is fine (idempotent)
+                    return study_path
+                else:
+                    raise StudyCreationError(
+                        f"Path {study_path} exists but is not a DataLad dataset"
+                    )
             # Create DataLad dataset independently (not as subdataset of parent)
             # This avoids automatic parent commits from DataLad
             # Parent registration is handled separately in batch by caller
