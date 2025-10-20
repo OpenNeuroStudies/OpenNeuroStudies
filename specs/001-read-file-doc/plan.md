@@ -512,3 +512,298 @@ Per Constitution Principle VI (No Silent Failures), all discovered datasets must
 5. 🚀 **Begin Implementation** - Follow tasks.md for step-by-step execution
 
 **Current Status**: Plan complete, ready for Phase 0 research documentation.
+
+## Phase 8: GitHub Publishing (NEW - Week 6)
+
+**Goal**: Implement publishing and unpublishing of study repositories to GitHub organization.
+
+**Background**:
+- Current implementation creates study repositories locally and configures .gitmodules URLs to point to GitHub
+- No code exists yet to actually create remote repositories or push content
+- The `--no-publish` flag exists in organize command but is never used
+
+**Deliverables**:
+1. `publish` CLI command to create GitHub repos and push study datasets
+2. `unpublish` CLI command with safety controls to delete remote repositories
+3. Publication status tracking in `.openneuro-studies/published-studies.json`
+4. Integration with `gh` CLI for repository management
+5. Enhanced `status` command to show published vs local-only studies
+6. Update `organize` command to respect `--no-publish` flag and optionally auto-publish
+
+**New Files**:
+```python
+code/src/openneuro_studies/
+├── cli/
+│   ├── publish.py        # Publishing command
+│   └── unpublish.py      # Unpublishing command (with safeguards)
+├── publishing/
+│   ├── __init__.py
+│   ├── github_publisher.py   # GitHub API operations via gh CLI
+│   ├── status_tracker.py     # published-studies.json management
+│   └── verification.py       # Pre-publish validation checks
+└── models/
+    └── publication.py    # PublishedStudy model
+```
+
+**Implementation Details**:
+
+### 1. Publishing Command (FR-024a)
+
+```bash
+# Publish all organized studies
+openneuro-studies publish
+
+# Publish specific studies
+openneuro-studies publish study-ds000001 study-ds005256
+
+# Publish using glob patterns
+openneuro-studies publish "study-ds0000*"
+
+# Dry run mode
+openneuro-studies publish --dry-run
+
+# Force push if remote exists but differs
+openneuro-studies publish --force
+```
+
+**Logic**:
+1. Check `gh auth status` - fail fast if not authenticated
+2. For each study directory:
+   - Verify local git repo is clean and has commits
+   - Check if remote exists via `gh repo view {org}/{study-id}`
+   - If not exists: `gh repo create {org}/{study-id} --public --source=. --push`
+   - If exists: compare remote HEAD with local HEAD
+     - If same: skip with "already up-to-date" message
+     - If different: warn and require `--force` to push
+   - Track success in `published-studies.json`
+3. Commit `published-studies.json` to `.openneuro-studies` subdataset
+
+### 2. Unpublishing Command (FR-024b)
+
+```bash
+# Delete specific study (requires confirmation)
+openneuro-studies unpublish study-ds000001
+
+# Delete with explicit confirmation flag (no prompt)
+openneuro-studies unpublish study-ds000001 --confirm
+
+# Delete multiple studies with glob pattern
+openneuro-studies unpublish "study-ds0000*"
+
+# Delete ALL studies (requires --confirm AND --all)
+openneuro-studies unpublish --all --confirm
+
+# Dry run to see what would be deleted
+openneuro-studies unpublish --all --dry-run
+```
+
+**Safety Controls**:
+1. **Interactive confirmation** (unless `--confirm` flag):
+   ```
+   WARNING: You are about to delete 3 remote repositories:
+     - https://github.com/OpenNeuroStudies/study-ds000001
+     - https://github.com/OpenNeuroStudies/study-ds005256
+     - https://github.com/OpenNeuroStudies/study-ds006131
+
+   This action CANNOT be undone. Local copies will remain intact.
+
+   Type 'delete 3 repositories' to confirm: _
+   ```
+
+2. **Dry run mode**: Shows what would be deleted without executing
+
+3. **Verification**: Check repo exists on GitHub before attempting deletion
+
+4. **Local preservation**: Never delete local study directories, only remote
+
+**Logic**:
+1. Parse study patterns/IDs
+2. For each study:
+   - Check if tracked in `published-studies.json`
+   - Verify remote exists: `gh repo view {org}/{study-id}`
+   - If not exists: warn and skip
+3. Display summary and request confirmation (unless `--confirm`)
+4. Execute deletions: `gh repo delete {org}/{study-id} --yes`
+5. Update `published-studies.json` to remove deleted entries
+6. Commit changes to `.openneuro-studies` subdataset
+
+### 3. Publication Status Tracking (FR-024c)
+
+**File**: `.openneuro-studies/published-studies.json`
+
+```json
+{
+  "studies": [
+    {
+      "study_id": "study-ds000001",
+      "github_url": "https://github.com/OpenNeuroStudies/study-ds000001",
+      "published_at": "2025-10-20T14:23:45Z",
+      "last_push_commit_sha": "a1b2c3d4...",
+      "last_push_at": "2025-10-20T14:25:12Z"
+    }
+  ],
+  "organization": "OpenNeuroStudies",
+  "last_updated": "2025-10-20T14:25:12Z"
+}
+```
+
+**Pydantic Model**:
+```python
+class PublishedStudy(BaseModel):
+    study_id: str
+    github_url: HttpUrl
+    published_at: datetime
+    last_push_commit_sha: str
+    last_push_at: datetime
+
+class PublicationStatus(BaseModel):
+    studies: List[PublishedStudy]
+    organization: str
+    last_updated: datetime
+```
+
+### 4. Enhanced Status Command
+
+```bash
+openneuro-studies status
+```
+
+**New Output Section**:
+```
+Publication Status:
+  Published to GitHub: 148 studies
+  Local only: 5 studies
+
+  Unpublished studies:
+    - study-ds000212 (organized 2025-10-19)
+    - study-ds006189 (organized 2025-10-20)
+    - study-ds006190 (organized 2025-10-20)
+    - study-ds123456 (organized 2025-10-20)
+    - study-ds789012 (organized 2025-10-20)
+
+  Run 'openneuro-studies publish' to publish local-only studies
+```
+
+### 5. Organize Command Integration
+
+**Update organize.py to**:
+1. Use `--no-publish` flag (currently accepted but ignored)
+2. Optionally auto-publish after organization with `--publish` flag:
+
+```bash
+# Organize and publish in one step
+openneuro-studies organize --publish
+
+# Organize without publishing (current default)
+openneuro-studies organize --no-publish
+```
+
+**Note**: Default behavior remains `--no-publish` for safety. Users must explicitly opt-in to automatic publishing.
+
+**Dependencies**: Phase 3 (organization complete)
+
+**Success Criteria**:
+- `gh auth status` verification prevents publishing without authentication
+- Published studies are accessible at configured GitHub URLs
+- Unpublish requires explicit confirmation to prevent accidents
+- `published-studies.json` accurately tracks publication state
+- Status command shows published vs local-only studies
+- Force-push warnings prevent accidental overwrites
+- All operations are idempotent and safe to retry
+
+**Testing**:
+- Unit tests with mock `gh` CLI calls
+- Integration tests with temporary GitHub repos (using test organization)
+- Dry-run mode verification
+- Confirmation prompt testing
+- Error handling (network failures, auth issues, quota limits)
+
+**Risk Mitigation**:
+- **GitHub API Limits**: Track rate limit status, pause/retry on 429 errors
+- **Auth Failures**: Verify `gh auth status` before any GitHub operations
+- **Network Issues**: Implement retry logic with exponential backoff
+- **Accidental Deletion**: Multiple confirmation layers for unpublish
+- **Quota Exhaustion**: Provide clear error messages with remediation steps
+
+**Timeline**: 1 week (assuming gh CLI integration is straightforward)
+
+## Updated Overall Plan
+
+### Completed Phases ✅
+- **Phase 1**: Core Infrastructure (models, config, CLI skeleton)
+- **Phase 2**: Discovery Module (GitHub API, dataset finder)
+- **Phase 3**: Organization Module (DataLad datasets, submodule linking)
+  - Including unorganized dataset tracking
+  - Multi-source derivative support
+  - Thread-safe parallel organization
+
+### Current Status
+- **Test Suite**: 47 tests passing (45 unit + 2 integration)
+- **Core Features Working**:
+  - ✅ Discovery with test filters
+  - ✅ Organization with parallel workers
+  - ✅ Multi-source derivative handling
+  - ✅ Unorganized dataset tracking
+  - ✅ Integration tests with real OpenNeuro datasets
+- **Recent Fixes**:
+  - Fixed git cacheinfo error for multi-source derivatives (commit 915b3c2)
+  - Improved error handling for missing source datasets
+
+### Next Immediate Steps
+
+1. **Phase 4: Metadata Generation** (Priority: HIGH)
+   - Generate dataset_description.json for studies
+   - Generate studies.tsv (wide format)
+   - Generate studies_derivatives.tsv (tall format)
+   - JSON sidecar generation
+   - **Estimated**: 1-2 weeks
+
+2. **Phase 8: GitHub Publishing** (Priority: HIGH)
+   - Implement `publish` command
+   - Implement `unpublish` command with safeguards
+   - Publication status tracking
+   - Enhance `status` command
+   - **Estimated**: 1 week
+   - **Can run in parallel with Phase 4**
+
+3. **Phase 5: Validation Integration** (Priority: MEDIUM)
+   - bids-validator-deno integration
+   - Validation result storage
+   - **Estimated**: 3-4 days
+
+4. **Phase 6: Status & Utilities** (Priority: MEDIUM)
+   - Enhanced status reporting (now includes publication status)
+   - Cleanup commands
+   - Error logging improvements
+   - **Estimated**: 3-4 days
+
+5. **Phase 7: Documentation & Polish** (Priority: LOW)
+   - Final documentation
+   - Edge case handling
+   - Performance optimization
+   - **Estimated**: 1 week
+
+### Decision Points
+
+**Should we do Phase 4 or Phase 8 first?**
+
+**Option A: Phase 4 First (Metadata)**
+- Pros: Completes core feature set for local use
+- Pros: Metadata needed for comprehensive status reporting
+- Cons: Can't share results publicly yet
+
+**Option B: Phase 8 First (Publishing)**
+- Pros: Enables collaboration and public access earlier
+- Pros: Allows testing with actual GitHub infrastructure
+- Pros: Smaller, more focused implementation
+- Cons: Publishing repositories without metadata is less useful
+
+**Option C: Parallel (Recommended)**
+- Phase 4 (Metadata): Main development track
+- Phase 8 (Publishing): Can be developed in parallel by different developer or in separate branch
+- Merge both when complete
+- Gives flexibility to prioritize based on immediate needs
+
+**Recommendation**: **Option C (Parallel)** - Start Phase 4 immediately, add Phase 8 requirements to backlog. Publishing can be added later without blocking metadata work.
+
+**Current Status**: Plan updated with Phase 8 (Publishing), spec updated with FR-024a/b/c. Ready to proceed with either Phase 4 (Metadata) or Phase 8 (Publishing) based on priority.

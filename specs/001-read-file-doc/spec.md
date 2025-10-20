@@ -71,6 +71,9 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - What happens when a raw dataset has no git tags/releases? System should mark raw_version as "n/a" and fetch CHANGES file if available to determine version information without cloning.
 - What happens when calculating outdatedness requires cloning? This operation should be performed sparingly as a separate batch process, with results cached to avoid repeated cloning.
 - What happens when imaging metrics extraction (bold_size, bold_voxels) is needed? This requires sparse data access via datalad-fuse or fsspec as a separate operation stage, avoiding full clones while accessing NIfTI headers for size/dimension information.
+- What happens when publishing fails due to network errors or GitHub API limits? System should log the error, mark the study as unpublished in published-studies.json, and continue with remaining studies. User can retry publication for failed studies using `publish study-ds000001`.
+- What happens when unpublishing a study that's already deleted on GitHub? System should verify repository existence via GitHub API before attempting deletion, log a warning if not found, and remove from published-studies.json tracking file.
+- What happens when pushing a study repository that already exists remotely? System should check if remote commit SHA matches local HEAD. If different, offer to force-push with `--force` flag (with explicit warning). If same, skip push and log "already up-to-date".
 
 ## Requirements *(mandatory)*
 
@@ -109,6 +112,9 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-022**: System MUST link each study-{id} repository as a git submodule in the top-level repository's .gitmodules
 - **FR-023**: System MUST configure study submodule URLs to point to a configured GitHub organization (e.g., https://github.com/OpenNeuroStudies/study-ds000001)
 - **FR-024**: System MUST publish study repositories to the configured GitHub organization for public access
+- **FR-024a**: System MUST provide a `publish` command that creates remote repositories on GitHub (if they don't exist) and pushes local study repositories to the configured organization. The command MUST respect the `--no-publish` flag (default: publish enabled). Publishing MUST use `gh repo create` for repository creation and `git push` for content upload. Authentication relies on `gh auth status` and GITHUB_TOKEN environment variable.
+- **FR-024b**: System MUST provide a `unpublish` command with safety controls to delete remote study repositories from GitHub organization. The command MUST require explicit confirmation (interactive prompt or `--confirm` flag) before deletion. The command MUST support filtering by study ID patterns (e.g., `unpublish study-ds0000*` or `unpublish --all`) and provide a `--dry-run` mode showing what would be deleted without executing. MUST use `gh repo delete` with appropriate ownership prefix (e.g., `OpenNeuroStudies/study-ds000001`).
+- **FR-024c**: System MUST track publication status in `.openneuro-studies/published-studies.json` with fields: study_id, github_url, published_at (ISO timestamp), last_push_commit_sha. This enables `status` command to show which studies are published vs local-only, and prevents redundant publication attempts.
 - **FR-025**: System MUST extract raw dataset version from git tags without cloning when available
 - **FR-026**: System MUST fetch CHANGES file to determine version when git tags are unavailable, avoiding full clone
 - **FR-027**: System MUST populate studies.tsv version and raw_version columns (version for study dataset version, raw_version for source dataset version/tag or "n/a" if multiple sources or no release)
@@ -169,6 +175,9 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - Calendar-based versioning (0.YYYYMMDD.PATCH) is acceptable for project releases
 - GitHub organization (e.g., OpenNeuroStudies) is configured and accessible for publishing study repositories
 - Study repositories can be published to GitHub using automation (push access configured)
+- GitHub CLI (`gh`) is installed and authenticated (`gh auth status` succeeds) for repository management
+- User has admin/owner permissions in the target GitHub organization to create and delete repositories
+- Published repositories are public by default; private repository support is out of scope for initial implementation
 - Outdatedness calculations may require temporary cloning in some cases where git log/tag APIs are insufficient
 - Imaging metrics extraction (bold_size, t1w_size, max_bold_size, bold_voxels) requires sparse data access tools (datalad-fuse or fsspec) to avoid full cloning
 - Sparse access operations are separate stages run less frequently than basic metadata generation
