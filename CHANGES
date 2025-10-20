@@ -1,3 +1,41 @@
+0.20251020.0 2025-10-20
+  - GitHub publishing infrastructure specification (Phase 8)
+    - FR-024a/b/c/d: publish/unpublish commands with PyGithub
+    - Publication status tracking (published-studies.json)
+    - Sync mode to reconcile with GitHub state
+  - Multi-source derivative support
+    - Fix git cacheinfo error for derivative sources (915b3c2)
+    - Require discovered datasets for all source lookups
+    - Support derivatives referencing other derivatives
+  - Parallel processing improvements
+    - Thread-safe organization with per-study and parent locks
+    - Batch commit pattern (FR-039) for clean git status
+    - Configurable workers (--workers flag)
+    - Update mode for incremental discovery
+  - DataLad integration enhancements
+    - .openneuro-studies as DataLad subdataset (FR-020a)
+    - Proper subdataset API usage with dataset objects
+    - Logs moved to .openneuro-studies/logs/ (FR-020b)
+  - Unorganized dataset tracking
+    - Track derivatives without sources (FR-035/FR-036)
+    - Report organized vs unorganized counts
+    - JSON file with reason codes
+  - Logging and monitoring
+    - Dual logging: console WARNING, file user-level
+    - DataLad output suppression for clean logs
+    - Progress bars for discovery and organization
+    - Rate limit handling with retry logic
+  - Testing improvements
+    - 47 tests passing (45 unit + 2 integration)
+    - Integration tests with real OpenNeuro datasets
+    - Robust handling of dataset changes
+  - Deterministic output (FR-038)
+    - Sorted dataset JSON files (by dataset_id, url)
+    - Reproducible organization order
+
+0.20251013.0 2025-10-13
+  - Initial release with basic discovery and organization
+
 0.20251009.0 2025-10-09
   - Initial infrastructure implementation
   - Dataset discovery and organization framework
