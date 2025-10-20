@@ -291,17 +291,22 @@ def _organize_multi_source_derivative(
                 source_path = f"sourcedata/{source_id}"
 
                 # Look up source dataset info from discovered datasets
-                source_url = f"https://github.com/OpenNeuroDatasets/{source_id}"  # Default
-                source_commit = "HEAD"  # Default
+                # IMPORTANT: We must have the actual commit SHA, not "HEAD"
+                # Git update-index --cacheinfo requires a real 40-char hex SHA
+                if not discovered_datasets or source_id not in discovered_datasets:
+                    raise OrganizationError(
+                        f"Source dataset {source_id} not found in discovered datasets. "
+                        f"Multi-source derivatives require all sources to be discovered first."
+                    )
+
+                source_dataset = discovered_datasets[source_id]
+                source_url = str(source_dataset.url)
+                source_commit = source_dataset.commit_sha
                 source_datalad_id = None
 
-                if discovered_datasets and source_id in discovered_datasets:
-                    source_dataset = discovered_datasets[source_id]
-                    source_url = str(source_dataset.url)
-                    source_commit = source_dataset.commit_sha
-                    # Get datalad_uuid if it's a derivative
-                    if isinstance(source_dataset, DerivativeDataset):
-                        source_datalad_id = source_dataset.datalad_uuid
+                # Get datalad_uuid if the source is a derivative
+                if isinstance(source_dataset, DerivativeDataset):
+                    source_datalad_id = source_dataset.datalad_uuid
 
                 link_submodule(
                     parent_repo=study_path,
