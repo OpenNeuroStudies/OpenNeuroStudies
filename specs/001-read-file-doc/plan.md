@@ -521,12 +521,13 @@ Per Constitution Principle VI (No Silent Failures), all discovered datasets must
 - Current implementation creates study repositories locally and configures .gitmodules URLs to point to GitHub
 - No code exists yet to actually create remote repositories or push content
 - The `--no-publish` flag exists in organize command but is never used
+- PyGithub is already a project dependency (used for discovery)
 
 **Deliverables**:
 1. `publish` CLI command to create GitHub repos and push study datasets
 2. `unpublish` CLI command with safety controls to delete remote repositories
 3. Publication status tracking in `.openneuro-studies/published-studies.json`
-4. Integration with `gh` CLI for repository management
+4. `publish --sync` mode to reconcile tracking with actual GitHub state
 5. Enhanced `status` command to show published vs local-only studies
 6. Update `organize` command to respect `--no-publish` flag and optionally auto-publish
 
@@ -567,14 +568,16 @@ openneuro-studies publish --force
 ```
 
 **Logic**:
-1. Check `gh auth status` - fail fast if not authenticated
+1. Verify GITHUB_TOKEN is set - fail fast if not authenticated
 2. For each study directory:
    - Verify local git repo is clean and has commits
-   - Check if remote exists via `gh repo view {org}/{study-id}`
-   - If not exists: `gh repo create {org}/{study-id} --public --source=. --push`
-   - If exists: compare remote HEAD with local HEAD
+   - Check if remote exists via PyGithub: `org.get_repo(study-id)`
+   - If not exists: Create via PyGithub: `org.create_repo(name=study-id, private=False, auto_init=False)`
+   - Add remote: `git remote add origin {url}` (if not exists)
+   - If exists: compare remote HEAD with local HEAD via PyGithub API
      - If same: skip with "already up-to-date" message
      - If different: warn and require `--force` to push
+   - Push: `git push origin main` (or master, detect default branch)
    - Track success in `published-studies.json`
 3. Commit `published-studies.json` to `.openneuro-studies` subdataset
 
@@ -620,14 +623,55 @@ openneuro-studies unpublish --all --dry-run
 1. Parse study patterns/IDs
 2. For each study:
    - Check if tracked in `published-studies.json`
-   - Verify remote exists: `gh repo view {org}/{study-id}`
+   - Verify remote exists via PyGithub: `org.get_repo(study-id)`
    - If not exists: warn and skip
 3. Display summary and request confirmation (unless `--confirm`)
-4. Execute deletions: `gh repo delete {org}/{study-id} --yes`
+4. Execute deletions via PyGithub: `repo.delete()`
 5. Update `published-studies.json` to remove deleted entries
 6. Commit changes to `.openneuro-studies` subdataset
 
-### 3. Publication Status Tracking (FR-024c)
+### 3. Sync Mode - Reconcile with GitHub (FR-024d)
+
+```bash
+# Sync local tracking with GitHub state
+openneuro-studies publish --sync
+
+# Dry run to see what would change
+openneuro-studies publish --sync --dry-run
+```
+
+**Logic**:
+1. Query GitHub API for all repositories in organization: `org.get_repos()`
+2. Filter to study-* pattern repositories
+3. Compare with `published-studies.json`:
+   - **Added on GitHub** (in GitHub, not in tracking): Add to published-studies.json
+   - **Deleted from GitHub** (in tracking, not in GitHub): Remove from published-studies.json
+   - **Existing studies**: Update `last_push_commit_sha` from remote HEAD
+4. Display summary:
+   ```
+   Sync Summary:
+     Found on GitHub: 150 study repositories
+     Tracked locally: 148 studies
+
+   Changes:
+     + 2 studies added (manually created on GitHub)
+       - study-ds123456
+       - study-ds789012
+     - 0 studies removed
+     ↻ 148 studies updated (commit SHAs refreshed)
+
+   Updated published-studies.json
+   ```
+5. Commit updated `published-studies.json` to `.openneuro-studies` subdataset
+
+**Use Cases**:
+- **Manual GitHub additions**: Someone created study repos manually via web UI
+- **Manual GitHub deletions**: Someone deleted repos via web UI or API
+- **Tracking file corruption**: Recover from lost or corrupted published-studies.json
+- **Multi-user workflows**: Sync after collaborators made changes
+- **Audit**: Verify tracking file matches reality
+
+### 4. Publication Status Tracking (FR-024c)
 
 **File**: `.openneuro-studies/published-studies.json`
 
@@ -662,7 +706,7 @@ class PublicationStatus(BaseModel):
     last_updated: datetime
 ```
 
-### 4. Enhanced Status Command
+### 5. Enhanced Status Command
 
 ```bash
 openneuro-studies status
@@ -684,7 +728,7 @@ Publication Status:
   Run 'openneuro-studies publish' to publish local-only studies
 ```
 
-### 5. Organize Command Integration
+### 6. Organize Command Integration
 
 **Update organize.py to**:
 1. Use `--no-publish` flag (currently accepted but ignored)
@@ -703,16 +747,17 @@ openneuro-studies organize --no-publish
 **Dependencies**: Phase 3 (organization complete)
 
 **Success Criteria**:
-- `gh auth status` verification prevents publishing without authentication
+- GITHUB_TOKEN verification prevents publishing without authentication
 - Published studies are accessible at configured GitHub URLs
 - Unpublish requires explicit confirmation to prevent accidents
 - `published-studies.json` accurately tracks publication state
 - Status command shows published vs local-only studies
 - Force-push warnings prevent accidental overwrites
 - All operations are idempotent and safe to retry
+- Sync mode correctly reconciles with GitHub state
 
 **Testing**:
-- Unit tests with mock `gh` CLI calls
+- Unit tests with mock PyGithub API calls
 - Integration tests with temporary GitHub repos (using test organization)
 - Dry-run mode verification
 - Confirmation prompt testing
@@ -720,7 +765,7 @@ openneuro-studies organize --no-publish
 
 **Risk Mitigation**:
 - **GitHub API Limits**: Track rate limit status, pause/retry on 429 errors
-- **Auth Failures**: Verify `gh auth status` before any GitHub operations
+- **Auth Failures**: Verify GITHUB_TOKEN is set before any GitHub operations
 - **Network Issues**: Implement retry logic with exponential backoff
 - **Accidental Deletion**: Multiple confirmation layers for unpublish
 - **Quota Exhaustion**: Provide clear error messages with remediation steps
@@ -751,20 +796,26 @@ openneuro-studies organize --no-publish
 
 ### Next Immediate Steps
 
-1. **Phase 4: Metadata Generation** (Priority: HIGH)
+**USER PRIORITY: Publishing First**
+
+1. **Phase 8: GitHub Publishing** (Priority: HIGHEST - Next Implementation)
+   - Implement `publish` command using PyGithub
+   - Implement `unpublish` command with safeguards
+   - Implement `publish --sync` to reconcile with GitHub
+   - Publication status tracking in published-studies.json
+   - Enhance `status` command
+   - Update `organize` to respect --no-publish flag
+   - **Estimated**: 1 week
+   - **Dependencies**: Phase 3 complete ✅
+   - **Rationale**: Enables sharing organized studies publicly, allows collaboration
+
+2. **Phase 4: Metadata Generation** (Priority: HIGH)
    - Generate dataset_description.json for studies
    - Generate studies.tsv (wide format)
    - Generate studies_derivatives.tsv (tall format)
    - JSON sidecar generation
    - **Estimated**: 1-2 weeks
-
-2. **Phase 8: GitHub Publishing** (Priority: HIGH)
-   - Implement `publish` command
-   - Implement `unpublish` command with safeguards
-   - Publication status tracking
-   - Enhance `status` command
-   - **Estimated**: 1 week
-   - **Can run in parallel with Phase 4**
+   - **Can run after Phase 8**
 
 3. **Phase 5: Validation Integration** (Priority: MEDIUM)
    - bids-validator-deno integration
@@ -783,27 +834,27 @@ openneuro-studies organize --no-publish
    - Performance optimization
    - **Estimated**: 1 week
 
-### Decision Points
+### Decision: Phase 8 (Publishing) is Next
 
-**Should we do Phase 4 or Phase 8 first?**
+**USER DECISION**: Implement Publishing (Phase 8) before Metadata (Phase 4)
 
-**Option A: Phase 4 First (Metadata)**
-- Pros: Completes core feature set for local use
-- Pros: Metadata needed for comprehensive status reporting
-- Cons: Can't share results publicly yet
+**Rationale**:
+- ✅ Enables public sharing of organized study repositories immediately
+- ✅ Allows testing GitHub infrastructure and workflows
+- ✅ Smaller, more focused implementation (1 week vs 1-2 weeks)
+- ✅ Unblocks collaboration - others can access and review organized studies
+- ✅ PyGithub already available (no new dependencies)
+- ⚠️ Studies will be published without rich metadata initially (acceptable)
+- ⚠️ Metadata generation (Phase 4) can add value to already-published repos
 
-**Option B: Phase 8 First (Publishing)**
-- Pros: Enables collaboration and public access earlier
-- Pros: Allows testing with actual GitHub infrastructure
-- Pros: Smaller, more focused implementation
-- Cons: Publishing repositories without metadata is less useful
+**Implementation Approach**:
+1. Use existing PyGithub dependency (no gh CLI needed)
+2. Implement publish/unpublish commands with safety controls
+3. Add --sync mode for reconciliation with GitHub
+4. Track publication status in published-studies.json
+5. Test with small batch before publishing all 1000+ studies
 
-**Option C: Parallel (Recommended)**
-- Phase 4 (Metadata): Main development track
-- Phase 8 (Publishing): Can be developed in parallel by different developer or in separate branch
-- Merge both when complete
-- Gives flexibility to prioritize based on immediate needs
-
-**Recommendation**: **Option C (Parallel)** - Start Phase 4 immediately, add Phase 8 requirements to backlog. Publishing can be added later without blocking metadata work.
-
-**Current Status**: Plan updated with Phase 8 (Publishing), spec updated with FR-024a/b/c. Ready to proceed with either Phase 4 (Metadata) or Phase 8 (Publishing) based on priority.
+**Current Status**:
+- Spec updated with FR-024a/b/c/d (PyGithub-based)
+- Plan updated with detailed Phase 8 implementation
+- Ready to begin implementation immediately
