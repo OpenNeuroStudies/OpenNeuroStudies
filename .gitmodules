@@ -3,3 +3,7 @@
 	url = https://github.com/OpenNeuroStudies/OpenNeuroStudies-proto1
 	datalad-id = fb28cfda-dca0-4a32-86c9-d848f011eee1
 	datalad-url = https://github.com/OpenNeuroStudies/OpenNeuroStudies-proto1
+[submodule ".openneuro-studies"]
+	path = .openneuro-studies
+	url = ./.openneuro-studies
+	datalad-id = 233e6f83-358f-4f9b-b013-62890449e539
