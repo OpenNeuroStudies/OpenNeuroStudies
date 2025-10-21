@@ -11,6 +11,8 @@ from openneuro_studies import __version__
 from openneuro_studies.cli.discover import discover as discover_cmd
 from openneuro_studies.cli.init import init as init_cmd
 from openneuro_studies.cli.organize import organize as organize_cmd
+from openneuro_studies.cli.publish import publish as publish_cmd
+from openneuro_studies.cli.unpublish import unpublish as unpublish_cmd
 
 
 @click.group()
@@ -89,6 +91,8 @@ def cli(ctx: click.Context, config: str, log_level: str) -> None:
 cli.add_command(init_cmd, name="init")
 cli.add_command(discover_cmd, name="discover")
 cli.add_command(organize_cmd, name="organize")
+cli.add_command(publish_cmd, name="publish")
+cli.add_command(unpublish_cmd, name="unpublish")
 
 
 @cli.group()
@@ -172,14 +176,57 @@ def validate(study_ids: tuple[str, ...]) -> None:
 def status(format: str) -> None:
     """Show processing status and statistics.
 
-    Displays counts of discovered, organized, metadata-complete, and validated studies.
+    Displays counts of discovered, organized, metadata-complete, validated, and published studies.
 
     Example:
         openneuro-studies status
         openneuro-studies status --format json
     """
-    click.echo(f"[Placeholder] Would show status in {format} format")
-    click.echo("Phase 6 implementation pending...")
+    from openneuro_studies.publishing import PublicationTracker
+
+    config_dir = Path(".openneuro-studies")
+
+    # Count organized studies
+    organized_studies = [p for p in Path(".").iterdir() if p.is_dir() and p.name.startswith("study-")]
+
+    # Load publication status
+    tracker = PublicationTracker(config_dir)
+    published_studies = tracker.get_published_studies()
+
+    if format == "json":
+        import json
+
+        data = {
+            "organized": len(organized_studies),
+            "published": len(published_studies),
+            "organization": tracker.status.organization or "not configured",
+            "last_updated": tracker.status.last_updated.isoformat() if tracker.status.last_updated else None,
+        }
+        click.echo(json.dumps(data, indent=2))
+    else:
+        # Text format
+        click.echo("OpenNeuroStudies Status")
+        click.echo("=" * 60)
+        click.echo(f"Organized studies: {len(organized_studies)}")
+        click.echo(f"Published studies: {len(published_studies)}")
+
+        if tracker.status.organization:
+            click.echo(f"\nGitHub Organization: {tracker.status.organization}")
+            click.echo(f"URL: https://github.com/{tracker.status.organization}")
+
+        if tracker.status.last_updated:
+            click.echo(f"\nLast publication update: {tracker.status.last_updated.isoformat()}")
+
+        # Show unpublished studies
+        unpublished = [s.name for s in organized_studies if s.name not in published_studies]
+        if unpublished:
+            click.echo(f"\nUnpublished studies ({len(unpublished)}):")
+            for study_id in sorted(unpublished)[:10]:  # Show first 10
+                click.echo(f"  - {study_id}")
+            if len(unpublished) > 10:
+                click.echo(f"  ... and {len(unpublished) - 10} more")
+
+        click.echo("\nNote: Full status implementation pending (Phase 6)")
 
 
 @cli.command()
