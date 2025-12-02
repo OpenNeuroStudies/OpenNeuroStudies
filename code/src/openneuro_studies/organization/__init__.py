@@ -25,7 +25,24 @@ class OrganizationError(Exception):
     pass
 
 
-def _git_commit_gitlink(repo_path: Path, commit_message: str) -> None:
+def _git_has_staged_changes(repo_path: Path) -> bool:
+    """Check if repository has staged changes to commit.
+
+    Args:
+        repo_path: Path to git repository
+
+    Returns:
+        True if there are staged changes, False otherwise
+    """
+    result = subprocess.run(
+        ["git", "-C", str(repo_path), "diff", "--cached", "--quiet"],
+        capture_output=True,
+    )
+    # Exit code 0 means no changes, 1 means there are changes
+    return result.returncode != 0
+
+
+def _git_commit_gitlink(repo_path: Path, commit_message: str) -> bool:
     """Commit gitlinks without specifying paths.
 
     IMPORTANT: Do NOT specify paths when committing gitlinks!
@@ -34,13 +51,23 @@ def _git_commit_gitlink(repo_path: Path, commit_message: str) -> None:
     - Committing with explicit paths fails because git looks in worktree
     - Solution: Commit without paths - commits everything in the index
 
+    This function is idempotent - if there are no staged changes, it
+    returns False without raising an error (FR-016).
+
     Args:
         repo_path: Path to git repository
         commit_message: Commit message
 
+    Returns:
+        True if a commit was made, False if there was nothing to commit
+
     Raises:
-        OrganizationError: If commit fails
+        OrganizationError: If commit fails for reasons other than "nothing to commit"
     """
+    # Check if there are staged changes first (idempotency)
+    if not _git_has_staged_changes(repo_path):
+        return False
+
     try:
         subprocess.run(
             [
@@ -55,7 +82,11 @@ def _git_commit_gitlink(repo_path: Path, commit_message: str) -> None:
             capture_output=True,
             text=True,
         )
+        return True
     except subprocess.CalledProcessError as e:
+        # Check if it's a "nothing to commit" error (shouldn't happen due to check above)
+        if "nothing to commit" in (e.stdout or "") or "nothing to commit" in (e.stderr or ""):
+            return False
         raise OrganizationError(
             f"Failed to commit gitlink in {repo_path}: {e.stderr if e.stderr else str(e)}"
         ) from e
