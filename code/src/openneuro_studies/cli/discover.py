@@ -104,44 +104,60 @@ def discover(
                 click.echo("  (including derivatives of filtered datasets)")
         click.echo(f"Using {workers} parallel workers")
 
+        # Set up expansion progress callback for --include-derivatives
+        expansion_progress_callback = None
+        if include_derivatives and test_dataset_filter:
+
+            def expansion_cb(phase: str, message: str) -> None:
+                click.echo(message)
+
+            expansion_progress_callback = expansion_cb
+
         # Set up progress callback if progress bar is enabled
         progress_callback = None
+        pbar = None
         if progress:
-            # Use click.progressbar for progress tracking
-            # We'll need to count repos first to know the total
-            total_repos = 0
-            for source_spec in cfg.sources:
-                org_path = source_spec.organization_url.path
-                org_name = str(org_path).strip("/")
-                repos = finder.github_client.list_repositories(
-                    org_name, dataset_filter=test_dataset_filter
-                )
-                # Apply same filtering as discover_all
-                from openneuro_studies.discovery.dataset_finder import DatasetFinder as _DF
+            # Skip repo counting if include_derivatives is set - we'll show progress differently
+            # because the filter gets expanded after scanning
+            if not include_derivatives:
+                # Use click.progressbar for progress tracking
+                # We'll need to count repos first to know the total
+                total_repos = 0
+                for source_spec in cfg.sources:
+                    org_path = source_spec.organization_url.path
+                    org_name = str(org_path).strip("/")
+                    repos = finder.github_client.list_repositories(
+                        org_name, dataset_filter=test_dataset_filter
+                    )
+                    # Apply same filtering as discover_all
+                    from openneuro_studies.discovery.dataset_finder import DatasetFinder as _DF
 
-                filtered = _DF._filter_repos(finder, repos, source_spec.inclusion_patterns)
-                if source_spec.exclusion_patterns:
-                    import re
+                    filtered = _DF._filter_repos(finder, repos, source_spec.inclusion_patterns)
+                    if source_spec.exclusion_patterns:
+                        import re
 
-                    filtered = [
-                        r
-                        for r in filtered
-                        if not any(re.match(p, r["name"]) for p in source_spec.exclusion_patterns)
-                    ]
-                total_repos += len(filtered)
+                        filtered = [
+                            r
+                            for r in filtered
+                            if not any(re.match(p, r["name"]) for p in source_spec.exclusion_patterns)
+                        ]
+                    total_repos += len(filtered)
 
-            pbar = click.progressbar(length=total_repos, label="Processing datasets")
-            pbar.__enter__()
+                pbar = click.progressbar(length=total_repos, label="Processing datasets")
+                pbar.__enter__()
 
-            def progress_cb(dataset_id: str) -> None:
-                pbar.update(1)
+                def progress_cb(dataset_id: str) -> None:
+                    pbar.update(1)
 
-            progress_callback = progress_cb
+                progress_callback = progress_cb
 
         try:
-            discovered = finder.discover_all(progress_callback=progress_callback)
+            discovered = finder.discover_all(
+                progress_callback=progress_callback,
+                expansion_progress_callback=expansion_progress_callback,
+            )
         finally:
-            if progress and pbar:
+            if pbar:
                 pbar.__exit__(None, None, None)
 
         # Report results

@@ -140,11 +140,19 @@ def organize(
 
         # Filter targets if provided
         if targets:
-            # For now, filter by dataset_id matching targets
+            # Normalize targets: accept both "study-ds000001" and "ds000001" formats
+            # Also handle shell globs that expanded to directory names
+            normalized_targets = set()
+            for target in targets:
+                if target.startswith("study-"):
+                    # Strip "study-" prefix to get dataset_id
+                    normalized_targets.add(target[6:])
+                else:
+                    normalized_targets.add(target)
+
             # TODO: Support URLs and paths
-            target_set = set(targets)
-            raw_datasets = [d for d in raw_datasets if d.dataset_id in target_set]
-            derivative_datasets = [d for d in derivative_datasets if d.dataset_id in target_set]
+            raw_datasets = [d for d in raw_datasets if d.dataset_id in normalized_targets]
+            derivative_datasets = [d for d in derivative_datasets if d.dataset_id in normalized_targets]
 
         # Display plan
         total_datasets = len(raw_datasets) + len(derivative_datasets)
