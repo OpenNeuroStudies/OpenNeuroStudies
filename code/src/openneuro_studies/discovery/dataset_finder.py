@@ -27,6 +27,7 @@ class DatasetFinder:
         config: OpenNeuroStudies configuration
         github_client: GitHub API client
         test_dataset_filter: Optional list of dataset IDs to filter for testing
+        include_derivatives: Whether to include derivatives of filtered datasets
     """
 
     def __init__(
@@ -34,6 +35,7 @@ class DatasetFinder:
         config: OpenNeuroStudiesConfig,
         github_client: Optional[GitHubClient] = None,
         test_dataset_filter: Optional[List[str]] = None,
+        include_derivatives: bool = False,
         max_workers: int = 10,
     ):
         """Initialize dataset finder.
@@ -43,6 +45,9 @@ class DatasetFinder:
             github_client: GitHub API client (creates new if None)
             test_dataset_filter: Optional list of dataset IDs for testing
                                 (e.g., ["ds000001", "ds005256"])
+            include_derivatives: When True, automatically include derivatives whose
+                               source_datasets intersect with test_dataset_filter.
+                               Recursively includes derivatives of derivatives.
             max_workers: Maximum number of parallel workers for dataset processing (default: 10)
         """
         self.config = config
@@ -50,6 +55,7 @@ class DatasetFinder:
         # Use max_workers * 2 to account for potential connection reuse patterns
         self.github_client = github_client or GitHubClient(max_connections=max(max_workers * 2, 50))
         self.test_dataset_filter = test_dataset_filter
+        self.include_derivatives = include_derivatives
         self.max_workers = max_workers
 
     def discover_all(
@@ -57,6 +63,12 @@ class DatasetFinder:
         progress_callback: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, List[Union[SourceDataset, DerivativeDataset]]]:
         """Discover all datasets from configured sources.
+
+        When include_derivatives is True and test_dataset_filter is set, this method:
+        1. Discovers all datasets from derivative sources (no filter) to find relationships
+        2. Expands the filter to include derivatives whose source_datasets intersect
+           with the filtered set (recursively, to handle derivatives of derivatives)
+        3. Returns only datasets matching the expanded filter
 
         Args:
             progress_callback: Optional callback function called for each processed dataset
@@ -68,6 +80,16 @@ class DatasetFinder:
         Raises:
             DatasetDiscoveryError: If discovery fails
         """
+        # If include_derivatives is set, we need to expand the filter
+        effective_filter = self.test_dataset_filter
+        if self.include_derivatives and self.test_dataset_filter:
+            effective_filter = self._expand_filter_with_derivatives()
+            logger.info(
+                "Expanded filter from %d to %d datasets (including derivatives)",
+                len(self.test_dataset_filter),
+                len(effective_filter),
+            )
+
         discovered: Dict[str, List[Union[SourceDataset, DerivativeDataset]]] = {
             "raw": [],
             "derivative": [],
@@ -81,7 +103,7 @@ class DatasetFinder:
 
                 # List repositories with optional filtering
                 repos = self.github_client.list_repositories(
-                    org_name, dataset_filter=self.test_dataset_filter
+                    org_name, dataset_filter=effective_filter
                 )
 
                 # Filter by inclusion/exclusion patterns
@@ -131,6 +153,83 @@ class DatasetFinder:
                 ) from e
 
         return discovered
+
+    def _expand_filter_with_derivatives(self) -> List[str]:
+        """Expand test_dataset_filter to include derivatives of filtered datasets.
+
+        This method discovers all derivatives (without filter) and then finds which
+        ones have source_datasets that intersect with the filtered set. It recursively
+        expands to include derivatives of derivatives.
+
+        Returns:
+            Expanded list of dataset IDs including derivatives
+        """
+        if not self.test_dataset_filter:
+            return []
+
+        # Start with the original filter set
+        expanded_set = set(self.test_dataset_filter)
+
+        # Discover all derivatives from derivative sources to find relationships
+        # We need to discover without filter to find all potential derivatives
+        all_derivatives: List[DerivativeDataset] = []
+
+        for source_spec in self.config.sources:
+            try:
+                org_path: Any = source_spec.organization_url.path
+                org_name = str(org_path).strip("/")
+
+                # List ALL repositories (no filter) to find derivatives
+                repos = self.github_client.list_repositories(org_name, dataset_filter=None)
+
+                # Filter by inclusion/exclusion patterns
+                filtered_repos = self._filter_repos(repos, source_spec.inclusion_patterns)
+                if source_spec.exclusion_patterns:
+                    filtered_repos = [
+                        r
+                        for r in filtered_repos
+                        if not any(
+                            re.match(pattern, r["name"])
+                            for pattern in source_spec.exclusion_patterns
+                        )
+                    ]
+
+                # Process repositories to find derivatives
+                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                    future_to_repo = {
+                        executor.submit(self._process_dataset, org_name, repo): repo
+                        for repo in filtered_repos
+                    }
+
+                    for future in as_completed(future_to_repo):
+                        try:
+                            dataset = future.result()
+                            if dataset and isinstance(dataset, DerivativeDataset):
+                                all_derivatives.append(dataset)
+                        except Exception as e:
+                            logger.debug("Error processing dataset: %s", e)
+
+            except GitHubAPIError as e:
+                logger.warning("Failed to list derivatives from %s: %s", source_spec.name, e)
+
+        # Iteratively expand the set to include derivatives whose sources are in the set
+        # This handles the derivative-of-derivative case
+        changed = True
+        while changed:
+            changed = False
+            for deriv in all_derivatives:
+                if deriv.dataset_id not in expanded_set:
+                    # Check if any of the derivative's sources are in our set
+                    if any(src in expanded_set for src in deriv.source_datasets):
+                        expanded_set.add(deriv.dataset_id)
+                        changed = True
+                        logger.debug(
+                            "Added derivative %s (sources: %s)",
+                            deriv.dataset_id,
+                            deriv.source_datasets,
+                        )
+
+        return list(expanded_set)
 
     def _process_dataset(
         self, org_name: str, repo: Dict

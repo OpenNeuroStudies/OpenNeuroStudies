@@ -18,10 +18,11 @@ As a neuroscience researcher, I need to navigate a unified collection of OpenNeu
 **Acceptance Scenarios**:
 
 1. **Given** multiple source repositories configured in sourcedata/ (openneuro, openneuro-derivatives, openfmri), **When** the discovery script runs, **Then** all datasets are identified with their URLs and current commit states extracted from .gitmodules and Git
-2. **Given** a discovered raw dataset (e.g., ds000001), **When** the organization process runs, **Then** a study-ds000001 folder is created as a DataLad dataset without annex using `datalad create --no-annex -d . study-ds000001`, with sourcedata/raw/ linked as a git submodule to the original dataset, and the study dataset is linked as a git submodule in the top-level repository's .gitmodules with URL pointing to the configured GitHub organization (e.g., https://github.com/OpenNeuroStudies/study-ds000001)
+2. **Given** a discovered raw dataset (e.g., ds000001), **When** the organization process runs, **Then** a study-ds000001 folder is created as a DataLad dataset without annex using `datalad create --no-annex -d . study-ds000001`, with sourcedata/raw/ linked as a git submodule to the original dataset, and the study dataset is linked as a git submodule in the top-level repository's .gitmodules with URL pointing to the configured GitHub organization (e.g., https://github.com/OpenNeuroStudies/study-ds000001). Note: Not all raw datasets necessarily have derivatives; derivatives are only linked when discovered.
 3. **Given** derivative datasets (e.g. ds006185) matching a single raw dataset (e.g. ds006131), **When** organization process runs, **Then** derivatives are linked under derivatives/{toolname-version}/ as git submodules within the raw dataset (i.e ds006131).
 4. **Given** a derivative dataset (e.g. ds006185) from OpenNeuroDatasets has a single raw source dataset, **When** organization process runs, **Then** we do NOT create a `study-{id}` for that dataset.
 5. **Given** a derivative dataset with multiple SourceDatasets (e.g., ds006190) from OpenNeuroDatasets, **When** organization process runs, **Then** we do create a `study-{id}` for that dataset and all source datasets are linked under sourcedata/{original_id}/ without creating a single sourcedata/raw folder, and the entire `study-{id}` is linked under `derivatives/study-{id}` of each original raw dataset (e.g. ds006189, ds006185, ds006131 for ds006185)
+6. **Given** `--test-filter` is used with `--include-derivatives`, **When** the discovery script runs, **Then** the filter is automatically expanded to include all derivatives whose source_datasets intersect with the filtered set, recursively (so derivatives of derivatives are also included)
 
 ---
 
@@ -104,6 +105,7 @@ As a data quality manager, I need automated BIDS validation results stored for e
 - **FR-016**: System MUST be idempotent (running multiple times produces the same result)
 - **FR-017**: System MUST cache API responses to avoid GitHub rate limits
 - **FR-017a**: System MUST minimize API calls during discovery by fetching dataset_description.json only once per repository and reusing the parsed content for both raw and derivative dataset determination (rather than fetching twice)
+- **FR-017b**: System MUST provide an `--include-derivatives` option for the discover command that, when used with `--test-filter`, automatically expands the filter to include derivatives of filtered datasets. The expansion MUST be recursive (including derivatives of derivatives) by checking if any derivative's source_datasets intersect with the current filter set. This enables testing with raw datasets while automatically discovering their complete derivative chains.
 - **FR-018**: System MUST support versioned releases using 0.YYYYMMDD.PATCH format
 - **FR-019**: System MUST generate CHANGES file entries following CPAN::Changes::Spec format
 - **FR-020**: System MUST operate on YAML specifications for sources rather than requiring hardcoded submodules

@@ -28,6 +28,12 @@ from openneuro_studies.discovery import DatasetDiscoveryError, DatasetFinder
     help="Filter to specific dataset IDs for testing (e.g., ds000001)",
 )
 @click.option(
+    "--include-derivatives",
+    is_flag=True,
+    help="When using --test-filter, also include derivatives of filtered datasets "
+    "(recursively includes derivatives of derivatives)",
+)
+@click.option(
     "--workers",
     type=int,
     default=10,
@@ -53,6 +59,7 @@ def discover(
     config: Optional[str],
     output: str,
     test_filter: tuple[str, ...],
+    include_derivatives: bool,
     workers: int,
     progress: bool,
     mode: str,
@@ -71,6 +78,7 @@ def discover(
     Examples:
         openneuro-studies discover
         openneuro-studies discover --test-filter ds000001 --test-filter ds005256
+        openneuro-studies discover --test-filter ds000001 --include-derivatives
         openneuro-studies discover --workers 20 --no-progress
         openneuro-studies discover --mode overwrite  # Replace all existing results
     """
@@ -81,12 +89,19 @@ def discover(
 
         # Create dataset finder with specified workers
         test_dataset_filter = list(test_filter) if test_filter else None
-        finder = DatasetFinder(cfg, test_dataset_filter=test_dataset_filter, max_workers=workers)
+        finder = DatasetFinder(
+            cfg,
+            test_dataset_filter=test_dataset_filter,
+            include_derivatives=include_derivatives,
+            max_workers=workers,
+        )
 
         # Discover datasets
         click.echo("Discovering datasets from configured sources...")
         if test_dataset_filter:
             click.echo(f"Using test filter: {', '.join(test_dataset_filter)}")
+            if include_derivatives:
+                click.echo("  (including derivatives of filtered datasets)")
         click.echo(f"Using {workers} parallel workers")
 
         # Set up progress callback if progress bar is enabled

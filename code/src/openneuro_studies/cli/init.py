@@ -101,7 +101,7 @@ sources:
         if not test_script.exists() or force:
             click.echo("Creating test discovery script...")
             script_content = """#!/bin/bash
-# Helper script to discover the 6 MVP test datasets
+# Helper script to discover the MVP test datasets with their derivatives
 # Usage: .openneuro-studies/test-discover.sh
 
 set -e
@@ -114,25 +114,27 @@ if [ -z "$GITHUB_TOKEN" ]; then
     exit 1
 fi
 
-# Run discovery with test filter
-echo "Discovering 6 MVP test datasets..."
+# Run discovery with test filter and include-derivatives
+# The --include-derivatives flag automatically discovers derivatives of the
+# filtered datasets, including derivatives of derivatives (recursive).
+echo "Discovering MVP test datasets with derivatives..."
 echo ""
 
 openneuro-studies discover \\
     --test-filter ds000001 \\
     --test-filter ds005256 \\
     --test-filter ds006131 \\
-    --test-filter ds006185 \\
-    --test-filter ds006189 \\
-    --test-filter ds006190 \\
+    --include-derivatives \\
     --output .openneuro-studies/discovered-datasets.json
 
 echo ""
 echo "Discovery complete! Results saved to .openneuro-studies/discovered-datasets.json"
 echo ""
-echo "Test datasets:"
+echo "Base test datasets:"
 echo "  Raw datasets: ds000001, ds005256, ds006131"
-echo "  Derivatives:  ds006185, ds006189, ds006190"
+echo ""
+echo "The --include-derivatives flag automatically discovered derivatives of these"
+echo "datasets from both OpenNeuroDatasets and OpenNeuroDerivatives organizations."
 """
             test_script.write_text(script_content)
             test_script.chmod(0o755)

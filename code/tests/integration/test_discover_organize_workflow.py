@@ -100,27 +100,24 @@ def verify_gitlinks_for_submodules(repo_path: Path) -> None:
 
 # Test datasets to discover (from CLAUDE.md)
 # NOTE: Only ds000001, ds005256, ds006131 are raw datasets
-# ds006185, ds006189, ds006190 are derivatives (discovered via DatasetType field)
+# Derivatives are discovered automatically via --include-derivatives flag
 TEST_RAW_DATASETS = [
     "ds000001",
     "ds005256",
     "ds006131",
 ]
 
-# Derivative datasets to test
-# NOTE: Some derivatives (like ds006143) are in OpenNeuroDatasets, not OpenNeuroDerivatives
-# They will be discovered automatically when we search OpenNeuroDatasets
-TEST_DERIVATIVE_DATASETS = [
-    "ds000001-mriqc",  # From OpenNeuroDerivatives
-    "ds000212-fmriprep",  # From OpenNeuroDerivatives (raw ds000212 not in test set)
-    "ds006143",  # From OpenNeuroDatasets - derivative of ds006131
-    "ds006185",  # From OpenNeuroDatasets - derivative (not raw)
-    "ds006189",  # From OpenNeuroDatasets - derivative (not raw)
-    "ds006190",  # From OpenNeuroDatasets - multi-source derivative
+# Expected derivative datasets (discovered via --include-derivatives)
+# These are not explicitly filtered but should be found because they are
+# derivatives of the raw datasets above (recursively)
+EXPECTED_DERIVATIVE_DATASETS = [
+    # From OpenNeuroDerivatives (ds000001-mriqc style)
+    # "ds000001-mriqc",  # Would be discovered if exists
+    # From OpenNeuroDatasets (DatasetType=derivative)
+    "ds006185",  # fMRIPrep derivative of ds006131
+    "ds006189",  # fMRIPost-AROMA derivative of ds006185 + ds006131
+    "ds006190",  # tedana derivative of ds006189 + ds006185 + ds006131
 ]
-
-# Combined list for discovery filtering
-TEST_ALL_DATASETS = TEST_RAW_DATASETS + TEST_DERIVATIVE_DATASETS
 
 
 @pytest.fixture
@@ -171,10 +168,10 @@ def test_full_workflow(test_workspace: Path) -> None:
     assert (test_workspace / ".openneuro-studies" / "config.yaml").exists()
     assert (test_workspace / ".git").exists()
 
-    # Step 2: Discover datasets (with filter for test datasets)
+    # Step 2: Discover datasets (with filter for raw datasets + include-derivatives)
     print("\n=== Step 2: Discover datasets ===")
-    discover_args = ["discover"]
-    for dataset_id in TEST_ALL_DATASETS:
+    discover_args = ["discover", "--include-derivatives"]
+    for dataset_id in TEST_RAW_DATASETS:
         discover_args.extend(["--test-filter", dataset_id])
 
     result = run_cli(
@@ -207,14 +204,11 @@ def test_full_workflow(test_workspace: Path) -> None:
     for expected_id in TEST_RAW_DATASETS:
         assert expected_id in raw_ids, f"Should discover {expected_id}"
 
-    # Verify derivative datasets were discovered
-    # TODO: Derivative discovery not yet implemented - skip for now
-    {d["dataset_id"] for d in deriv_datasets}
-    # for expected_id in TEST_DERIVATIVE_DATASETS:
-    #     assert expected_id in deriv_ids, f"Should discover derivative {expected_id}"
-
-    # TODO: Future work - implement derivative discovery and unorganized-datasets.json tracking
-    # For example, ds000212-fmriprep should be tracked as unorganized since ds000212 is not in test set
+    # Verify derivative datasets were discovered via --include-derivatives
+    deriv_ids = {d["dataset_id"] for d in deriv_datasets}
+    print(f"Derivative IDs found: {deriv_ids}")
+    for expected_id in EXPECTED_DERIVATIVE_DATASETS:
+        assert expected_id in deriv_ids, f"Should discover derivative {expected_id} via --include-derivatives"
 
     # Step 3: Organize datasets (with parallel workers if specified)
     print("\n=== Step 3: Organize datasets ===")
@@ -447,10 +441,10 @@ def _test_persistent_test_directory() -> None:
     print("\n=== Initializing /tmp/openneuro-test-discover ===")
     run_cli(["init"], cwd=test_dir, check=True)
 
-    # Discover with test filter
+    # Discover with test filter and include-derivatives
     print("\n=== Discovering test datasets ===")
-    discover_args = ["discover"]
-    for dataset_id in TEST_ALL_DATASETS:
+    discover_args = ["discover", "--include-derivatives"]
+    for dataset_id in TEST_RAW_DATASETS:
         discover_args.extend(["--test-filter", dataset_id])
 
     run_cli(discover_args, cwd=test_dir, check=True)
