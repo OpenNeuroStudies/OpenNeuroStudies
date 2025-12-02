@@ -3,6 +3,7 @@
 High-level functions for organizing OpenNeuro datasets into study structures.
 """
 
+import re
 import subprocess
 from pathlib import Path
 from typing import Optional, Union
@@ -16,7 +17,66 @@ from openneuro_studies.organization.submodule_linker import link_submodule
 __all__ = [
     "organize_study",
     "OrganizationError",
+    "sanitize_name",
+    "get_derivative_dir_name",
 ]
+
+
+def sanitize_name(name: str) -> str:
+    """Sanitize a name for use in directory/submodule names.
+
+    Replaces sequences of non-alphanumeric characters (except hyphen and underscore)
+    with a single '+' character (FR-003f).
+
+    Args:
+        name: The name to sanitize
+
+    Returns:
+        Sanitized name with special characters replaced by '+'
+
+    Examples:
+        >>> sanitize_name("qsiprep-1.0.1.dev0+gee9aa2e.d20250115")
+        'qsiprep-1.0.1+dev0+gee9aa2e+d20250115'
+        >>> sanitize_name("Custom code-unknown")
+        'Custom+code-unknown'
+        >>> sanitize_name("fMRIPrep-24.1.1")
+        'fMRIPrep-24.1.1'
+    """
+    # Replace sequences of characters that are not alphanumeric, hyphen, or underscore
+    # with a single '+'
+    return re.sub(r"[^a-zA-Z0-9_-]+", "+", name)
+
+
+def get_derivative_dir_name(tool_name: str, version: str, dataset_id: str) -> str:
+    """Generate a derivative directory name following FR-003e and FR-003f.
+
+    Args:
+        tool_name: Name of the processing tool (e.g., "fMRIPrep", "Custom code")
+        version: Version of the tool (e.g., "24.1.1", "unknown")
+        dataset_id: Dataset ID to use for custom pipelines (e.g., "ds006191")
+
+    Returns:
+        Sanitized derivative directory name
+
+    Examples:
+        >>> get_derivative_dir_name("fMRIPrep", "24.1.1", "ds006185")
+        'fMRIPrep-24.1.1'
+        >>> get_derivative_dir_name("Custom code", "unknown", "ds006191")
+        'custom-ds006191'
+        >>> get_derivative_dir_name("qsiprep", "1.0.1.dev0+gee9aa2e.d20250115", "ds006182")
+        'qsiprep-1.0.1+dev0+gee9aa2e+d20250115'
+    """
+    # Handle unknown/custom pipelines (FR-003e)
+    if tool_name.lower() in ("custom code", "unknown", "") or version.lower() in (
+        "unknown",
+        "",
+    ):
+        if tool_name.lower() in ("custom code", "unknown", ""):
+            return f"custom-{dataset_id}"
+
+    # Standard case: {tool_name}-{version}, sanitized (FR-003f)
+    raw_name = f"{tool_name}-{version}"
+    return sanitize_name(raw_name)
 
 
 class OrganizationError(Exception):
@@ -164,7 +224,8 @@ def _organize_raw_dataset(
 ) -> Path:
     """Organize a single raw dataset.
 
-    Creates study-{id} directory and links raw dataset as sourcedata/raw submodule.
+    Creates study-{id} directory and links raw dataset as sourcedata/{dataset_id}/ submodule.
+    Uses consistent naming with multi-source studies (FR-003d).
 
     Args:
         dataset: Raw dataset to organize
@@ -183,17 +244,20 @@ def _organize_raw_dataset(
     # Create study dataset
     study_path = create_study_dataset(study_id, github_org, parent_path)
 
+    # Use sourcedata/{dataset_id}/ for consistent naming (FR-003d)
+    sourcedata_path = f"sourcedata/{dataset.dataset_id}"
+
     try:
         # Use per-study lock to prevent race conditions when multiple workers
         # try to modify the same study (e.g., raw + derivative)
         with study_lock(study_path):
-            # Link raw dataset as sourcedata/raw
+            # Link raw dataset as sourcedata/{dataset_id}/
             link_submodule(
                 parent_repo=study_path,
-                submodule_path="sourcedata/raw",
+                submodule_path=sourcedata_path,
                 url=str(dataset.url),
                 commit_sha=dataset.commit_sha,
-                submodule_name=f"{dataset.dataset_id}-raw",
+                submodule_name=dataset.dataset_id,
                 datalad_id=None,  # TODO: Extract from .datalad/config if available
             )
 
@@ -202,12 +266,12 @@ def _organize_raw_dataset(
             _git_commit_gitlink(
                 study_path,
                 f"Link raw dataset {dataset.dataset_id}\n\n"
-                f"Added sourcedata/raw submodule pointing to {dataset.url} @ {dataset.commit_sha[:8]}",
+                f"Added {sourcedata_path} submodule pointing to {dataset.url} @ {dataset.commit_sha[:8]}",
             )
 
             # Create empty directory for the gitlink to prevent "deleted" status
             # Git requires the directory to exist for submodules, even if not cloned
-            (study_path / "sourcedata" / "raw").mkdir(parents=True, exist_ok=True)
+            (study_path / sourcedata_path).mkdir(parents=True, exist_ok=True)
 
         # Register the study dataset as a submodule in the parent repository
         # IMPORTANT: Must be done AFTER committing changes in the study repo
@@ -252,8 +316,11 @@ def _organize_single_source_derivative(
     # Use per-study lock to prevent race conditions when multiple workers
     # try to modify the same study (e.g., raw + derivative)
     with study_lock(study_path):
-        # Link derivative under derivatives/{tool}-{version}/
-        derivative_path = f"derivatives/{dataset.tool_name}-{dataset.version}"
+        # Link derivative under derivatives/{sanitized_tool}-{version}/ (FR-003e, FR-003f)
+        derivative_dir_name = get_derivative_dir_name(
+            dataset.tool_name, dataset.version, dataset.dataset_id
+        )
+        derivative_path = f"derivatives/{derivative_dir_name}"
         link_submodule(
             parent_repo=study_path,
             submodule_path=derivative_path,
@@ -349,8 +416,11 @@ def _organize_multi_source_derivative(
                 )
                 submodule_paths.append(source_path)
 
-            # Link derivative under derivatives/
-            derivative_path = f"derivatives/{dataset.tool_name}-{dataset.version}"
+            # Link derivative under derivatives/ (FR-003e, FR-003f)
+            derivative_dir_name = get_derivative_dir_name(
+                dataset.tool_name, dataset.version, dataset.dataset_id
+            )
+            derivative_path = f"derivatives/{derivative_dir_name}"
             link_submodule(
                 parent_repo=study_path,
                 submodule_path=derivative_path,

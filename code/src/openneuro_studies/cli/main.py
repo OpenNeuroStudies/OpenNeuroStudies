@@ -10,6 +10,7 @@ import click
 from openneuro_studies import __version__
 from openneuro_studies.cli.discover import discover as discover_cmd
 from openneuro_studies.cli.init import init as init_cmd
+from openneuro_studies.cli.migrate import migrate as migrate_cmd
 from openneuro_studies.cli.organize import organize as organize_cmd
 from openneuro_studies.cli.publish import publish as publish_cmd
 from openneuro_studies.cli.unpublish import unpublish as unpublish_cmd
@@ -91,6 +92,7 @@ def cli(ctx: click.Context, config: str, log_level: str) -> None:
 cli.add_command(init_cmd, name="init")
 cli.add_command(discover_cmd, name="discover")
 cli.add_command(organize_cmd, name="organize")
+cli.add_command(migrate_cmd, name="migrate")
 cli.add_command(publish_cmd, name="publish")
 cli.add_command(unpublish_cmd, name="unpublish")
 
