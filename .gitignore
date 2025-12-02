@@ -58,3 +58,4 @@ htmlcov/
 
 # Git annex
 .git/annex/tmp/
+.npm
