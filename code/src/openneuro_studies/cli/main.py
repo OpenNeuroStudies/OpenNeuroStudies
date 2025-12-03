@@ -109,8 +109,36 @@ def metadata() -> None:
 
 @metadata.command(name="generate")
 @click.argument("study_ids", nargs=-1, required=False)
+@click.option(
+    "--dataset-description/--no-dataset-description",
+    default=True,
+    help="Generate dataset_description.json for each study",
+)
+@click.option(
+    "--studies-tsv/--no-studies-tsv",
+    default=True,
+    help="Generate studies.tsv and studies.json at root level",
+)
+@click.option(
+    "--derivatives-tsv/--no-derivatives-tsv",
+    default=True,
+    help="Generate studies_derivatives.tsv and studies_derivatives.json at root level",
+)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    default=False,
+    help="Overwrite existing files (default: update/merge)",
+)
 @click.pass_context
-def metadata_generate(ctx: click.Context, study_ids: tuple[str, ...]) -> None:
+def metadata_generate(
+    ctx: click.Context,
+    study_ids: tuple[str, ...],
+    dataset_description: bool,
+    studies_tsv: bool,
+    derivatives_tsv: bool,
+    overwrite: bool,
+) -> None:
     """Generate metadata for study datasets.
 
     Creates dataset_description.json, studies.tsv, studies_derivatives.tsv, and JSON sidecars.
@@ -121,12 +149,75 @@ def metadata_generate(ctx: click.Context, study_ids: tuple[str, ...]) -> None:
     Example:
         openneuro-studies metadata generate
         openneuro-studies metadata generate study-ds000001
+        openneuro-studies metadata generate --no-studies-tsv
     """
+    from openneuro_studies.metadata import (
+        generate_dataset_description,
+        generate_studies_derivatives_json,
+        generate_studies_derivatives_tsv,
+        generate_studies_json,
+        generate_studies_tsv,
+    )
+
+    root_path = Path(".")
+
+    # Find study directories
     if study_ids:
-        click.echo(f"[Placeholder] Would generate metadata for: {', '.join(study_ids)}")
+        # Normalize study IDs (accept both study-ds000001 and ds000001)
+        study_paths = []
+        for study_id in study_ids:
+            if not study_id.startswith("study-"):
+                study_id = f"study-{study_id}"
+            study_path = root_path / study_id
+            if study_path.is_dir():
+                study_paths.append(study_path)
+            else:
+                click.echo(f"Warning: Study directory not found: {study_id}", err=True)
     else:
-        click.echo("[Placeholder] Would generate metadata for all studies")
-    click.echo("Phase 4 implementation pending...")
+        # Find all study directories
+        study_paths = sorted(
+            [p for p in root_path.iterdir() if p.is_dir() and p.name.startswith("study-")]
+        )
+
+    if not study_paths:
+        click.echo("No study directories found.", err=True)
+        return
+
+    click.echo(f"Generating metadata for {len(study_paths)} studies...")
+
+    # Generate dataset_description.json for each study
+    if dataset_description:
+        click.echo("\nGenerating dataset_description.json files...")
+        for study_path in study_paths:
+            try:
+                generate_dataset_description(study_path, overwrite=overwrite)
+                click.echo(f"  ✓ {study_path.name}")
+            except Exception as e:
+                click.echo(f"  ✗ {study_path.name}: {e}", err=True)
+
+    # Generate studies.tsv and studies.json at root level
+    if studies_tsv:
+        click.echo("\nGenerating studies.tsv...")
+        try:
+            generate_studies_tsv(study_paths, root_path / "studies.tsv")
+            generate_studies_json(root_path / "studies.json")
+            click.echo("  ✓ studies.tsv")
+            click.echo("  ✓ studies.json")
+        except Exception as e:
+            click.echo(f"  ✗ Failed: {e}", err=True)
+
+    # Generate studies_derivatives.tsv and studies_derivatives.json at root level
+    if derivatives_tsv:
+        click.echo("\nGenerating studies_derivatives.tsv...")
+        try:
+            generate_studies_derivatives_tsv(study_paths, root_path / "studies_derivatives.tsv")
+            generate_studies_derivatives_json(root_path / "studies_derivatives.json")
+            click.echo("  ✓ studies_derivatives.tsv")
+            click.echo("  ✓ studies_derivatives.json")
+        except Exception as e:
+            click.echo(f"  ✗ Failed: {e}", err=True)
+
+    click.echo("\nMetadata generation complete.")
 
 
 @metadata.command(name="sync")
