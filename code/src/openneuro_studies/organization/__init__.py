@@ -25,8 +25,8 @@ __all__ = [
 def sanitize_name(name: str) -> str:
     """Sanitize a name for use in directory/submodule names.
 
-    Replaces sequences of non-alphanumeric characters (except hyphen and underscore)
-    with a single '+' character (FR-003f).
+    Replaces sequences of characters that are not alphanumeric, hyphen, underscore,
+    dot, or plus with a single '+' character (FR-003f).
 
     Args:
         name: The name to sanitize
@@ -35,20 +35,27 @@ def sanitize_name(name: str) -> str:
         Sanitized name with special characters replaced by '+'
 
     Examples:
+        >>> sanitize_name("xcp_d-0.10.6")
+        'xcp_d-0.10.6'
         >>> sanitize_name("qsiprep-1.0.1.dev0+gee9aa2e.d20250115")
-        'qsiprep-1.0.1+dev0+gee9aa2e+d20250115'
+        'qsiprep-1.0.1.dev0+gee9aa2e.d20250115'
         >>> sanitize_name("Custom code-unknown")
         'Custom+code-unknown'
         >>> sanitize_name("fMRIPrep-24.1.1")
         'fMRIPrep-24.1.1'
+        >>> sanitize_name("tool with spaces")
+        'tool+with+spaces'
     """
-    # Replace sequences of characters that are not alphanumeric, hyphen, or underscore
-    # with a single '+'
-    return re.sub(r"[^a-zA-Z0-9_-]+", "+", name)
+    # Replace sequences of characters that are not alphanumeric, hyphen, underscore,
+    # dot, or plus with a single '+'
+    return re.sub(r"[^a-zA-Z0-9_.+-]+", "+", name)
 
 
 def get_derivative_dir_name(tool_name: str, version: str, dataset_id: str) -> str:
     """Generate a derivative directory name following FR-003e and FR-003f.
+
+    Sanitizes both tool_name and version components to remove spaces and other
+    invalid characters, then joins them with a hyphen.
 
     Args:
         tool_name: Name of the processing tool (e.g., "fMRIPrep", "Custom code")
@@ -63,8 +70,12 @@ def get_derivative_dir_name(tool_name: str, version: str, dataset_id: str) -> st
         'fMRIPrep-24.1.1'
         >>> get_derivative_dir_name("Custom code", "unknown", "ds006191")
         'custom-ds006191'
+        >>> get_derivative_dir_name("xcp_d", "0.10.6", "ds006182")
+        'xcp_d-0.10.6'
         >>> get_derivative_dir_name("qsiprep", "1.0.1.dev0+gee9aa2e.d20250115", "ds006182")
-        'qsiprep-1.0.1+dev0+gee9aa2e+d20250115'
+        'qsiprep-1.0.1.dev0+gee9aa2e.d20250115'
+        >>> get_derivative_dir_name("tool with spaces", "1.0", "ds000001")
+        'tool+with+spaces-1.0'
     """
     # Handle unknown/custom pipelines (FR-003e)
     if tool_name.lower() in ("custom code", "unknown", "") or version.lower() in (
@@ -74,9 +85,10 @@ def get_derivative_dir_name(tool_name: str, version: str, dataset_id: str) -> st
         if tool_name.lower() in ("custom code", "unknown", ""):
             return f"custom-{dataset_id}"
 
-    # Standard case: {tool_name}-{version}, sanitized (FR-003f)
-    raw_name = f"{tool_name}-{version}"
-    return sanitize_name(raw_name)
+    # Sanitize both components separately, then join (FR-003f)
+    sanitized_tool = sanitize_name(tool_name)
+    sanitized_version = sanitize_name(version)
+    return f"{sanitized_tool}-{sanitized_version}"
 
 
 class OrganizationError(Exception):
