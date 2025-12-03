@@ -1,2 +1,8 @@
 study_id	name	version	raw_version	bids_version	hed_version	license	authors	author_lead_raw	author_senior_raw	source_count	source_types	derivative_count	subjects_num	sessions_num	sessions_min	sessions_max	bold_num	t1w_num	t2w_num	bold_size	t1w_size	bold_size_max	bold_voxels	datatypes	derivative_ids	bids_valid
 study-ds000001	Study dataset for ds000001	n/a	n/a	1.10.1	n/a	CC0	Yaroslav Halchenko	n/a	n/a	1	raw	2	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	fMRIPrep-21.0.1,MRIQC-0.16.1	n/a
+study-ds005256	Study dataset for ds005256	n/a	n/a	1.10.1	n/a	CC0	Yaroslav Halchenko	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds006131	Study dataset for ds006131	n/a	n/a	1.10.1	n/a	CC0	Yaroslav Halchenko	n/a	n/a	1	raw	4	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	fMRIPrep-24.1.1,MRIQC-25.0.0rc0,qsiprep-1.0.1.dev0+gee9aa2e.d20250115,ASLPrep-0.7.5	n/a
+study-ds006189	Study dataset for ds006189	n/a	n/a	1.10.1	n/a	CC0	Yaroslav Halchenko	n/a	n/a	2	raw	1	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	fMRIPost-AROMA-0.0.10	n/a
+study-ds006190	Study dataset for ds006190	n/a	n/a	1.10.1	n/a	CC0	Yaroslav Halchenko	n/a	n/a	3	raw	1	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	tedana-24.0.2	n/a
+study-ds006191	Study dataset for ds006191	n/a	n/a	1.10.1	n/a	CC0	Yaroslav Halchenko	n/a	n/a	4	raw	1	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	custom-ds006191	n/a
+study-ds006192	Study dataset for ds006192	n/a	n/a	1.10.1	n/a	CC0	Yaroslav Halchenko	n/a	n/a	4	raw	1	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	xcp_d-0.10.6	n/a

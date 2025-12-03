@@ -1,3 +1,11 @@
 study_id	derivative_id	tool_name	tool_version	datalad_uuid	url	size_total	size_annexed	file_count	outdatedness	processed_raw_version
 study-ds000001	MRIQC-0.16.1	MRIQC	0.16.1	n/a	https://github.com/OpenNeuroDerivatives/ds000001-mriqc.git	n/a	n/a	n/a	n/a	n/a
 study-ds000001	fMRIPrep-21.0.1	fMRIPrep	21.0.1	n/a	https://github.com/OpenNeuroDerivatives/ds000001-fmriprep.git	n/a	n/a	n/a	n/a	n/a
+study-ds006131	ASLPrep-0.7.5	ASLPrep	0.7.5	n/a	https://github.com/OpenNeuroDatasets/ds006188.git	n/a	n/a	n/a	n/a	n/a
+study-ds006131	MRIQC-25.0.0rc0	MRIQC	25.0.0rc0	n/a	https://github.com/OpenNeuroDatasets/ds006143.git	n/a	n/a	n/a	n/a	n/a
+study-ds006131	fMRIPrep-24.1.1	fMRIPrep	24.1.1	n/a	https://github.com/OpenNeuroDatasets/ds006185.git	n/a	n/a	n/a	n/a	n/a
+study-ds006131	qsiprep-1.0.1.dev0+gee9aa2e.d20250115	qsiprep	1.0.1.dev0+gee9aa2e.d20250115	n/a	https://github.com/OpenNeuroDatasets/ds006182.git	n/a	n/a	n/a	n/a	n/a
+study-ds006189	fMRIPost-AROMA-0.0.10	fMRIPost-AROMA	0.0.10	n/a	https://github.com/OpenNeuroDatasets/ds006189.git	n/a	n/a	n/a	n/a	n/a
+study-ds006190	tedana-24.0.2	tedana	24.0.2	n/a	https://github.com/OpenNeuroDatasets/ds006190.git	n/a	n/a	n/a	n/a	n/a
+study-ds006191	custom-ds006191	custom	ds006191	n/a	https://github.com/OpenNeuroDatasets/ds006191.git	n/a	n/a	n/a	n/a	n/a
+study-ds006192	xcp_d-0.10.6	xcp_d	0.10.6	n/a	https://github.com/OpenNeuroDatasets/ds006192.git	n/a	n/a	n/a	n/a	n/a
