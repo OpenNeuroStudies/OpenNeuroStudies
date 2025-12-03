@@ -1,0 +1,3 @@
+study_id	derivative_id	tool_name	tool_version	datalad_uuid	url	size_total	size_annexed	file_count	outdatedness	processed_raw_version
+study-ds000001	MRIQC-0.16.1	MRIQC	0.16.1	n/a	https://github.com/OpenNeuroDerivatives/ds000001-mriqc.git	n/a	n/a	n/a	n/a	n/a
+study-ds000001	fMRIPrep-21.0.1	fMRIPrep	21.0.1	n/a	https://github.com/OpenNeuroDerivatives/ds000001-fmriprep.git	n/a	n/a	n/a	n/a	n/a

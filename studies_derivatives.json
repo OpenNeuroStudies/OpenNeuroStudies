@@ -1,0 +1,35 @@
+{
+  "study_id": {
+    "Description": "Unique identifier for the study dataset containing this derivative"
+  },
+  "derivative_id": {
+    "Description": "Identifier for the derivative directory (e.g., fMRIPrep-24.1.1)"
+  },
+  "tool_name": {
+    "Description": "Name of the processing tool/pipeline"
+  },
+  "tool_version": {
+    "Description": "Version of the processing tool"
+  },
+  "datalad_uuid": {
+    "Description": "DataLad dataset UUID for disambiguation, or 'n/a'"
+  },
+  "url": {
+    "Description": "Git URL of the derivative dataset"
+  },
+  "size_total": {
+    "Description": "Total size of the derivative dataset in bytes"
+  },
+  "size_annexed": {
+    "Description": "Size of annexed (large) files in bytes"
+  },
+  "file_count": {
+    "Description": "Number of files in the derivative dataset"
+  },
+  "outdatedness": {
+    "Description": "Number of commits the processed raw version is behind current raw version"
+  },
+  "processed_raw_version": {
+    "Description": "Version/commit of the raw dataset that was processed"
+  }
+}

@@ -1,0 +1,2 @@
+study_id	name	version	raw_version	bids_version	hed_version	license	authors	author_lead_raw	author_senior_raw	source_count	source_types	derivative_count	subjects_num	sessions_num	sessions_min	sessions_max	bold_num	t1w_num	t2w_num	bold_size	t1w_size	bold_size_max	bold_voxels	datatypes	derivative_ids	bids_valid
+study-ds000001	Study dataset for ds000001	n/a	n/a	1.10.1	n/a	CC0	Yaroslav Halchenko	n/a	n/a	1	raw	2	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	n/a	fMRIPrep-21.0.1,MRIQC-0.16.1	n/a
