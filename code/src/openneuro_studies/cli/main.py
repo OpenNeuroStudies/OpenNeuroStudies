@@ -239,10 +239,26 @@ def metadata_sync(study_ids: tuple[str, ...]) -> None:
 
 @cli.command()
 @click.argument("study_ids", nargs=-1, required=False)
-def validate(study_ids: tuple[str, ...]) -> None:
+@click.option(
+    "--timeout",
+    type=int,
+    default=600,
+    help="Timeout per study in seconds",
+    show_default=True,
+)
+@click.option(
+    "--update-tsv/--no-update-tsv",
+    default=True,
+    help="Update bids_valid column in studies.tsv",
+)
+def validate(
+    study_ids: tuple[str, ...],
+    timeout: int,
+    update_tsv: bool,
+) -> None:
     """Run BIDS validation on study datasets.
 
-    Executes bids-validator-deno and stores results in derivatives/bids-validator.{json,txt}.
+    Executes bids-validator and stores results in derivatives/bids-validator.{json,txt}.
     Updates bids_valid column in studies.tsv.
 
     Arguments:
@@ -252,11 +268,105 @@ def validate(study_ids: tuple[str, ...]) -> None:
         openneuro-studies validate
         openneuro-studies validate study-ds000001
     """
+    from openneuro_studies.validation import (
+        ValidationStatus,
+        find_validator,
+        run_validation,
+        update_studies_tsv_validation,
+    )
+
+    root_path = Path(".")
+
+    # Check for validator first
+    validator = find_validator()
+    if validator is None:
+        click.echo(
+            "Error: No BIDS validator found.\n"
+            "Install with one of:\n"
+            "  pip install bids-validator\n"
+            "  Or ensure deno or npx is in PATH",
+            err=True,
+        )
+        return
+
+    validator_cmd, validator_type = validator
+    click.echo(f"Using {validator_type} for validation")
+
+    # Find study directories
     if study_ids:
-        click.echo(f"[Placeholder] Would validate studies: {', '.join(study_ids)}")
+        # Normalize study IDs (accept both study-ds000001 and ds000001)
+        study_paths = []
+        for study_id in study_ids:
+            if not study_id.startswith("study-"):
+                study_id = f"study-{study_id}"
+            study_path = root_path / study_id
+            if study_path.is_dir():
+                study_paths.append(study_path)
+            else:
+                click.echo(f"Warning: Study directory not found: {study_id}", err=True)
     else:
-        click.echo("[Placeholder] Would validate all studies")
-    click.echo("Phase 5 implementation pending...")
+        # Find all study directories
+        study_paths = sorted(
+            [p for p in root_path.iterdir() if p.is_dir() and p.name.startswith("study-")]
+        )
+
+    if not study_paths:
+        click.echo("No study directories found.", err=True)
+        return
+
+    click.echo(f"\nValidating {len(study_paths)} studies...")
+
+    # Track results
+    results_summary = {
+        ValidationStatus.VALID: 0,
+        ValidationStatus.WARNINGS: 0,
+        ValidationStatus.ERRORS: 0,
+        ValidationStatus.NOT_AVAILABLE: 0,
+    }
+
+    for study_path in study_paths:
+        click.echo(f"\n  Validating {study_path.name}...", nl=False)
+
+        result = run_validation(
+            study_path,
+            validator_cmd=validator_cmd,
+            timeout=timeout,
+        )
+
+        results_summary[result.status] += 1
+
+        # Display result
+        status_icons = {
+            ValidationStatus.VALID: "✓",
+            ValidationStatus.WARNINGS: "⚠",
+            ValidationStatus.ERRORS: "✗",
+            ValidationStatus.NOT_AVAILABLE: "?",
+        }
+        icon = status_icons.get(result.status, "?")
+
+        if result.status == ValidationStatus.VALID:
+            click.echo(f" {icon} valid")
+        elif result.status == ValidationStatus.WARNINGS:
+            click.echo(f" {icon} {result.warning_count} warnings")
+        elif result.status == ValidationStatus.ERRORS:
+            click.echo(f" {icon} {result.error_count} errors, {result.warning_count} warnings")
+        else:
+            click.echo(f" {icon} n/a")
+
+        # Update studies.tsv
+        if update_tsv:
+            studies_tsv = root_path / "studies.tsv"
+            if studies_tsv.exists():
+                update_studies_tsv_validation(studies_tsv, study_path.name, result.status)
+
+    # Summary
+    click.echo("\n" + "=" * 60)
+    click.echo("Validation Summary:")
+    click.echo(f"  Valid:    {results_summary[ValidationStatus.VALID]}")
+    click.echo(f"  Warnings: {results_summary[ValidationStatus.WARNINGS]}")
+    click.echo(f"  Errors:   {results_summary[ValidationStatus.ERRORS]}")
+    click.echo(f"  N/A:      {results_summary[ValidationStatus.NOT_AVAILABLE]}")
+    click.echo("\nResults stored in derivatives/bids-validator.{json,txt} per study.")
 
 
 @cli.command()
