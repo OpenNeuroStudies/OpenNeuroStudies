@@ -63,6 +63,8 @@ def _rename_submodule_path(
 ) -> bool:
     """Rename a submodule path in .gitmodules and git index.
 
+    Uses git mv to rename the submodule path, then updates .gitmodules.
+
     Args:
         repo_path: Path to git repository
         old_path: Current submodule path
@@ -82,87 +84,43 @@ def _rename_submodule_path(
         return True
 
     try:
-        # 1. Update .gitmodules
-        content = gitmodules_path.read_text()
-        # Replace path = old_path with path = new_path
-        content = re.sub(
-            rf'(\[submodule "{re.escape(submodule_name)}"\][^\[]*path\s*=\s*){re.escape(old_path)}',
-            rf"\g<1>{new_path}",
-            content,
-        )
-        gitmodules_path.write_text(content)
+        # 1. Create parent directory for new path if needed
+        new_dir.parent.mkdir(parents=True, exist_ok=True)
 
-        # 2. Remove old gitlink from index
+        # 2. Use git mv to rename the submodule path in the index
+        # This handles the gitlink rename properly
         subprocess.run(
-            ["git", "-C", str(repo_path), "rm", "--cached", old_path],
+            ["git", "-C", str(repo_path), "mv", old_path, new_path],
             check=True,
-            capture_output=True,
-        )
-
-        # 3. Get the commit SHA from the old entry (need to retrieve before removal)
-        # We can get this from git ls-tree
-        result = subprocess.run(
-            ["git", "-C", str(repo_path), "ls-tree", "HEAD", old_path],
             capture_output=True,
             text=True,
         )
-        if result.returncode != 0:
-            # Try from index
-            result = subprocess.run(
-                ["git", "-C", str(repo_path), "ls-files", "--stage", old_path],
-                capture_output=True,
-                text=True,
-            )
 
-        # Parse: 160000 <sha> 0\t<path>
-        commit_sha = None
-        for line in result.stdout.strip().split("\n"):
-            if line:
-                parts = line.split()
-                if len(parts) >= 2:
-                    commit_sha = parts[1] if parts[0] == "160000" else parts[1]
-                    break
-
-        if not commit_sha:
-            logger.warning(f"Could not find commit SHA for {old_path}")
-            return False
-
-        # 4. Create new directory if needed
-        new_dir.mkdir(parents=True, exist_ok=True)
-
-        # 5. Add new gitlink with same commit SHA
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(repo_path),
-                "update-index",
-                "--add",
-                "--cacheinfo",
-                f"160000,{commit_sha},{new_path}",
-            ],
-            check=True,
-            capture_output=True,
+        # 3. Update .gitmodules to reflect the new path
+        content = gitmodules_path.read_text()
+        # Replace path = old_path with path = new_path
+        # Use a more robust pattern that handles the multiline section
+        updated_content = re.sub(
+            rf'(path\s*=\s*){re.escape(old_path)}(\s*\n)',
+            rf'\g<1>{new_path}\g<2>',
+            content,
         )
+        gitmodules_path.write_text(updated_content)
 
-        # 6. Stage .gitmodules
+        # 4. Stage .gitmodules
         subprocess.run(
             ["git", "-C", str(repo_path), "add", ".gitmodules"],
             check=True,
             capture_output=True,
         )
 
-        # 7. Remove old empty directory if it exists
-        if old_dir.exists() and old_dir.is_dir():
-            try:
-                old_dir.rmdir()
-            except OSError:
-                pass  # Directory not empty or other issue
-
+        click.echo(f"    Renamed: {old_path} -> {new_path}")
         return True
 
     except subprocess.CalledProcessError as e:
-        logger.error(f"Failed to rename {old_path} -> {new_path}: {e}")
+        stderr = e.stderr if hasattr(e, 'stderr') and e.stderr else str(e)
+        logger.error(f"Failed to rename {old_path} -> {new_path}: {stderr}")
+        click.echo(f"    ERROR: Failed to rename {old_path} -> {new_path}: {stderr}", err=True)
         return False
 
 
