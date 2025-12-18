@@ -390,11 +390,9 @@ def test_provisioner_copier_integration(study_workspace: Path) -> None:
         provision_study,
     )
 
-    # Force use of copier
     result = provision_study(
         study_workspace,
         force=True,
-        use_copier=True,
     )
 
     assert result.provisioned, f"Provisioning should succeed: {result.error}"
@@ -414,58 +412,3 @@ def test_provisioner_copier_integration(study_workspace: Path) -> None:
     # Verify README content
     readme = (study_workspace / "README.md").read_text()
     assert "study-ds000001" in readme
-
-
-@pytest.mark.integration
-def test_provisioner_copier_vs_inline_parity(tmp_path: Path) -> None:
-    """Test that copier and inline templates produce equivalent output."""
-    from openneuro_studies.provision.provisioner import (
-        TEMPLATE_VERSION,
-        provision_study,
-    )
-
-    # Create two study workspaces
-    copier_study = tmp_path / "study-copier"
-    inline_study = tmp_path / "study-inline"
-    copier_study.mkdir()
-    inline_study.mkdir()
-
-    # Provision with copier
-    copier_result = provision_study(
-        copier_study,
-        force=True,
-        use_copier=True,
-    )
-    assert copier_result.provisioned
-
-    # Provision with inline (fallback)
-    inline_result = provision_study(
-        inline_study,
-        force=True,
-        use_copier=False,
-    )
-    assert inline_result.provisioned
-
-    # Compare template versions
-    copier_version = (
-        copier_study / ".openneuro-studies" / "template-version"
-    ).read_text().strip()
-    inline_version = (
-        inline_study / ".openneuro-studies" / "template-version"
-    ).read_text().strip()
-    assert copier_version == inline_version == TEMPLATE_VERSION
-
-    # Compare script content (should be identical)
-    copier_script = (copier_study / "code" / "run-bids-validator").read_text()
-    inline_script = (inline_study / "code" / "run-bids-validator").read_text()
-    assert copier_script == inline_script, "Validator scripts should match"
-
-    # README will differ in study_id, but structure should match
-    copier_readme = (copier_study / "README.md").read_text()
-    inline_readme = (inline_study / "README.md").read_text()
-
-    # Check same sections exist
-    assert "## Dataset Structure" in copier_readme
-    assert "## Dataset Structure" in inline_readme
-    assert "## Running BIDS Validation" in copier_readme
-    assert "## Running BIDS Validation" in inline_readme

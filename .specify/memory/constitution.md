@@ -190,4 +190,15 @@ Deviations from simplicity MUST be justified:
 - Manual operations → explain why automation not possible
 - Database introduction → explain why file-based approach insufficient
 
-**Version**: 1.20251011.1 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-10-11
+### VII. No Duplicate Implementations (DRY)
+
+Avoid maintaining multiple implementations of the same functionality.
+
+- Each feature SHOULD have a single canonical implementation
+- Fallback implementations create maintenance burden and divergence risk
+- If a dependency provides functionality, use it exclusively rather than maintaining parallel code
+- Periodic codebase evaluation SHOULD identify and remove redundant implementations
+
+**Rationale**: Duplicate implementations increase maintenance burden, risk divergence between versions, and bloat the codebase. A single well-tested implementation is preferable to multiple "just in case" alternatives.
+
+**Version**: 1.20251218.0 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-12-18

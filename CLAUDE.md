@@ -10,6 +10,7 @@ Auto-generated from all feature plans. Last updated: 2025-10-09
 - **CLI Framework**: Click
 - **Data Validation**: Pydantic
 - **Configuration**: PyYAML
+- **Templating**: Copier (for provisioning study datasets)
 - **Storage**: File-based (TSV, JSON, YAML) with git/git-annex version control
 
 ### DataLad Ecosystem
