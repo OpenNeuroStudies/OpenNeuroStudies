@@ -3,10 +3,66 @@
 import logging
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 from github import Github, GithubException, UnknownObjectException
 
 logger = logging.getLogger(__name__)
+
+
+def datalad_push_since(
+    dataset_path: Path = Path("."),
+    since: str = "^",
+    to: Optional[str] = None,
+    recursive: bool = True,
+    dry_run: bool = False,
+) -> tuple[int, int, list[str]]:
+    """Push using datalad push --since to efficiently update only changed datasets.
+
+    This is more efficient than individual git pushes for large collections
+    as it only pushes studies with changes since the reference point.
+
+    Args:
+        dataset_path: Path to the superdataset
+        since: Git reference for --since (default "^" = last pushed state)
+        to: Remote name to push to (default: None = all configured remotes)
+        recursive: Push recursively into subdatasets
+        dry_run: If True, show what would be pushed without pushing
+
+    Returns:
+        Tuple of (pushed_count, skipped_count, pushed_paths)
+    """
+    import datalad.api as dl
+
+    try:
+        result = dl.push(
+            path=str(dataset_path),
+            since=since,
+            to=to,
+            recursive=recursive,
+            dry_run=dry_run,
+        )
+
+        # Parse results
+        pushed_paths = []
+        pushed_count = 0
+        skipped_count = 0
+
+        if result:
+            for r in result:
+                if isinstance(r, dict):
+                    if r.get("status") == "ok":
+                        pushed_count += 1
+                        if "path" in r:
+                            pushed_paths.append(r["path"])
+                    elif r.get("status") == "notneeded":
+                        skipped_count += 1
+
+        return pushed_count, skipped_count, pushed_paths
+
+    except Exception as e:
+        logger.error(f"datalad push failed: {e}")
+        raise
 
 
 class PublishError(Exception):

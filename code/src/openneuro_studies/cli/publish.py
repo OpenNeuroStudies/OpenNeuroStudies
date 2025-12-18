@@ -13,6 +13,7 @@ from openneuro_studies.publishing import (
     save_publication_status,
     sync_publication_status,
 )
+from openneuro_studies.publishing.github_publisher import datalad_push_since
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,13 @@ logger = logging.getLogger(__name__)
     is_flag=True,
     help="Show what would be published without actually doing it",
 )
+@click.option(
+    "--since",
+    type=str,
+    default=None,
+    help="Use datalad push --since for efficient incremental push. "
+    'Use "^" for last pushed state or a git ref (branch/tag/commit).',
+)
 @click.pass_context
 def publish(
     ctx: click.Context,
@@ -58,6 +66,7 @@ def publish(
     force: bool,
     sync: bool,
     dry_run: bool,
+    since: str | None,
 ) -> None:
     """Publish study repositories to GitHub.
 
@@ -87,6 +96,12 @@ def publish(
 
         # Dry run (show what would happen)
         openneuro-studies publish --dry-run
+
+        # Efficient incremental push (only push changed studies since last push)
+        openneuro-studies publish --since=^
+
+        # Push only studies changed since a specific tag
+        openneuro-studies publish --since=v1.0.0
     """
     config_dir = Path(".openneuro-studies")
 
@@ -116,6 +131,43 @@ def publish(
 
         except Exception as e:
             raise click.ClickException(f"Sync failed: {e}")
+
+        return
+
+    # Efficient incremental push using datalad push --since
+    if since is not None:
+        click.echo(f"Using datalad push --since={since} for incremental push...")
+
+        if study_ids:
+            click.echo(
+                "Warning: --since mode pushes all changed subdatasets, "
+                "ignoring specific study IDs",
+                err=True,
+            )
+
+        try:
+            pushed, skipped, pushed_paths = datalad_push_since(
+                dataset_path=Path("."),
+                since=since,
+                to="origin",  # Push to origin remote
+                recursive=True,
+                dry_run=dry_run,
+            )
+
+            if dry_run:
+                click.echo(f"[DRY RUN] Would push {pushed} datasets")
+            else:
+                click.echo(f"\nPushed: {pushed} datasets")
+                click.echo(f"Skipped (no changes): {skipped} datasets")
+                if pushed_paths:
+                    click.echo("\nPushed paths:")
+                    for path in pushed_paths[:20]:  # Show first 20
+                        click.echo(f"  {path}")
+                    if len(pushed_paths) > 20:
+                        click.echo(f"  ... and {len(pushed_paths) - 20} more")
+
+        except Exception as e:
+            raise click.ClickException(f"datalad push failed: {e}")
 
         return
 
