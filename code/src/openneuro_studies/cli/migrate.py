@@ -54,6 +54,78 @@ def _get_dataset_id_from_url(url: str) -> Optional[str]:
     return url.split("/")[-1]
 
 
+def _migrate_validation_output(
+    study_path: Path,
+    dry_run: bool = False,
+) -> bool:
+    """Migrate old validation outputs to new directory structure.
+
+    Old format:
+        derivatives/bids-validator.json
+        derivatives/bids-validator.txt
+
+    New format (FR-015):
+        derivatives/bids-validator/version.txt
+        derivatives/bids-validator/report.json
+        derivatives/bids-validator/report.txt
+
+    Args:
+        study_path: Path to study directory
+        dry_run: If True, only show what would be done
+
+    Returns:
+        True if migration was performed, False if nothing to migrate
+    """
+    derivatives_dir = study_path / "derivatives"
+    old_json = derivatives_dir / "bids-validator.json"
+    old_txt = derivatives_dir / "bids-validator.txt"
+
+    # Check if old format exists
+    has_old_json = old_json.exists()
+    has_old_txt = old_txt.exists()
+
+    if not has_old_json and not has_old_txt:
+        return False
+
+    new_dir = derivatives_dir / "bids-validator"
+
+    if dry_run:
+        click.echo("    Would migrate validation outputs:")
+        if has_old_json:
+            click.echo(f"      {old_json.relative_to(study_path)} -> bids-validator/report.json")
+        if has_old_txt:
+            click.echo(f"      {old_txt.relative_to(study_path)} -> bids-validator/report.txt")
+        return True
+
+    try:
+        # Create new directory
+        new_dir.mkdir(exist_ok=True)
+
+        # Move files
+        if has_old_json:
+            new_json = new_dir / "report.json"
+            old_json.rename(new_json)
+            click.echo(f"    Moved: bids-validator.json -> bids-validator/report.json")
+
+        if has_old_txt:
+            new_txt = new_dir / "report.txt"
+            old_txt.rename(new_txt)
+            click.echo(f"    Moved: bids-validator.txt -> bids-validator/report.txt")
+
+        # Stage changes
+        subprocess.run(
+            ["git", "-C", str(study_path), "add", "-A", "derivatives/"],
+            check=True,
+            capture_output=True,
+        )
+
+        return True
+
+    except Exception as e:
+        click.echo(f"    ERROR: Failed to migrate validation outputs: {e}", err=True)
+        return False
+
+
 def _rename_submodule_path(
     repo_path: Path,
     old_path: str,
@@ -145,10 +217,16 @@ def migrate(
 ) -> None:
     """Migrate study structures to new naming conventions.
 
-    Updates existing studies to follow FR-003d, FR-003e, and FR-003f:
+    Updates existing studies to follow current spec requirements:
+
+    Submodule naming (FR-003d, FR-003e, FR-003f):
     - Renames sourcedata/raw to sourcedata/{dataset_id}
     - Renames derivatives/Custom code-unknown to derivatives/custom-{dataset_id}
     - Sanitizes derivative directory names (replaces special chars with +)
+
+    Validation output (FR-015):
+    - Moves derivatives/bids-validator.json to derivatives/bids-validator/report.json
+    - Moves derivatives/bids-validator.txt to derivatives/bids-validator/report.txt
 
     Arguments:
         STUDY_IDS: Optional list of study IDs to migrate. If not provided,
@@ -201,6 +279,10 @@ def migrate(
         changes_made = False
 
         click.echo(f"\n{study_id}:")
+
+        # Migrate validation output format (FR-015)
+        if _migrate_validation_output(study_path, dry_run):
+            changes_made = True
 
         for submodule_name, config in submodules.items():
             old_path = config.get("path", "")
@@ -257,9 +339,10 @@ def migrate(
                             str(study_path),
                             "commit",
                             "-m",
-                            "Migrate to new naming conventions (FR-003d/e/f)\n\n"
-                            "- Renamed sourcedata/raw to sourcedata/{dataset_id}\n"
-                            "- Sanitized derivative directory names",
+                            "Migrate to new spec conventions\n\n"
+                            "- Renamed sourcedata/raw to sourcedata/{dataset_id} (FR-003d)\n"
+                            "- Sanitized derivative directory names (FR-003e/f)\n"
+                            "- Moved validation outputs to derivatives/bids-validator/ (FR-015)",
                         ],
                         check=True,
                         capture_output=True,

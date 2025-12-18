@@ -1,7 +1,13 @@
 """BIDS validator integration.
 
 Implements FR-015: Run bids-validator-deno on study datasets and store
-JSON and text outputs under derivatives/.
+JSON and text outputs under derivatives/bids-validator/.
+
+Output structure:
+    derivatives/bids-validator/
+        version.txt   - Validator version (from --version)
+        report.json   - Machine-readable validation results
+        report.txt    - Human-readable summary
 """
 
 import csv
@@ -15,6 +21,9 @@ from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# Output directory name under derivatives/
+VALIDATOR_OUTPUT_DIR = "bids-validator"
 
 
 class ValidationStatus(Enum):
@@ -42,13 +51,19 @@ def find_validator() -> Optional[tuple[list[str], str]]:
     """Find the BIDS validator executable.
 
     Tries in order:
-    1. bids-validator (pip-installed deno version)
-    2. deno run with bids_validator from deno.land
-    3. npx bids-validator (node version, slower)
+    1. uvx bids-validator (preferred, fast via uv)
+    2. bids-validator (pip-installed deno version)
+    3. deno run with bids_validator from deno.land
+    4. npx bids-validator (node version, slower)
 
     Returns:
         Tuple of (command_args, validator_type) or None if not found
     """
+    # Try uvx (fastest, recommended)
+    uvx = shutil.which("uvx")
+    if uvx:
+        return ([uvx, "bids-validator"], "uvx")
+
     # Try pip-installed bids-validator (deno compiled)
     bids_validator = shutil.which("bids-validator")
     if bids_validator:
@@ -76,12 +91,105 @@ def find_validator() -> Optional[tuple[list[str], str]]:
     return None
 
 
+def get_validator_version(validator_cmd: list[str], timeout: int = 30) -> Optional[str]:
+    """Get the version of the BIDS validator.
+
+    Args:
+        validator_cmd: Validator command arguments
+        timeout: Timeout in seconds
+
+    Returns:
+        Version string or None if failed
+    """
+    try:
+        result = subprocess.run(
+            validator_cmd + ["--version"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if result.returncode == 0 and result.stdout:
+            return result.stdout.strip()
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to get validator version: {e}")
+        return None
+
+
+def needs_validation(study_path: Path) -> bool:
+    """Check if a study needs (re)validation.
+
+    Returns True if:
+    - No validation output exists
+    - Study has commits newer than the last validation
+
+    Args:
+        study_path: Path to study directory
+
+    Returns:
+        True if validation should be run
+    """
+    validator_dir = study_path / "derivatives" / VALIDATOR_OUTPUT_DIR
+    version_file = validator_dir / "version.txt"
+
+    # No validation output exists
+    if not version_file.exists():
+        return True
+
+    try:
+        # Get the commit when validation was last run
+        # (the commit that added/modified the validation output)
+        result = subprocess.run(
+            [
+                "git", "-C", str(study_path),
+                "log", "-1", "--format=%H",
+                "--", f"derivatives/{VALIDATOR_OUTPUT_DIR}",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        last_validation_commit = result.stdout.strip()
+
+        if not last_validation_commit:
+            # Validation output not tracked in git yet
+            return True
+
+        # Check if there are any commits since the validation commit
+        # (excluding the validation directory itself)
+        result = subprocess.run(
+            [
+                "git", "-C", str(study_path),
+                "log", "--oneline",
+                f"{last_validation_commit}..HEAD",
+                "--", ".",
+                f":!derivatives/{VALIDATOR_OUTPUT_DIR}",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        # If there are commits after validation (excluding validation dir), need to revalidate
+        return bool(result.stdout.strip())
+
+    except subprocess.CalledProcessError as e:
+        logger.debug(f"Git command failed for {study_path}: {e}")
+        # If git fails, assume validation is needed
+        return True
+
+
 def run_validation(
     study_path: Path,
     validator_cmd: Optional[list[str]] = None,
     timeout: int = 600,
 ) -> ValidationResult:
     """Run BIDS validation on a study dataset.
+
+    Outputs are stored in derivatives/bids-validator/:
+        version.txt   - Validator version
+        report.json   - Machine-readable results
+        report.txt    - Human-readable summary
 
     Args:
         study_path: Path to study directory
@@ -107,12 +215,20 @@ def run_validation(
     else:
         validator_type = "custom"
 
-    # Create derivatives directory if needed
-    derivatives_dir = study_path / "derivatives"
-    derivatives_dir.mkdir(exist_ok=True)
+    # Create output directory: derivatives/bids-validator/
+    output_dir = study_path / "derivatives" / VALIDATOR_OUTPUT_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    json_output_path = derivatives_dir / "bids-validator.json"
-    text_output_path = derivatives_dir / "bids-validator.txt"
+    version_path = output_dir / "version.txt"
+    json_output_path = output_dir / "report.json"
+    text_output_path = output_dir / "report.txt"
+
+    # Get and save validator version
+    validator_version = get_validator_version(validator_cmd)
+    if validator_version:
+        with open(version_path, "w") as f:
+            f.write(validator_version + "\n")
+        logger.info(f"Validator version: {validator_version}")
 
     # Build command - run validation with JSON output
     # Note: bids-validator v2.x uses --json for JSON to stdout
@@ -161,6 +277,7 @@ def run_validation(
             warning_count=warning_count,
             json_output=json_data,
             text_output=text_output,
+            validator_version=validator_version,
         )
 
     except subprocess.TimeoutExpired:
@@ -181,6 +298,7 @@ def run_validation(
             error_count=0,
             warning_count=0,
             text_output=text_output,
+            validator_version=validator_version,
         )
 
     except Exception as e:
@@ -193,6 +311,7 @@ def run_validation(
             error_count=0,
             warning_count=0,
             text_output=text_output,
+            validator_version=validator_version,
         )
 
 

@@ -12,6 +12,7 @@ from openneuro_studies.cli.discover import discover as discover_cmd
 from openneuro_studies.cli.init import init as init_cmd
 from openneuro_studies.cli.migrate import migrate as migrate_cmd
 from openneuro_studies.cli.organize import organize as organize_cmd
+from openneuro_studies.cli.provision import provision as provision_cmd
 from openneuro_studies.cli.publish import publish as publish_cmd
 from openneuro_studies.cli.unpublish import unpublish as unpublish_cmd
 
@@ -92,6 +93,7 @@ def cli(ctx: click.Context, config: str, log_level: str) -> None:
 cli.add_command(init_cmd, name="init")
 cli.add_command(discover_cmd, name="discover")
 cli.add_command(organize_cmd, name="organize")
+cli.add_command(provision_cmd, name="provision")
 cli.add_command(migrate_cmd, name="migrate")
 cli.add_command(publish_cmd, name="publish")
 cli.add_command(unpublish_cmd, name="unpublish")
@@ -324,15 +326,27 @@ def metadata_sync(study_ids: tuple[str, ...]) -> None:
     default=True,
     help="Commit validation results with datalad save",
 )
+@click.option(
+    "--when",
+    type=click.Choice(["always", "new-commits"], case_sensitive=False),
+    default="new-commits",
+    help="When to run validation: 'always' or 'new-commits' (skip if no changes since last validation)",
+    show_default=True,
+)
 def validate(
     study_ids: tuple[str, ...],
     timeout: int,
     update_tsv: bool,
     commit: bool,
+    when: str,
 ) -> None:
     """Run BIDS validation on study datasets.
 
-    Executes bids-validator and stores results in derivatives/bids-validator.{json,txt}.
+    Executes bids-validator and stores results in derivatives/bids-validator/:
+    - version.txt: Validator version
+    - report.json: Machine-readable results
+    - report.txt: Human-readable summary
+
     Updates bids_valid column in studies.tsv.
 
     Arguments:
@@ -341,10 +355,12 @@ def validate(
     Example:
         openneuro-studies validate
         openneuro-studies validate study-ds000001
+        openneuro-studies validate --when=always  # Force revalidation
     """
     from openneuro_studies.validation import (
         ValidationStatus,
         find_validator,
+        needs_validation,
         run_validation,
         update_studies_tsv_validation,
     )
@@ -397,8 +413,15 @@ def validate(
         ValidationStatus.ERRORS: 0,
         ValidationStatus.NOT_AVAILABLE: 0,
     }
+    skipped_count = 0
 
     for study_path in study_paths:
+        # Check if validation is needed (--when option)
+        if when.lower() == "new-commits" and not needs_validation(study_path):
+            click.echo(f"\n  {study_path.name}: skipped (no changes)")
+            skipped_count += 1
+            continue
+
         click.echo(f"\n  Validating {study_path.name}...", nl=False)
 
         result = run_validation(
@@ -440,7 +463,9 @@ def validate(
     click.echo(f"  Warnings: {results_summary[ValidationStatus.WARNINGS]}")
     click.echo(f"  Errors:   {results_summary[ValidationStatus.ERRORS]}")
     click.echo(f"  N/A:      {results_summary[ValidationStatus.NOT_AVAILABLE]}")
-    click.echo("\nResults stored in derivatives/bids-validator.{json,txt} per study.")
+    if skipped_count > 0:
+        click.echo(f"  Skipped:  {skipped_count} (no changes since last validation)")
+    click.echo("\nResults stored in derivatives/bids-validator/ per study.")
 
     # Commit changes if requested
     if commit:
@@ -476,12 +501,14 @@ def validate(
                 pass
 
         # Then commit at root level with stats
-        stats = {
+        stats: dict[str, int | str] = {
             "valid": results_summary[ValidationStatus.VALID],
             "warnings": results_summary[ValidationStatus.WARNINGS],
             "errors": results_summary[ValidationStatus.ERRORS],
             "n/a": results_summary[ValidationStatus.NOT_AVAILABLE],
         }
+        if skipped_count > 0:
+            stats["skipped"] = skipped_count
         success = save_with_stats(
             message="Run BIDS validation",
             stats=stats,

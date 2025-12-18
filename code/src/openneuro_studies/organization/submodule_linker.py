@@ -29,7 +29,7 @@ def link_submodule(
 
     Args:
         parent_repo: Path to parent repository
-        submodule_path: Relative path where submodule should appear (e.g., "sourcedata/raw")
+        submodule_path: Relative path where submodule should appear (e.g., "sourcedata/ds000001")
         url: URL of submodule repository
         commit_sha: Specific commit SHA to reference
         submodule_name: Name for submodule (defaults to path with slashes replaced)
@@ -41,7 +41,7 @@ def link_submodule(
     Examples:
         >>> link_submodule(
         ...     parent_repo=Path("study-ds000001"),
-        ...     submodule_path="sourcedata/raw",
+        ...     submodule_path="sourcedata/ds000001",
         ...     url="https://github.com/OpenNeuroDatasets/ds000001",
         ...     commit_sha="f8e27ac909e50b5b5e311f6be271f0b1757ebb7b",
         ...     datalad_id="9850e7d6-100e-11e5-96f6-002590c1b0b6"
@@ -57,13 +57,13 @@ def link_submodule(
     with parent_repo_lock:
         try:
             # 1. Ensure parent directory for submodule exists
-            # (e.g., "sourcedata" must exist for "sourcedata/raw")
+            # (e.g., "sourcedata" must exist for "sourcedata/ds000001")
             submodule_dir = parent_repo / submodule_path
             submodule_dir.parent.mkdir(parents=True, exist_ok=True)
 
             # Note: We do NOT create the submodule directory itself. Git handles this
             # when the submodule is cloned. Creating an empty directory causes:
-            # "error: 'sourcedata/raw' does not have a commit checked out"
+            # "error: 'sourcedata/ds000001' does not have a commit checked out"
 
             # 2. Configure .gitmodules - path
             subprocess.run(
@@ -182,7 +182,7 @@ def is_submodule_linked(parent_repo: Path, submodule_path: str) -> bool:
         True if submodule is already linked, False otherwise
 
     Examples:
-        >>> is_submodule_linked(Path("study-ds000001"), "sourcedata/raw")
+        >>> is_submodule_linked(Path("study-ds000001"), "sourcedata/ds000001")
         True
     """
     try:
