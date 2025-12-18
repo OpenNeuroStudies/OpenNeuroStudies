@@ -1,0 +1,54 @@
+Validator output: Update specification and then implementation and existing
+studies accordingly to keep validator output not directly in files under
+derivatives/, but rather under `derivatives/bids-validator/report.txt,json}`.
+Also provision in that folder file `version.txt` which would be output of
+running `bids-validator-deno --version`.
+
+Provisioning and running commands: Add to specification overall strong
+preference to run external commands via `datalad run` or even `datalad
+containers-run` (later).  To facilitate that, then to run validator etc, we
+would like to add to openneuro-studies a command `provision` where for a given
+set of studies (all by default) we would populate desired components from a
+template (to be initiated) managed by `copier`.  So, we would like to shift
+some functionality to `copier` to develop and maintain the overall study layout
+and set of scripts etc to populate under `code/` folder.  In that copier
+template right away provision to have a script `code/run-bids-validator` which
+would have invocation like
+
+    #!/bin/bash
+    
+    set -u
+    od=derivatives/bids-validator
+    cmd="uvx bids-validator-deno"
+    mkdir -p "$od" && $cmd --version > "$od/version.txt" \
+    && {
+        $cmd -o "$od/report.txt" .
+        $cmd --json -o "$od/report.json" .
+    }
+
+Then, altogether, run external command via `datalad run` , so in this
+case we would be able to do
+
+    datalad run code/run-bids-validator
+
+There could also be README.md template on the top level of the dataset to
+describe what such a study dataset is about, point to BIDS specification
+describing "study" type datasets, and what to find where  in it. FWIW, a
+template (not copier) for overall study dataset could be found under
+https://github.com/emberarchive/study-template worth reviewing and adopting for
+some aspects (e.g. adding `scratch/` with `.gitignore` for it).
+
+Review how it is done typically with copier, but in the "provisioned"
+study dataset make sure to store some reflection of the version of the
+template, so we could easily determine if templated content is up-to-date.
+The `openneuro-studies provision`
+
+Efficient invocations:    Then check in the specification if we provisioned for
+commands like validate etc, an option like `--when=new-commits,always` so now
+it is "always" as we always redo validation.  But then we need to switch by
+default to  (re)run e.g. validation only if study changed (hence "new-commits")
+since prior run on validation which should be discerned using `git log` or `git
+diff` commands, as if there are any commits in the dataset since last time we
+committed `derivatives/bids-validator`.  So it is not unlike `datalad push
+--since=^` option which pushes only subdatasets which changed since last
+push.
