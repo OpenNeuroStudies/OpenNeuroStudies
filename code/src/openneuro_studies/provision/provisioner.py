@@ -5,16 +5,16 @@ Provisions study datasets with templated content:
 - README.md: Study dataset overview
 - .openneuro-studies/template-version: Tracks which template version was applied
 
-Future extension: Use copier for more sophisticated template management.
+Uses copier templates from templates/study/ directory.
 """
 
 import logging
+import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-
-from openneuro_studies import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,9 @@ TEMPLATE_VERSION_FILE = ".openneuro-studies/template-version"
 
 # Current template version (increment when template changes)
 TEMPLATE_VERSION = "1.0.0"
+
+# Path to copier template (relative to this module)
+TEMPLATE_DIR = Path(__file__).parent / "templates" / "study"
 
 
 @dataclass
@@ -80,10 +83,163 @@ def needs_provisioning(study_path: Path, force: bool = False) -> bool:
     return current_version != TEMPLATE_VERSION
 
 
+def _is_copier_available() -> bool:
+    """Check if copier is available.
+
+    Checks both system PATH and python -m copier.
+    """
+    if shutil.which("copier") is not None:
+        return True
+    # Check if copier is available via python -m
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "copier", "--version"],
+            capture_output=True,
+            text=True,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _get_copier_cmd() -> list[str]:
+    """Get command to run copier."""
+    if shutil.which("copier") is not None:
+        return ["copier"]
+    return [sys.executable, "-m", "copier"]
+
+
+def _provision_with_copier(
+    study_path: Path,
+    study_id: str,
+    dataset_id: str,
+    github_org: str = "OpenNeuroStudies",
+) -> tuple[list[str], list[str]]:
+    """Provision using copier template.
+
+    Args:
+        study_path: Path to study directory
+        study_id: Study identifier
+        dataset_id: Dataset identifier
+        github_org: GitHub organization
+
+    Returns:
+        Tuple of (files_created, files_updated)
+
+    Raises:
+        RuntimeError: If copier fails
+    """
+    files_created: list[str] = []
+    files_updated: list[str] = []
+
+    # Track existing files before copier runs
+    files_to_check = [
+        "code/run-bids-validator",
+        "README.md",
+        TEMPLATE_VERSION_FILE,
+    ]
+    existing_files = {f for f in files_to_check if (study_path / f).exists()}
+
+    # Run copier with answers
+    cmd = _get_copier_cmd() + [
+        "copy",
+        "--force",  # Overwrite existing files
+        "--data", f"study_id={study_id}",
+        "--data", f"dataset_id={dataset_id}",
+        "--data", f"template_version={TEMPLATE_VERSION}",
+        "--data", f"github_org={github_org}",
+        str(TEMPLATE_DIR),
+        str(study_path),
+    ]
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"copier failed: {result.stderr}")
+
+    # Determine which files were created vs updated
+    for f in files_to_check:
+        if (study_path / f).exists():
+            if f in existing_files:
+                files_updated.append(f)
+            else:
+                files_created.append(f)
+
+    # Make script executable
+    script_path = study_path / "code" / "run-bids-validator"
+    if script_path.exists():
+        script_path.chmod(0o755)
+
+    return files_created, files_updated
+
+
+def _provision_with_inline_templates(
+    study_path: Path,
+    study_id: str,
+    dataset_id: str,
+    github_org: str = "OpenNeuroStudies",
+) -> tuple[list[str], list[str]]:
+    """Provision using inline Python templates (fallback).
+
+    Args:
+        study_path: Path to study directory
+        study_id: Study identifier
+        dataset_id: Dataset identifier
+        github_org: GitHub organization
+
+    Returns:
+        Tuple of (files_created, files_updated)
+    """
+    files_created: list[str] = []
+    files_updated: list[str] = []
+
+    # Create code/ directory
+    code_dir = study_path / "code"
+    code_dir.mkdir(exist_ok=True)
+
+    # Create run-bids-validator script
+    validator_script = code_dir / "run-bids-validator"
+    script_existed = validator_script.exists()
+    _write_validator_script(validator_script)
+    if script_existed:
+        files_updated.append("code/run-bids-validator")
+    else:
+        files_created.append("code/run-bids-validator")
+
+    # Create README.md
+    readme_file = study_path / "README.md"
+    readme_existed = readme_file.exists()
+    _write_readme(readme_file, study_id, dataset_id, github_org)
+    if readme_existed:
+        files_updated.append("README.md")
+    else:
+        files_created.append("README.md")
+
+    # Create .openneuro-studies/ directory and write template version file
+    openneuro_studies_dir = study_path / TEMPLATE_VERSION_DIR
+    openneuro_studies_dir.mkdir(exist_ok=True)
+
+    version_file = study_path / TEMPLATE_VERSION_FILE
+    version_existed = version_file.exists()
+    version_file.write_text(f"{TEMPLATE_VERSION}\n")
+    if version_existed:
+        files_updated.append(TEMPLATE_VERSION_FILE)
+    else:
+        files_created.append(TEMPLATE_VERSION_FILE)
+
+    return files_created, files_updated
+
+
 def provision_study(
     study_path: Path,
     force: bool = False,
     dry_run: bool = False,
+    github_org: str = "OpenNeuroStudies",
+    use_copier: Optional[bool] = None,
 ) -> ProvisionResult:
     """Provision a study dataset with templated content.
 
@@ -96,6 +252,8 @@ def provision_study(
         study_path: Path to study directory
         force: Force re-provisioning even if already up-to-date
         dry_run: Only check what would be done
+        github_org: GitHub organization for links
+        use_copier: Use copier templates (None=auto-detect, True=require, False=inline)
 
     Returns:
         ProvisionResult with details of changes
@@ -103,6 +261,9 @@ def provision_study(
     study_id = study_path.name
     files_created: list[str] = []
     files_updated: list[str] = []
+
+    # Extract dataset ID from study ID (study-ds000001 -> ds000001)
+    dataset_id = study_id.replace("study-", "") if study_id.startswith("study-") else study_id
 
     if not study_path.exists():
         return ProvisionResult(
@@ -129,7 +290,7 @@ def provision_study(
         files_to_check = [
             "code/run-bids-validator",
             "README.md",
-            TEMPLATE_VERSION_FILE,  # .openneuro-studies/template-version
+            TEMPLATE_VERSION_FILE,
         ]
         for file in files_to_check:
             file_path = study_path / file
@@ -147,39 +308,29 @@ def provision_study(
         )
 
     try:
-        # Create code/ directory
-        code_dir = study_path / "code"
-        code_dir.mkdir(exist_ok=True)
+        # Determine whether to use copier
+        if use_copier is None:
+            use_copier = _is_copier_available() and TEMPLATE_DIR.exists()
+        elif use_copier and not _is_copier_available():
+            return ProvisionResult(
+                study_id=study_id,
+                provisioned=False,
+                files_created=[],
+                files_updated=[],
+                template_version=TEMPLATE_VERSION,
+                error="copier is not installed. Install with: pip install copier",
+            )
 
-        # Create run-bids-validator script
-        validator_script = code_dir / "run-bids-validator"
-        script_existed = validator_script.exists()
-        _write_validator_script(validator_script)
-        if script_existed:
-            files_updated.append("code/run-bids-validator")
+        if use_copier:
+            logger.info(f"Provisioning {study_id} with copier template")
+            files_created, files_updated = _provision_with_copier(
+                study_path, study_id, dataset_id, github_org
+            )
         else:
-            files_created.append("code/run-bids-validator")
-
-        # Create README.md
-        readme_file = study_path / "README.md"
-        readme_existed = readme_file.exists()
-        _write_readme(readme_file, study_id)
-        if readme_existed:
-            files_updated.append("README.md")
-        else:
-            files_created.append("README.md")
-
-        # Create .openneuro-studies/ directory and write template version file
-        openneuro_studies_dir = study_path / TEMPLATE_VERSION_DIR
-        openneuro_studies_dir.mkdir(exist_ok=True)
-
-        version_file = study_path / TEMPLATE_VERSION_FILE
-        version_existed = version_file.exists()
-        version_file.write_text(f"{TEMPLATE_VERSION}\n")
-        if version_existed:
-            files_updated.append(TEMPLATE_VERSION_FILE)
-        else:
-            files_created.append(TEMPLATE_VERSION_FILE)
+            logger.info(f"Provisioning {study_id} with inline templates")
+            files_created, files_updated = _provision_with_inline_templates(
+                study_path, study_id, dataset_id, github_org
+            )
 
         return ProvisionResult(
             study_id=study_id,
@@ -278,11 +429,8 @@ echo "Validation complete. Results in $od/"
     logger.debug(f"Created validator script: {path}")
 
 
-def _write_readme(path: Path, study_id: str) -> None:
+def _write_readme(path: Path, study_id: str, dataset_id: str, github_org: str) -> None:
     """Write study README.md template."""
-    # Extract dataset ID from study ID (study-ds000001 -> ds000001)
-    dataset_id = study_id.replace("study-", "") if study_id.startswith("study-") else study_id
-
     readme = f"""# {study_id}
 
 BIDS study dataset aggregating OpenNeuro dataset [{dataset_id}](https://openneuro.org/datasets/{dataset_id}) and its derivatives.
@@ -296,7 +444,7 @@ This is a BIDS [DatasetType: "study"](https://bids.neuroimaging.io/extensions/be
 
 ## Contents
 
-- `rawdata/` - Link to raw BIDS dataset (git submodule)
+- `sourcedata/` - Link to source BIDS dataset(s) (git submodules)
 - `derivatives/` - Processed data derivatives:
   - `bids-validator/` - BIDS validation results
   - Other derivatives linked as submodules
@@ -319,8 +467,9 @@ Results are stored in `derivatives/bids-validator/`:
 ## Links
 
 - **OpenNeuro**: https://openneuro.org/datasets/{dataset_id}
+- **GitHub**: https://github.com/{github_org}/{study_id}
 - **BIDS BEP035**: https://bids.neuroimaging.io/extensions/beps/bep_035.html
-- **OpenNeuroStudies**: https://github.com/OpenNeuroStudies
+- **OpenNeuroStudies**: https://github.com/{github_org}
 
 ## License
 
