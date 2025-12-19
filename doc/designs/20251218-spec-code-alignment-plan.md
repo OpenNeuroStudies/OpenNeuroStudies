@@ -1,7 +1,7 @@
 # Spec-Code Alignment Plan
 
 Date: 2025-12-18
-Status: Implementation Complete
+Status: ✅ COMPLETE
 
 ## Summary
 
@@ -77,17 +77,17 @@ If any validation was run, outputs may be at old locations:
 ### Template Development
 
 7. ✅ **Add unit tests for provision functionality** - Test template output verification
-8. **Create copier template** - Populate `templates/study/` with copier template files:
+8. ✅ **Create copier template** - Populate `templates/study/` with copier template files:
    - `copier.yaml` - Copier configuration with template variables
    - `code/run-bids-validator.jinja` - Validator script template
    - `README.md.jinja` - Study README template
    - `.openneuro-studies/template-version.jinja` - Version tracking
-9. **Add integration tests for copier** - Test actual copier rendering works correctly
+9. ✅ **Add integration tests for copier** - Test actual copier rendering works correctly (10 tests in `test_provision_copier.py`)
 
 ### Operations - Existing Dataset Updates
 
-10. **Provision existing studies** - Run `openneuro-studies provision` on all study-* directories
-11. **Re-run validation** - Run `openneuro-studies validate --when=always` to regenerate outputs in new location
+10. ✅ **Provision existing studies** - Run `openneuro-studies provision` on all study-* directories
+11. ✅ **Re-run validation** - Run `openneuro-studies validate` to regenerate outputs in new location
 
 ## Implementation Order
 
@@ -101,38 +101,36 @@ Phase 2: Code Documentation (item 4) ✅
 Phase 3: Migration (items 5-6) ✅
   └── Extend migrate command to handle validation output format
 
-Phase 4: Template Development (items 7-9)
+Phase 4: Template Development (items 7-9) ✅
   ├── Unit tests for provision output (item 7) ✅
-  ├── Create copier template files (item 8)
-  └── Integration tests for copier (item 9)
+  ├── Create copier template files (item 8) ✅
+  └── Integration tests for copier (item 9) ✅
 
-Phase 5: Operations (items 10-11)
-  └── Run provision and validate on existing studies
+Phase 5: Operations (items 10-11) ✅
+  └── Run provision and validate on existing studies ✅
 ```
 
 ## Current Implementation Status
 
-The provision command currently uses **inline Python templates** (string formatting in `provisioner.py`).
-The `templates/study/` directory is empty - copier template files need to be created.
+**COMPLETE** - All TODOs have been implemented:
 
-Two approaches are possible:
-1. **Keep inline templates** - Simpler, already tested, no external dependency
-2. **Migrate to copier** - More flexible, industry standard, enables user customization
-
-The unit tests in `test_provision.py` verify the **output** of provisioning regardless of implementation,
-so they will work with either approach.
+- Copier is now a **required dependency** (no inline template fallback - DRY principle)
+- `templates/study/` contains copier template files
+- All 7 existing studies have been provisioned and validated
+- Validation outputs use native bids-validator text (not custom formatting)
+- 10 integration tests verify copier template rendering
 
 ## Existing Studies Current State
 
 | Study | sourcedata/ | derivatives/ | code/ | README | .openneuro-studies/ |
 |-------|-------------|--------------|-------|--------|---------------------|
-| study-ds000001 | ✅ ds000001/ | ✅ fMRIPrep-21.0.1/, MRIQC-0.16.1/ | ❌ | ❌ | ❌ |
-| study-ds005256 | ✅ ds005256/ | ❌ (none) | ❌ | ❌ | ❌ |
-| study-ds006131 | ✅ ds006131/ | ✅ 4 derivatives | ❌ | ❌ | ❌ |
-| study-ds006189 | ✅ 2 sources | ✅ 1 derivative | ❌ | ❌ | ❌ |
-| study-ds006190 | ✅ 3 sources | ✅ 1 derivative | ❌ | ❌ | ❌ |
-| study-ds006191 | ✅ 4 sources | ✅ custom-ds006191 | ❌ | ❌ | ❌ |
-| study-ds006192 | ✅ 4 sources | ✅ xcp_d-0.10.6 | ❌ | ❌ | ❌ |
+| study-ds000001 | ✅ ds000001/ | ✅ fMRIPrep-21.0.1/, MRIQC-0.16.1/, bids-validator/ | ✅ | ✅ | ✅ |
+| study-ds005256 | ✅ ds005256/ | ✅ bids-validator/ | ✅ | ✅ | ✅ |
+| study-ds006131 | ✅ ds006131/ | ✅ 4 derivatives + bids-validator/ | ✅ | ✅ | ✅ |
+| study-ds006189 | ✅ 2 sources | ✅ 1 derivative + bids-validator/ | ✅ | ✅ | ✅ |
+| study-ds006190 | ✅ 3 sources | ✅ 1 derivative + bids-validator/ | ✅ | ✅ | ✅ |
+| study-ds006191 | ✅ 4 sources | ✅ custom-ds006191 + bids-validator/ | ✅ | ✅ | ✅ |
+| study-ds006192 | ✅ 4 sources | ✅ xcp_d-0.10.6 + bids-validator/ | ✅ | ✅ | ✅ |
 
 All studies use correct `sourcedata/{dataset_id}/` naming (FR-003d compliant).
-All studies need provisioning to add code/, README.md, .openneuro-studies/template-version.
+All studies have been provisioned with template version 1.2.0.
