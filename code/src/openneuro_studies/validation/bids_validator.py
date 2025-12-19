@@ -51,9 +51,9 @@ def find_validator() -> Optional[tuple[list[str], str]]:
     """Find the BIDS validator executable.
 
     Tries in order:
-    1. uvx bids-validator (preferred, fast via uv)
-    2. bids-validator (pip-installed deno version)
-    3. deno run with bids_validator from deno.land
+    1. uvx bids-validator-deno (preferred, fast via uv)
+    2. bids-validator-deno (pip-installed deno version)
+    3. deno run with @bids/validator from jsr
     4. npx bids-validator (node version, slower)
 
     Returns:
@@ -62,12 +62,12 @@ def find_validator() -> Optional[tuple[list[str], str]]:
     # Try uvx (fastest, recommended)
     uvx = shutil.which("uvx")
     if uvx:
-        return ([uvx, "bids-validator"], "uvx")
+        return ([uvx, "bids-validator-deno"], "uvx")
 
-    # Try pip-installed bids-validator (deno compiled)
-    bids_validator = shutil.which("bids-validator")
+    # Try pip-installed bids-validator-deno
+    bids_validator = shutil.which("bids-validator-deno")
     if bids_validator:
-        return ([bids_validator], "bids-validator")
+        return ([bids_validator], "bids-validator-deno")
 
     # Try deno direct execution
     deno = shutil.which("deno")
@@ -78,7 +78,7 @@ def find_validator() -> Optional[tuple[list[str], str]]:
                 "run",
                 "--allow-read",
                 "--allow-env",
-                "https://deno.land/x/bids_validator/bids-validator.ts",
+                "jsr:@bids/validator",
             ],
             "deno",
         )

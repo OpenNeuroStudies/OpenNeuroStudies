@@ -24,7 +24,7 @@ TEMPLATE_VERSION_DIR = ".openneuro-studies"
 TEMPLATE_VERSION_FILE = ".openneuro-studies/template-version"
 
 # Current template version (increment when template changes)
-TEMPLATE_VERSION = "1.0.0"
+TEMPLATE_VERSION = "1.1.0"
 
 # Path to copier template (relative to this module)
 TEMPLATE_DIR = Path(__file__).parent / "templates" / "study"

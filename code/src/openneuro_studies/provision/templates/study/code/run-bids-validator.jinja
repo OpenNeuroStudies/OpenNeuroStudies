@@ -14,15 +14,15 @@ od=derivatives/bids-validator
 
 # Command to run (prefer uvx for speed)
 if command -v uvx >/dev/null 2>&1; then
-    cmd="uvx bids-validator"
-elif command -v bids-validator >/dev/null 2>&1; then
-    cmd="bids-validator"
+    cmd="uvx bids-validator-deno"
+elif command -v bids-validator-deno >/dev/null 2>&1; then
+    cmd="bids-validator-deno"
 elif command -v deno >/dev/null 2>&1; then
-    cmd="deno run --allow-read --allow-env https://deno.land/x/bids_validator/bids-validator.ts"
+    cmd="deno run --allow-read --allow-env jsr:@bids/validator"
 elif command -v npx >/dev/null 2>&1; then
     cmd="npx -y bids-validator"
 else
-    echo "Error: No BIDS validator found. Install with: pip install bids-validator"
+    echo "Error: No BIDS validator found. Install with: uv tool install bids-validator-deno"
     exit 1
 fi
 
