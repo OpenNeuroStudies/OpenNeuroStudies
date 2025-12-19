@@ -24,7 +24,7 @@ dataset_id:
 template_version:
   type: str
   help: Template version being applied
-  default: "1.1.0"
+  default: "1.2.0"
 
 github_org:
   type: str

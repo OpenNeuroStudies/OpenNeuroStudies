@@ -4,8 +4,8 @@
 #
 # Outputs are stored in derivatives/bids-validator/:
 #   version.txt  - Validator version
-#   report.json  - Machine-readable results
-#   report.txt   - Human-readable summary
+#   report.json  - Machine-readable results (--json)
+#   report.txt   - Human-readable output
 
 set -eu
 
@@ -33,33 +33,7 @@ mkdir -p "$od"
 $cmd --version > "$od/version.txt" 2>&1 || echo "unknown" > "$od/version.txt"
 
 # Run validation with JSON output
-echo "Running BIDS validation..."
 $cmd --json . > "$od/report.json" 2>&1 || true
 
-# Generate text summary
-{
-    echo "BIDS Validation Summary"
-    echo "============================================================"
-    echo ""
-
-    if [ -f "$od/report.json" ]; then
-        # Extract error and warning counts from JSON
-        errors=$(jq -r '.issues.errors | length // 0' "$od/report.json" 2>/dev/null || echo "0")
-        warnings=$(jq -r '.issues.warnings | length // 0' "$od/report.json" 2>/dev/null || echo "0")
-
-        echo "Errors: $errors"
-        echo "Warnings: $warnings"
-        echo ""
-
-        if [ "$errors" = "0" ] && [ "$warnings" = "0" ]; then
-            echo "Dataset is BIDS valid!"
-        fi
-    else
-        echo "No JSON output available"
-    fi
-
-    echo ""
-    echo "Validator version: $(cat "$od/version.txt")"
-} > "$od/report.txt"
-
-echo "Validation complete. Results in $od/"
+# Run validation with text output
+$cmd . > "$od/report.txt" 2>&1 || true
