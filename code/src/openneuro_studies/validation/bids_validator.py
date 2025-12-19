@@ -230,20 +230,13 @@ def run_validation(
             f.write(validator_version + "\n")
         logger.info(f"Validator version: {validator_version}")
 
-    # Build command - run validation with JSON output
-    # Note: bids-validator v2.x uses --json for JSON to stdout
-    # Output file option may vary between versions
-    cmd = validator_cmd + [
-        str(study_path),
-        "--json",
-    ]
-
-    logger.info(f"Running: {' '.join(cmd)}")
-
     try:
-        # Run validator
-        result = subprocess.run(
-            cmd,
+        # Run 1: Get JSON output for machine-readable results
+        json_cmd = validator_cmd + [str(study_path), "--json"]
+        logger.info(f"Running (JSON): {' '.join(json_cmd)}")
+
+        json_result = subprocess.run(
+            json_cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -252,24 +245,34 @@ def run_validation(
 
         # Parse JSON output from stdout
         json_data = None
-        if result.stdout and result.stdout.strip():
+        if json_result.stdout and json_result.stdout.strip():
             try:
-                json_data = json.loads(result.stdout)
+                json_data = json.loads(json_result.stdout)
                 # Write to file for persistence
                 with open(json_output_path, "w") as f:
                     json.dump(json_data, f, indent=2)
             except json.JSONDecodeError:
-                logger.debug(f"Failed to parse JSON from stdout: {result.stdout[:200]}")
+                logger.debug(f"Failed to parse JSON from stdout: {json_result.stdout[:200]}")
 
-        # Generate text summary
-        text_output = _generate_text_summary(result, json_data)
+        # Run 2: Get native text output for human-readable report
+        text_cmd = validator_cmd + [str(study_path)]
+        logger.info(f"Running (text): {' '.join(text_cmd)}")
 
-        # Write text output
+        text_result = subprocess.run(
+            text_cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=study_path.parent,
+        )
+
+        # Write native validator text output directly
+        text_output = text_result.stdout or text_result.stderr or ""
         with open(text_output_path, "w") as f:
             f.write(text_output)
 
         # Determine status from JSON data
-        status, error_count, warning_count = _parse_validation_result(json_data, result)
+        status, error_count, warning_count = _parse_validation_result(json_data, json_result)
 
         return ValidationResult(
             status=status,
@@ -313,85 +316,6 @@ def run_validation(
             text_output=text_output,
             validator_version=validator_version,
         )
-
-
-def _generate_text_summary(
-    result: subprocess.CompletedProcess,
-    json_data: Optional[dict],
-) -> str:
-    """Generate human-readable text summary of validation."""
-    lines = []
-
-    lines.append("BIDS Validation Summary")
-    lines.append("=" * 60)
-    lines.append("")
-
-    # Always include stdout/stderr if validation didn't produce JSON
-    if not json_data and (result.stdout or result.stderr):
-        if result.stderr:
-            lines.append("STDERR:")
-            lines.append(result.stderr[:5000])
-            lines.append("")
-        if result.stdout:
-            lines.append("STDOUT:")
-            lines.append(result.stdout[:5000])
-            lines.append("")
-
-    if json_data:
-        # Parse issues from JSON
-        issues = json_data.get("issues", {})
-
-        errors = issues.get("errors", [])
-        warnings = issues.get("warnings", [])
-
-        lines.append(f"Errors: {len(errors)}")
-        lines.append(f"Warnings: {len(warnings)}")
-        lines.append("")
-
-        if errors:
-            lines.append("ERRORS:")
-            lines.append("-" * 40)
-            for error in errors[:20]:  # Limit to first 20
-                code = error.get("code", "UNKNOWN")
-                msg = error.get("reason", error.get("message", "No message"))
-                location = error.get("location", "")
-                lines.append(f"  [{code}] {msg}")
-                if location:
-                    lines.append(f"    at: {location}")
-            if len(errors) > 20:
-                lines.append(f"  ... and {len(errors) - 20} more errors")
-            lines.append("")
-
-        if warnings:
-            lines.append("WARNINGS:")
-            lines.append("-" * 40)
-            for warning in warnings[:20]:  # Limit to first 20
-                code = warning.get("code", "UNKNOWN")
-                msg = warning.get("reason", warning.get("message", "No message"))
-                location = warning.get("location", "")
-                lines.append(f"  [{code}] {msg}")
-                if location:
-                    lines.append(f"    at: {location}")
-            if len(warnings) > 20:
-                lines.append(f"  ... and {len(warnings) - 20} more warnings")
-            lines.append("")
-
-        if not errors and not warnings:
-            lines.append("Dataset is BIDS valid!")
-
-    else:
-        # No JSON data, use stdout/stderr
-        if result.stdout:
-            lines.append("STDOUT:")
-            lines.append(result.stdout[:5000])  # Limit output
-        if result.stderr:
-            lines.append("STDERR:")
-            lines.append(result.stderr[:5000])
-
-    lines.append("")
-    lines.append(f"Exit code: {result.returncode}")
-
-    return "\n".join(lines)
 
 
 def _parse_validation_result(
