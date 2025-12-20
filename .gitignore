@@ -17,6 +17,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+# Exception: include source code lib directory
+!code/src/openneuro_studies/lib/
 parts/
 sdist/
 var/
