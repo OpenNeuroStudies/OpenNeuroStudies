@@ -2,17 +2,84 @@
 
 Date: 2025-12-18
 Status: Planning
-Approach: **datalad-fuse sparse access** (generalizable, works with any git forge)
+Approach: **datalad-fuse FsspecAdapter** (no FUSE mount required)
 
 ## Summary
 
 This document plans the implementation of missing summary columns in studies.tsv per FR-009, FR-031, FR-032, FR-033.
 
-**Key Decision**: Use datalad-fuse to mount the entire repository hierarchy with sparse access. This approach:
+**Key Decision**: Use datalad-fuse's `FsspecAdapter` directly in Python without FUSE mounting:
 - Is generalizable (works with any git forge, not just GitHub)
-- Avoids full cloning (git-annex fetches content on-demand)
-- Provides a filesystem interface for metadata extraction
+- Avoids full cloning (git-annex fetches content on-demand via URLs)
+- Uses fsspec file-like objects passed to nibabel/other libraries
+- No filesystem mounting required (pure Python solution)
 - Works uniformly across all data sources
+
+## Research Findings
+
+### datalad-fuse Architecture
+
+The [datalad-fuse](https://github.com/datalad/datalad-fuse) extension provides:
+1. **FsspecAdapter** - Python class that wraps git-annex repositories
+2. **URL Resolution** - Uses `git annex whereis` to get remote URLs for annexed files
+3. **fsspec Integration** - Opens remote URLs via `HTTPFileSystem` with range request support
+4. **Sparse Caching** - Downloads only requested bytes, caches under `.git/datalad/cache/fsspec`
+
+See: [datalad-fuse issue #2](https://github.com/datalad/datalad-fuse/issues/2) for fsspec adapter design.
+
+### fsspec + nibabel Integration
+
+- [fsspec](https://filesystem-spec.readthedocs.io/) provides file-like objects for remote URLs
+- [nibabel supports file-like objects](https://nipy.org/nibabel/reference/nibabel.filebasedimages.html) via `from_stream()` method
+- HTTP range requests allow reading just NIfTI headers (~352 bytes) without full download
+- [xibabel project](https://github.com/matthew-brett/xibabel) demonstrates fsspec+nibabel integration
+
+### How it Works (No FUSE Mount)
+
+```python
+from datalad_fuse import FsspecAdapter
+
+# Create adapter for dataset (no mount!)
+adapter = FsspecAdapter("/path/to/study-ds000001/sourcedata/ds000001")
+
+# Open annexed file - returns file-like object
+with adapter.open("sub-01/anat/sub-01_T1w.nii.gz") as f:
+    # f is an fsspec file-like object (HTTPFileSystem)
+    # Only fetches bytes as needed via HTTP range requests
+    import nibabel as nib
+    img = nib.Nifti1Image.from_stream(f)
+    shape = img.shape  # Reads header only (~352 bytes)
+```
+
+### Alternative: Direct git-annex whereis + fsspec
+
+If datalad-fuse proves too heavy, we can implement minimal version:
+
+```python
+import subprocess
+import json
+import fsspec
+
+def get_remote_url(repo_path: Path, file_path: str) -> str:
+    """Get HTTP URL for annexed file via git-annex whereis."""
+    result = subprocess.run(
+        ["git", "-C", str(repo_path), "annex", "whereis", "--json", file_path],
+        capture_output=True, text=True
+    )
+    data = json.loads(result.stdout)
+    # Find web remote URL
+    for remote in data.get("whereis", []):
+        for url in remote.get("urls", []):
+            if url.startswith("http"):
+                return url
+    return None
+
+def open_remote_nifti(repo_path: Path, file_path: str):
+    """Open remote NIfTI file without downloading."""
+    url = get_remote_url(repo_path, file_path)
+    fs = fsspec.filesystem("http")
+    return fs.open(url)
+```
 
 ## Current State
 
@@ -20,74 +87,92 @@ studies.tsv has these columns with `n/a` values that need implementation:
 
 | Column | Description | Data Source | Extraction Method |
 |--------|-------------|-------------|-------------------|
-| `subjects_num` | Number of subjects | sub-* directories | Count via fuse mount |
-| `sessions_num` | Total sessions | ses-* directories | Count via fuse mount |
-| `sessions_min` | Min sessions/subject | ses-* per subject | Count via fuse mount |
-| `sessions_max` | Max sessions/subject | ses-* per subject | Count via fuse mount |
-| `bold_num` | BOLD file count | *_bold.nii* files | Count via fuse mount |
-| `t1w_num` | T1w file count | *_T1w.nii* files | Count via fuse mount |
-| `t2w_num` | T2w file count | *_T2w.nii* files | Count via fuse mount |
-| `datatypes` | Present datatypes | Datatype directories | List via fuse mount |
-| `raw_version` | Source dataset version | Git tags | Already in metadata cache |
-| `author_lead_raw` | First author from raw | dataset_description.json | Already in metadata cache |
-| `author_senior_raw` | Last author from raw | dataset_description.json | Already in metadata cache |
-| `bold_size` | Total BOLD size | File sizes | stat() via fuse mount |
-| `t1w_size` | Total T1w size | File sizes | stat() via fuse mount |
-| `bold_size_max` | Max BOLD size | File sizes | stat() via fuse mount |
-| `bold_voxels` | Total BOLD voxels | NIfTI headers | Read first 1KB via fuse mount |
+| `subjects_num` | Number of subjects | sub-* directories | git ls-tree (Phase 2) |
+| `sessions_num` | Total sessions | ses-* directories | git ls-tree (Phase 2) |
+| `sessions_min` | Min sessions/subject | ses-* per subject | git ls-tree (Phase 2) |
+| `sessions_max` | Max sessions/subject | ses-* per subject | git ls-tree (Phase 2) |
+| `bold_num` | BOLD file count | *_bold.nii* files | git ls-tree (Phase 3) |
+| `t1w_num` | T1w file count | *_T1w.nii* files | git ls-tree (Phase 3) |
+| `t2w_num` | T2w file count | *_T2w.nii* files | git ls-tree (Phase 3) |
+| `datatypes` | Present datatypes | Datatype directories | git ls-tree (Phase 2) |
+| `raw_version` | Source dataset version | Git tags | Cached metadata (Phase 1) |
+| `author_lead_raw` | First author from raw | dataset_description.json | Cached metadata (Phase 1) |
+| `author_senior_raw` | Last author from raw | dataset_description.json | Cached metadata (Phase 1) |
+| `bold_size` | Total BOLD size | Annex key sizes | Symlink parsing (Phase 4) |
+| `t1w_size` | Total T1w size | Annex key sizes | Symlink parsing (Phase 4) |
+| `bold_size_max` | Max BOLD size | Annex key sizes | Symlink parsing (Phase 4) |
+| `bold_voxels` | Total BOLD voxels | NIfTI headers | fsspec + nibabel (Phase 5) |
 
-## datalad-fuse Background
+## datalad-fuse as Python Library (No Mount)
 
 **What is datalad-fuse?**
-- FUSE filesystem that mounts DataLad datasets
-- Provides lazy access to git-annex content (fetched on-demand)
-- No full clone required - only accessed files are retrieved
-- Works as a normal filesystem mount point
+- Python library with `FsspecAdapter` class for remote file access
+- FUSE mounting is optional - we use the Python API directly
+- Uses `git annex whereis` to resolve remote URLs
+- fsspec handles HTTP range requests for sparse access
 
-**How it works:**
-```bash
-# Mount a study dataset hierarchy
-datalad-fuse /path/to/OpenNeuroStudies /tmp/fuse-mount
+**How it works (Python API, no mount):**
+```python
+from datalad_fuse import FsspecAdapter
 
-# Access appears as normal filesystem
-ls /tmp/fuse-mount/study-ds000001/sourcedata/ds000001/
-# → Fetches directory listing without downloading files
+# Initialize adapter for a dataset
+adapter = FsspecAdapter("/path/to/study-ds000001/sourcedata/ds000001")
 
-stat /tmp/fuse-mount/study-ds000001/sourcedata/ds000001/sub-01/anat/sub-01_T1w.nii.gz
-# → Returns file size from git-annex key (no download)
+# Get file state (annexed? local?)
+is_local, annex_key = adapter.get_file_state("sub-01/anat/sub-01_T1w.nii.gz")
+# annex_key contains size: SHA256E-s12345678--hash.nii.gz
 
-head -c 1024 /tmp/fuse-mount/.../sub-01_T1w.nii.gz
-# → Downloads only first 1KB from git-annex remote
+# Open file - returns fsspec file-like object
+with adapter.open("sub-01/anat/sub-01_T1w.nii.gz") as f:
+    # f supports read(), seek() - fetches bytes via HTTP range requests
+    header_bytes = f.read(352)  # Only downloads 352 bytes
 ```
+
+**Why this approach?**
+1. Pure Python - no FUSE kernel module needed
+2. Works on any platform (including CI/containers)
+3. Same code path for local and remote files
+4. Integrates with nibabel via file-like objects
 
 ## Implementation Phases
 
 ### Phase 0: datalad-fuse Infrastructure
 
-**Goal:** Provide utilities for managing datalad-fuse mounts
+**Goal:** Provide utilities for sparse file access via datalad-fuse's FsspecAdapter (no FUSE mount)
 
 **Components:**
-1. `code/src/openneuro_studies/lib/fuse_mount.py`:
-   - `FuseMount` context manager class
-   - `mount_repository()` - mount entire repo hierarchy
-   - `unmount()` - clean unmount
-   - Error handling for mount failures
+1. `code/src/openneuro_studies/lib/sparse_access.py`:
+   - `SparseDataset` class wrapping FsspecAdapter
+   - `list_files(pattern)` - list files matching glob pattern (from git tree)
+   - `get_file_size(path)` - get size from annex key (no download)
+   - `open_file(path)` - return fsspec file-like object for remote access
+   - Graceful fallback if datalad-fuse not installed
 
 2. Integration tests:
-   - `code/tests/integration/test_fuse_mount.py`
-   - Test mounting/unmounting
-   - Test directory listing through mount
-   - Test file stat() without download
+   - `code/tests/integration/test_sparse_access.py`
+   - Test file listing without clone
+   - Test size extraction from annex keys
+   - Test remote file open with fsspec
+   - Test nibabel header reading via sparse access
 
 **Example API:**
 ```python
-from openneuro_studies.lib.fuse_mount import FuseMount
+from openneuro_studies.lib.sparse_access import SparseDataset
 
-# Context manager auto-mounts and unmounts
-with FuseMount(repo_path, mount_point="/tmp/fuse") as mount:
-    # Access files through mount point
-    subjects = list((mount.path / "study-ds000001/sourcedata/ds000001").glob("sub-*"))
+# Open dataset for sparse access (no clone, no mount)
+with SparseDataset("/path/to/study-ds000001/sourcedata/ds000001") as ds:
+    # List files from git tree
+    subjects = ds.list_dirs("sub-*")
     print(f"Found {len(subjects)} subjects")
+
+    # Get file size from annex key (no download)
+    size = ds.get_file_size("sub-01/anat/sub-01_T1w.nii.gz")
+
+    # Open for reading (fsspec handles HTTP range requests)
+    with ds.open_file("sub-01/anat/sub-01_T1w.nii.gz") as f:
+        import nibabel as nib
+        img = nib.Nifti1Image.from_stream(f)
+        shape = img.shape  # Only reads header
 ```
 
 ### Phase 1: Raw Dataset Metadata (No Mounting Required)
@@ -108,170 +193,182 @@ with FuseMount(repo_path, mount_point="/tmp/fuse") as mount:
    - Otherwise use "n/a"
 4. Get `raw_version` from git tags (already cached in metadata)
 
-### Phase 2: Directory-Based Counts (Fuse Mount)
+### Phase 2: Directory-Based Counts (Sparse Access)
 
 **Target columns:** `subjects_num`, `sessions_num`, `sessions_min`, `sessions_max`, `datatypes`
 
-**Approach:** Mount via datalad-fuse, traverse directory structure
+**Approach:** Use SparseDataset to list directories from git tree (no download)
 
 **Implementation:**
 1. Create `code/src/openneuro_studies/metadata/summary_extractor.py`
-2. Function `extract_directory_summary(study_path: Path, fuse_mount: FuseMount) -> dict`:
+2. Function `extract_directory_summary(study_path: Path) -> dict`:
    ```python
-   def extract_directory_summary(study_path: Path, fuse_mount: FuseMount) -> dict:
-       """Extract summary from directory structure via fuse mount."""
-       source_path = fuse_mount.path / study_path / "sourcedata"
+   from openneuro_studies.lib.sparse_access import SparseDataset
 
-       # Find all sub-* directories
-       subjects = list(source_path.glob("*/sub-*"))
-       subjects_num = len(subjects)
+   def extract_directory_summary(study_path: Path) -> dict:
+       """Extract summary from directory structure via sparse access."""
+       # Find sourcedata subdataset
+       source_paths = list((study_path / "sourcedata").iterdir())
+       if not source_paths:
+           return {"subjects_num": "n/a", ...}
 
-       # Count sessions per subject
-       session_counts = []
-       for sub_dir in subjects:
-           sessions = list(sub_dir.glob("ses-*"))
-           if sessions:
-               session_counts.append(len(sessions))
+       with SparseDataset(source_paths[0]) as ds:
+           # List sub-* directories from git tree
+           subjects = ds.list_dirs("sub-*")
+           subjects_num = len(subjects)
 
-       sessions_num = sum(session_counts) if session_counts else 0
-       sessions_min = min(session_counts) if session_counts else "n/a"
-       sessions_max = max(session_counts) if session_counts else "n/a"
+           # Count sessions per subject
+           session_counts = []
+           for sub in subjects:
+               sessions = ds.list_dirs(f"{sub}/ses-*")
+               if sessions:
+                   session_counts.append(len(sessions))
 
-       # Identify datatypes (anat/, func/, dwi/, etc.)
-       datatypes = set()
-       for datatype_dir in source_path.glob("*/sub-*/*/"):
-           if datatype_dir.name in ["anat", "func", "dwi", "fmap", "perf", "meg", "eeg", "ieeg"]:
-               datatypes.add(datatype_dir.name)
+           sessions_num = sum(session_counts) if session_counts else 0
+           sessions_min = min(session_counts) if session_counts else "n/a"
+           sessions_max = max(session_counts) if session_counts else "n/a"
 
-       return {
-           "subjects_num": subjects_num,
-           "sessions_num": sessions_num,
-           "sessions_min": sessions_min,
-           "sessions_max": sessions_max,
-           "datatypes": ",".join(sorted(datatypes)) if datatypes else "n/a",
-       }
+           # Identify datatypes
+           datatypes = ds.list_bids_datatypes()
+
+           return {
+               "subjects_num": subjects_num,
+               "sessions_num": sessions_num,
+               "sessions_min": sessions_min,
+               "sessions_max": sessions_max,
+               "datatypes": ",".join(sorted(datatypes)) if datatypes else "n/a",
+           }
    ```
 
-### Phase 3: File Counts (Fuse Mount)
+### Phase 3: File Counts (Sparse Access)
 
 **Target columns:** `bold_num`, `t1w_num`, `t2w_num`
 
-**Approach:** Mount via datalad-fuse, glob for file patterns
+**Approach:** Use SparseDataset to list files matching BIDS patterns
 
 **Implementation:**
 1. Extend `summary_extractor.py`
-2. Function `extract_file_counts(study_path: Path, fuse_mount: FuseMount) -> dict`:
+2. Function `extract_file_counts(study_path: Path) -> dict`:
    ```python
-   def extract_file_counts(study_path: Path, fuse_mount: FuseMount) -> dict:
-       """Count imaging files by modality via fuse mount."""
-       source_path = fuse_mount.path / study_path / "sourcedata"
+   def extract_file_counts(study_path: Path) -> dict:
+       """Count imaging files by modality via sparse access."""
+       source_paths = list((study_path / "sourcedata").iterdir())
+       if not source_paths:
+           return {"bold_num": "n/a", "t1w_num": "n/a", "t2w_num": "n/a"}
 
-       # Use glob patterns for BIDS imaging files
-       bold_files = list(source_path.glob("**/func/*_bold.nii*"))
-       t1w_files = list(source_path.glob("**/anat/*_T1w.nii*"))
-       t2w_files = list(source_path.glob("**/anat/*_T2w.nii*"))
+       with SparseDataset(source_paths[0]) as ds:
+           # List files matching BIDS patterns
+           bold_files = ds.list_files("**/func/*_bold.nii*")
+           t1w_files = ds.list_files("**/anat/*_T1w.nii*")
+           t2w_files = ds.list_files("**/anat/*_T2w.nii*")
 
-       return {
-           "bold_num": len(bold_files),
-           "t1w_num": len(t1w_files),
-           "t2w_num": len(t2w_files),
-       }
+           return {
+               "bold_num": len(bold_files),
+               "t1w_num": len(t1w_files),
+               "t2w_num": len(t2w_files),
+           }
    ```
 
-### Phase 4: File Sizes (Fuse Mount with stat)
+### Phase 4: File Sizes (From Annex Keys)
 
 **Target columns:** `bold_size`, `t1w_size`, `bold_size_max`
 
-**Approach:** Use stat() on fuse mount - git-annex keys encode sizes
+**Approach:** Parse sizes from git-annex keys (no download required)
 
 **Implementation:**
 1. Extend `summary_extractor.py`
-2. Function `extract_file_sizes(study_path: Path, fuse_mount: FuseMount) -> dict`:
+2. Function `extract_file_sizes(study_path: Path) -> dict`:
    ```python
-   def extract_file_sizes(study_path: Path, fuse_mount: FuseMount) -> dict:
-       """Extract file sizes via stat() without downloading."""
-       source_path = fuse_mount.path / study_path / "sourcedata"
+   def extract_file_sizes(study_path: Path) -> dict:
+       """Extract file sizes from annex keys without downloading."""
+       source_paths = list((study_path / "sourcedata").iterdir())
+       if not source_paths:
+           return {"bold_size": "n/a", "t1w_size": "n/a", "bold_size_max": "n/a"}
 
-       # Get BOLD files and their sizes
-       bold_files = list(source_path.glob("**/func/*_bold.nii*"))
-       bold_sizes = [f.stat().st_size for f in bold_files]
+       with SparseDataset(source_paths[0]) as ds:
+           # Get file sizes from annex keys
+           bold_files = ds.list_files("**/func/*_bold.nii*")
+           bold_sizes = [ds.get_file_size(f) for f in bold_files]
+           bold_sizes = [s for s in bold_sizes if s is not None]
 
-       # Get T1w sizes
-       t1w_files = list(source_path.glob("**/anat/*_T1w.nii*"))
-       t1w_sizes = [f.stat().st_size for f in t1w_files]
+           t1w_files = ds.list_files("**/anat/*_T1w.nii*")
+           t1w_sizes = [ds.get_file_size(f) for f in t1w_files]
+           t1w_sizes = [s for s in t1w_sizes if s is not None]
 
-       return {
-           "bold_size": sum(bold_sizes) if bold_sizes else 0,
-           "t1w_size": sum(t1w_sizes) if t1w_sizes else 0,
-           "bold_size_max": max(bold_sizes) if bold_sizes else 0,
-       }
+           return {
+               "bold_size": sum(bold_sizes) if bold_sizes else 0,
+               "t1w_size": sum(t1w_sizes) if t1w_sizes else 0,
+               "bold_size_max": max(bold_sizes) if bold_sizes else 0,
+           }
    ```
 
-**Note:** stat() on annex files returns size without download - encoded in symlink target.
+**Note:** Git-annex keys encode sizes in the key name: `SHA256E-s12345678--hash.nii.gz` where `s12345678` is the size in bytes.
 
-### Phase 5: Voxel Counts (Fuse Mount with NIfTI Headers)
+### Phase 5: Voxel Counts (fsspec + nibabel)
 
 **Target columns:** `bold_voxels`
 
-**Approach:** Read first 352 bytes of NIfTI files (header) via fuse mount
+**Approach:** Open NIfTI headers via fsspec, read dimensions with nibabel
 
 **Implementation:**
 1. Create `code/src/openneuro_studies/metadata/imaging_metrics.py`
-2. Function `extract_nifti_voxels(nifti_path: Path) -> int`:
+2. Function `extract_nifti_dimensions(fileobj) -> tuple`:
    ```python
    import nibabel as nib
 
-   def extract_nifti_voxels(nifti_path: Path) -> int:
-       """Extract voxel count from NIfTI header (reads ~1KB only)."""
-       # nibabel reads header first, no full download
-       img = nib.load(str(nifti_path))
-       shape = img.shape
-       return int(np.prod(shape[:3]))  # X * Y * Z dimensions
+   def extract_nifti_dimensions(fileobj) -> tuple:
+       """Extract dimensions from NIfTI header (reads ~352 bytes only)."""
+       # nibabel can read from file-like objects
+       img = nib.Nifti1Image.from_stream(fileobj)
+       return img.shape
    ```
-3. Function `extract_voxel_counts(study_path: Path, fuse_mount: FuseMount) -> dict`:
+3. Function `extract_voxel_counts(study_path: Path) -> dict`:
    ```python
-   def extract_voxel_counts(study_path: Path, fuse_mount: FuseMount) -> dict:
-       """Extract total voxel counts across BOLD files."""
-       source_path = fuse_mount.path / study_path / "sourcedata"
+   def extract_voxel_counts(study_path: Path) -> dict:
+       """Extract total voxel counts across BOLD files via sparse access."""
+       source_paths = list((study_path / "sourcedata").iterdir())
+       if not source_paths:
+           return {"bold_voxels": "n/a"}
 
-       bold_files = list(source_path.glob("**/func/*_bold.nii*"))
-       total_voxels = 0
+       with SparseDataset(source_paths[0]) as ds:
+           bold_files = ds.list_files("**/func/*_bold.nii*")
+           total_voxels = 0
 
-       for bold_file in bold_files:
-           try:
-               voxels = extract_nifti_voxels(bold_file)
-               # For 4D files, multiply by time dimension
-               img = nib.load(str(bold_file))
-               if len(img.shape) > 3:
-                   voxels *= img.shape[3]  # Include time dimension
-               total_voxels += voxels
-           except Exception as e:
-               logger.warning(f"Failed to read {bold_file}: {e}")
-               continue
+           for bold_file in bold_files:
+               try:
+                   with ds.open_file(bold_file) as f:
+                       shape = extract_nifti_dimensions(f)
+                       voxels = int(np.prod(shape[:3]))  # X * Y * Z
+                       if len(shape) > 3:
+                           voxels *= shape[3]  # Include time dimension
+                       total_voxels += voxels
+               except Exception as e:
+                   logger.warning(f"Failed to read {bold_file}: {e}")
+                   continue
 
-       return {"bold_voxels": total_voxels if total_voxels > 0 else "n/a"}
+           return {"bold_voxels": total_voxels if total_voxels > 0 else "n/a"}
    ```
 
 ## Implementation Order
 
 ```
-Phase 0: datalad-fuse Infrastructure
-  ├── lib/fuse_mount.py (mount utilities)
-  └── tests/integration/test_fuse_mount.py
+Phase 0: datalad-fuse Infrastructure (Pure Python, no FUSE mount)
+  ├── lib/sparse_access.py (SparseDataset wrapper)
+  └── tests/integration/test_sparse_access.py
 
-Phase 1: Raw Dataset Metadata (no mount)
+Phase 1: Raw Dataset Metadata (from cached data)
   └── author_lead_raw, author_senior_raw, raw_version
 
-Phase 2: Directory Counts (fuse mount)
+Phase 2: Directory Counts (sparse access - git tree listing)
   └── subjects_num, sessions_*, datatypes
 
-Phase 3: File Counts (fuse mount)
+Phase 3: File Counts (sparse access - git tree listing)
   └── bold_num, t1w_num, t2w_num
 
-Phase 4: File Sizes (fuse mount + stat)
+Phase 4: File Sizes (sparse access - annex key parsing)
   └── bold_size, t1w_size, bold_size_max
 
-Phase 5: Voxel Counts (fuse mount + NIfTI headers)
+Phase 5: Voxel Counts (sparse access - fsspec + nibabel headers)
   └── bold_voxels
 ```
 
@@ -280,16 +377,16 @@ Phase 5: Voxel Counts (fuse mount + NIfTI headers)
 Use `--stage` option to control extraction depth:
 
 ```bash
-# Basic metadata only (no mount required)
+# Basic metadata only (from cached data, no sparse access)
 openneuro-studies metadata generate --stage basic
 
-# Include directory/file counts (fuse mount, no downloads)
+# Include directory/file counts (sparse access - git tree only)
 openneuro-studies metadata generate --stage counts
 
-# Include file sizes (fuse mount + stat)
+# Include file sizes (sparse access - annex key parsing)
 openneuro-studies metadata generate --stage sizes
 
-# Full extraction with NIfTI headers (fuse mount + partial downloads)
+# Full extraction with NIfTI headers (sparse access - fsspec + nibabel)
 openneuro-studies metadata generate --stage imaging
 ```
 
@@ -302,33 +399,37 @@ organize → study-*/sourcedata/{id}/ (submodule links, no clone)
     ↓
 metadata --stage=basic → studies.tsv (from cached data only)
     ↓
-datalad-fuse mount → /tmp/fuse-mount/
+metadata --stage=counts → studies.tsv (+ counts via git tree listing)
     ↓
-metadata --stage=counts → studies.tsv (+ directory/file counts via mount)
+metadata --stage=sizes → studies.tsv (+ file sizes from annex keys)
     ↓
-metadata --stage=sizes → studies.tsv (+ file sizes via stat)
-    ↓
-metadata --stage=imaging → studies.tsv (+ NIfTI headers, ~1KB per file)
-    ↓
-datalad-fuse unmount
+metadata --stage=imaging → studies.tsv (+ NIfTI headers via fsspec, ~352 bytes per file)
 ```
+
+**Note:** No FUSE mounting required at any stage. All sparse access is done via:
+1. `git ls-tree` for directory/file listings
+2. Symlink target parsing for annex key sizes
+3. `git annex whereis` + fsspec HTTPFileSystem for remote file content
 
 ## Testing Strategy
 
 **Unit Tests:**
 - Parse subject/session patterns from paths
-- Extract file counts from lists
-- Parse NIfTI headers
+- Parse annex key sizes from symlink targets
+- Extract file counts from git tree output
+- Parse NIfTI dimensions from headers
 
 **Integration Tests:**
-1. Mount sample study via datalad-fuse
-2. Extract directory summary without errors
-3. Verify counts match expected values
-4. Verify no full downloads occurred (check disk usage)
+1. Open sample study via SparseDataset
+2. List files/directories from git tree
+3. Extract file sizes from annex keys
+4. Open remote file via fsspec and read NIfTI header
+5. Verify no full downloads occurred (check network traffic / cache)
 
 **Test Datasets:**
 - Use existing study-ds000001, study-ds005256, etc.
 - Small datasets to minimize test time
+- Test with both local content and remote-only content
 
 ## Dependencies
 
@@ -336,29 +437,31 @@ datalad-fuse unmount
 # Add to pyproject.toml
 [project.optional-dependencies]
 imaging = [
-    "datalad-fuse>=0.4.0",
-    "nibabel>=5.0.0",  # For NIfTI header reading
+    "datalad-fuse>=0.4.0",  # FsspecAdapter for sparse access
+    "fsspec>=2023.1.0",     # Remote file access
+    "aiohttp",              # For fsspec HTTP async
+    "nibabel>=5.0.0",       # For NIfTI header reading
 ]
 ```
 
 ## Open Questions
 
-1. Should we mount once for all studies or per-study?
-   - **Recommendation:** Mount once at repo root, process all studies
-2. How to handle mount failures?
+1. Use datalad-fuse's FsspecAdapter or implement minimal version?
+   - **Recommendation:** Start with datalad-fuse, fall back to minimal if issues
+2. How to handle network failures during sparse access?
    - **Recommendation:** Fall back to "n/a" for affected columns, log error
-3. Cache fuse mount results?
-   - **Recommendation:** Yes, cache summary extractions with timestamp
+3. Cache sparse access results?
+   - **Recommendation:** Yes, cache summary extractions with timestamp in `.openneuro-studies/cache/`
 4. Multi-source studies: aggregate or report per-source?
    - **Recommendation:** Aggregate (sum counts, max sizes)
 5. What if datalad-fuse not installed?
-   - **Recommendation:** Gracefully skip imaging stages, populate "n/a"
+   - **Recommendation:** Gracefully skip imaging stages, populate "n/a", warn user
 
 ## Next Steps
 
-1. Implement Phase 0 (fuse mount utilities)
-2. Write integration tests for fuse mounting
+1. Implement Phase 0 (SparseDataset wrapper for datalad-fuse)
+2. Write integration tests for sparse access
 3. Implement Phase 1 (raw metadata from cache)
-4. Implement Phases 2-3 (counts via fuse)
+4. Implement Phases 2-3 (counts via git tree)
 5. Test on sample studies
-6. Implement Phases 4-5 (sizes and voxels)
+6. Implement Phases 4-5 (sizes from annex keys, voxels from nibabel)
