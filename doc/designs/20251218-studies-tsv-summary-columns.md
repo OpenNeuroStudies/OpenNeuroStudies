@@ -1,7 +1,7 @@
 # Studies.tsv Summary Columns Implementation Plan
 
 Date: 2025-12-18
-Status: Planning
+Status: ✅ IMPLEMENTED (Phases 0-4 complete, Phase 5 ready but requires nibabel)
 Approach: **datalad-fuse FsspecAdapter** (no FUSE mount required)
 
 ## Summary
