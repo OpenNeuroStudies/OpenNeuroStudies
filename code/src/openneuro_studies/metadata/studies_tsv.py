@@ -12,6 +12,8 @@ import logging
 from pathlib import Path
 from typing import Any, Optional
 
+from openneuro_studies.metadata.summary_extractor import extract_all_summaries
+
 logger = logging.getLogger(__name__)
 
 # Column definitions for studies.tsv (FR-009)
@@ -215,11 +217,19 @@ def _load_dataset_description(study_path: Path) -> dict[str, Any]:
     return {}
 
 
-def collect_study_metadata(study_path: Path) -> dict[str, Any]:
+def collect_study_metadata(
+    study_path: Path,
+    stage: str = "basic",
+) -> dict[str, Any]:
     """Collect all metadata for a study for studies.tsv.
 
     Args:
         study_path: Path to study directory
+        stage: Extraction stage for summary data
+            - "basic": Only cached metadata
+            - "counts": + directory/file counts
+            - "sizes": + file sizes from annex keys
+            - "imaging": + voxel counts via nibabel
 
     Returns:
         Dictionary with all column values
@@ -234,46 +244,55 @@ def collect_study_metadata(study_path: Path) -> dict[str, Any]:
     authors_list = desc.get("Authors", [])
     authors = ", ".join(authors_list) if authors_list else "n/a"
 
+    # Extract summary metadata using sparse access
+    summaries = extract_all_summaries(study_path, stage=stage)
+
     return {
         "study_id": study_id,
         "name": desc.get("Name", f"Study dataset for {study_id}"),
         "version": "n/a",  # TODO: Get from git tag
-        "raw_version": "n/a",  # TODO: Get from source dataset tags
+        "raw_version": summaries.get("raw_version", "n/a"),
         "bids_version": desc.get("BIDSVersion", "n/a"),
         "hed_version": desc.get("HEDVersion", "n/a"),
         "license": desc.get("License", "n/a"),
         "authors": authors,
-        "author_lead_raw": "n/a",  # TODO: Get from source dataset
-        "author_senior_raw": "n/a",  # TODO: Get from source dataset
+        "author_lead_raw": summaries.get("author_lead_raw", "n/a"),
+        "author_senior_raw": summaries.get("author_senior_raw", "n/a"),
         "source_count": source_count,
         "source_types": source_types,
         "derivative_count": derivative_count,
-        "subjects_num": "n/a",  # TODO: Requires dataset access
-        "sessions_num": "n/a",
-        "sessions_min": "n/a",
-        "sessions_max": "n/a",
-        "bold_num": "n/a",  # TODO: Requires sparse access (FR-031-033)
-        "t1w_num": "n/a",
-        "t2w_num": "n/a",
-        "bold_size": "n/a",
-        "t1w_size": "n/a",
-        "bold_size_max": "n/a",
-        "bold_voxels": "n/a",
-        "datatypes": "n/a",  # TODO: Requires dataset access
+        "subjects_num": summaries.get("subjects_num", "n/a"),
+        "sessions_num": summaries.get("sessions_num", "n/a"),
+        "sessions_min": summaries.get("sessions_min", "n/a"),
+        "sessions_max": summaries.get("sessions_max", "n/a"),
+        "bold_num": summaries.get("bold_num", "n/a"),
+        "t1w_num": summaries.get("t1w_num", "n/a"),
+        "t2w_num": summaries.get("t2w_num", "n/a"),
+        "bold_size": summaries.get("bold_size", "n/a"),
+        "t1w_size": summaries.get("t1w_size", "n/a"),
+        "bold_size_max": summaries.get("bold_size_max", "n/a"),
+        "bold_voxels": summaries.get("bold_voxels", "n/a"),
+        "datatypes": summaries.get("datatypes", "n/a"),
         "derivative_ids": ",".join(derivative_ids) if derivative_ids else "n/a",
-        "bids_valid": "n/a",  # TODO: Requires validation (FR-015)
+        "bids_valid": "n/a",  # Set by validation command
     }
 
 
 def generate_studies_tsv(
     studies: list[Path],
     output_path: Path,
+    stage: str = "basic",
 ) -> Path:
     """Generate studies.tsv from list of study directories.
 
     Args:
         studies: List of study directory paths
         output_path: Path to output studies.tsv
+        stage: Extraction stage for summary data
+            - "basic": Only cached metadata
+            - "counts": + directory/file counts
+            - "sizes": + file sizes from annex keys
+            - "imaging": + voxel counts via nibabel
 
     Returns:
         Path to generated file
@@ -281,7 +300,7 @@ def generate_studies_tsv(
     rows = []
     for study_path in sorted(studies, key=lambda p: p.name):
         try:
-            metadata = collect_study_metadata(study_path)
+            metadata = collect_study_metadata(study_path, stage=stage)
             rows.append(metadata)
         except Exception as e:
             logger.warning(f"Failed to collect metadata for {study_path.name}: {e}")
