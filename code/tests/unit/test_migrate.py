@@ -54,8 +54,8 @@ def study_with_old_naming(tmp_path: Path) -> Path:
     (study_path / "derivatives" / "Custom code-unknown").mkdir(parents=True)
 
     # Create fake gitlinks (mode 160000) using update-index
-    # Use a dummy SHA for testing
-    dummy_sha = "0" * 40
+    # Use a valid dummy SHA for testing (git rejects all-zeros SHA)
+    dummy_sha = "1234567890" * 4
     subprocess.run(
         [
             "git",
