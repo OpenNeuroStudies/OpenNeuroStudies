@@ -5,7 +5,6 @@ without full clones. Supports FR-032/033 for imaging metrics extraction.
 """
 
 import logging
-import os
 import shutil
 import subprocess
 import sys
@@ -175,7 +174,8 @@ class FuseMount:
         cmd = [
             datalad_cmd,
             "fusefs",
-            "--dataset", str(self.dataset_path),
+            "--dataset",
+            str(self.dataset_path),
             "--mode-transparent",  # Expose .git directory
         ]
 

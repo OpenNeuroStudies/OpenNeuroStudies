@@ -16,7 +16,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,9 @@ class SparseDataset:
                 self._adapter = None
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self, exc_type: type | None, exc_val: BaseException | None, exc_tb: object
+    ) -> None:
         """Exit context manager."""
         if self._adapter is not None:
             try:
@@ -156,22 +158,25 @@ class SparseDataset:
 
         # Extract unique directory paths from file paths
         dirs = set()
-        for mode, obj_type, path in tree:
+        for _mode, _obj_type, path in tree:
             # Add all parent directories
             parts = path.split("/")
             for i in range(1, len(parts)):
                 dirs.add("/".join(parts[:i]))
 
         # Filter by pattern
+        filtered: list[str]
         if pattern != "*":
             if "/" in pattern:
                 # Pattern includes path components
-                dirs = [d for d in dirs if fnmatch.fnmatch(d, pattern)]
+                filtered = [d for d in dirs if fnmatch.fnmatch(d, pattern)]
             else:
                 # Pattern is for directory name only
-                dirs = [d for d in dirs if fnmatch.fnmatch(d.split("/")[-1], pattern)]
+                filtered = [d for d in dirs if fnmatch.fnmatch(d.split("/")[-1], pattern)]
+        else:
+            filtered = list(dirs)
 
-        return sorted(dirs)
+        return sorted(filtered)
 
     def list_bids_datatypes(self) -> set[str]:
         """List BIDS datatype directories present in the dataset.
@@ -254,7 +259,7 @@ class SparseDataset:
 
         return None
 
-    def open_file(self, path: str):
+    def open_file(self, path: str) -> Any:
         """Open a file for reading via sparse access.
 
         Uses fsspec to open the file from its remote URL, enabling
@@ -279,7 +284,7 @@ class SparseDataset:
         # Fall back to direct fsspec with git-annex whereis
         return self._open_via_whereis(path)
 
-    def _open_via_whereis(self, path: str):
+    def _open_via_whereis(self, path: str) -> Any:
         """Open file using git-annex whereis and fsspec.
 
         Args:
@@ -290,8 +295,10 @@ class SparseDataset:
         """
         try:
             import fsspec
-        except ImportError:
-            raise RuntimeError("fsspec not installed. Install with: pip install fsspec aiohttp")
+        except ImportError as e:
+            raise RuntimeError(
+                "fsspec not installed. Install with: pip install fsspec aiohttp"
+            ) from e
 
         # Get remote URL from git-annex whereis
         url = self._get_remote_url(path)
@@ -318,19 +325,19 @@ class SparseDataset:
                 text=True,
                 check=True,
             )
-            data = json.loads(result.stdout)
+            data: dict[str, list[dict[str, list[str]]]] = json.loads(result.stdout)
 
             # Look for web remote URLs
             for remote in data.get("whereis", []):
                 for url in remote.get("urls", []):
                     if url.startswith("http"):
-                        return url
+                        return str(url)
 
             # Check untrusted remotes too
             for remote in data.get("untrusted", []):
                 for url in remote.get("urls", []):
                     if url.startswith("http"):
-                        return url
+                        return str(url)
 
         except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
             logger.debug(f"git annex whereis failed: {e}")
@@ -347,9 +354,6 @@ def is_sparse_access_available() -> bool:
     if DATALAD_FUSE_AVAILABLE:
         return True
 
-    try:
-        import fsspec
+    import importlib.util
 
-        return True
-    except ImportError:
-        return False
+    return importlib.util.find_spec("fsspec") is not None

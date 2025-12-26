@@ -11,9 +11,8 @@ import configparser
 import json
 import logging
 import subprocess
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from openneuro_studies import __version__
 
@@ -61,7 +60,7 @@ def _get_source_datasets(study_path: Path) -> list[dict[str, str]]:
     # Use dict to deduplicate by path (handles duplicate submodule entries)
     source_by_path: dict[str, dict[str, str]] = {}
 
-    for name, config in submodules.items():
+    for _name, config in submodules.items():
         path = config.get("path", "")
         url = config.get("url", "")
 

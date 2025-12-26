@@ -97,13 +97,13 @@ class GitHubPublisher:
 
         try:
             self.organization = self.github.get_organization(organization_name)
-        except UnknownObjectException:
+        except UnknownObjectException as e:
             raise PublishError(
                 f"Organization '{organization_name}' not found. "
                 f"Check organization name and ensure you have access."
-            )
+            ) from e
         except GithubException as e:
-            raise PublishError(f"Failed to access organization '{organization_name}': {e}")
+            raise PublishError(f"Failed to access organization '{organization_name}': {e}") from e
 
     def repository_exists(self, repo_name: str) -> bool:
         """Check if a repository exists in the organization.
@@ -179,7 +179,7 @@ class GitHubPublisher:
             logger.info(f"Created repository: {repo.html_url}")
             return repo.clone_url
         except GithubException as e:
-            raise PublishError(f"Failed to create repository '{repo_name}': {e}")
+            raise PublishError(f"Failed to create repository '{repo_name}': {e}") from e
 
     def delete_repository(self, repo_name: str) -> None:
         """Delete a repository from the organization.
@@ -194,10 +194,10 @@ class GitHubPublisher:
             repo = self.organization.get_repo(repo_name)
             repo.delete()
             logger.info(f"Deleted repository: {self.organization_name}/{repo_name}")
-        except UnknownObjectException:
-            raise PublishError(f"Repository '{repo_name}' not found")
+        except UnknownObjectException as e:
+            raise PublishError(f"Repository '{repo_name}' not found") from e
         except GithubException as e:
-            raise PublishError(f"Failed to delete repository '{repo_name}': {e}")
+            raise PublishError(f"Failed to delete repository '{repo_name}': {e}") from e
 
     def get_local_head_sha(self, study_path: Path) -> str:
         """Get the HEAD commit SHA of a local git repository.
@@ -220,7 +220,7 @@ class GitHubPublisher:
             )
             return result.stdout.strip()
         except subprocess.CalledProcessError as e:
-            raise PublishError(f"Failed to get local HEAD SHA for {study_path}: {e}")
+            raise PublishError(f"Failed to get local HEAD SHA for {study_path}: {e}") from e
 
     def push_to_github(
         self,
@@ -302,7 +302,7 @@ class GitHubPublisher:
 
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr if e.stderr else str(e)
-            raise PublishError(f"Failed to push {study_path.name}: {error_msg}")
+            raise PublishError(f"Failed to push {study_path.name}: {error_msg}") from e
 
     def publish_study(
         self,

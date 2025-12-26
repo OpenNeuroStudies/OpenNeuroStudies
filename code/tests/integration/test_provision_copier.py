@@ -83,9 +83,7 @@ def test_copier_template_exists(template_dir: Path) -> None:
     assert (
         template_dir / "code" / "run-bids-validator.jinja"
     ).exists(), "run-bids-validator template should exist"
-    assert (
-        template_dir / "README.md.jinja"
-    ).exists(), "README.md template should exist"
+    assert (template_dir / "README.md.jinja").exists(), "README.md template should exist"
     assert (
         template_dir / ".openneuro-studies" / "template-version.jinja"
     ).exists(), "template-version template should exist"
@@ -96,13 +94,18 @@ def test_copier_template_renders(template_dir: Path, study_workspace: Path) -> N
     """Test that copier renders the template correctly."""
     # Run copier
     result = subprocess.run(
-        get_copier_cmd() + [
+        get_copier_cmd()
+        + [
             "copy",
             "--force",
-            "--data", "study_id=study-ds000001",
-            "--data", "dataset_id=ds000001",
-            "--data", "template_version=1.0.0",
-            "--data", "github_org=OpenNeuroStudies",
+            "--data",
+            "study_id=study-ds000001",
+            "--data",
+            "dataset_id=ds000001",
+            "--data",
+            "template_version=1.0.0",
+            "--data",
+            "github_org=OpenNeuroStudies",
             str(template_dir),
             str(study_workspace),
         ],
@@ -122,19 +125,22 @@ def test_copier_template_renders(template_dir: Path, study_workspace: Path) -> N
 
 
 @pytest.mark.integration
-def test_copier_template_variable_substitution(
-    template_dir: Path, study_workspace: Path
-) -> None:
+def test_copier_template_variable_substitution(template_dir: Path, study_workspace: Path) -> None:
     """Test that template variables are correctly substituted."""
     # Run copier
     subprocess.run(
-        get_copier_cmd() + [
+        get_copier_cmd()
+        + [
             "copy",
             "--force",
-            "--data", "study_id=study-ds000001",
-            "--data", "dataset_id=ds000001",
-            "--data", "template_version=1.0.0",
-            "--data", "github_org=OpenNeuroStudies",
+            "--data",
+            "study_id=study-ds000001",
+            "--data",
+            "dataset_id=ds000001",
+            "--data",
+            "template_version=1.0.0",
+            "--data",
+            "github_org=OpenNeuroStudies",
             str(template_dir),
             str(study_workspace),
         ],
@@ -157,22 +163,25 @@ def test_copier_template_variable_substitution(
 
 
 @pytest.mark.integration
-def test_copier_template_different_dataset(
-    template_dir: Path, tmp_path: Path
-) -> None:
+def test_copier_template_different_dataset(template_dir: Path, tmp_path: Path) -> None:
     """Test template with different dataset ID to verify all substitutions work."""
     study_workspace = tmp_path / "study-ds005256"
     study_workspace.mkdir()
 
     # Run copier with different values
     subprocess.run(
-        get_copier_cmd() + [
+        get_copier_cmd()
+        + [
             "copy",
             "--force",
-            "--data", "study_id=study-ds005256",
-            "--data", "dataset_id=ds005256",
-            "--data", "template_version=2.0.0",
-            "--data", "github_org=MyOrg",
+            "--data",
+            "study_id=study-ds005256",
+            "--data",
+            "dataset_id=ds005256",
+            "--data",
+            "template_version=2.0.0",
+            "--data",
+            "github_org=MyOrg",
             str(template_dir),
             str(study_workspace),
         ],
@@ -194,18 +203,21 @@ def test_copier_template_different_dataset(
 
 
 @pytest.mark.integration
-def test_copier_template_script_content(
-    template_dir: Path, study_workspace: Path
-) -> None:
+def test_copier_template_script_content(template_dir: Path, study_workspace: Path) -> None:
     """Test that run-bids-validator script has correct content."""
     subprocess.run(
-        get_copier_cmd() + [
+        get_copier_cmd()
+        + [
             "copy",
             "--force",
-            "--data", "study_id=study-ds000001",
-            "--data", "dataset_id=ds000001",
-            "--data", "template_version=1.0.0",
-            "--data", "github_org=OpenNeuroStudies",
+            "--data",
+            "study_id=study-ds000001",
+            "--data",
+            "dataset_id=ds000001",
+            "--data",
+            "template_version=1.0.0",
+            "--data",
+            "github_org=OpenNeuroStudies",
             str(template_dir),
             str(study_workspace),
         ],
@@ -224,7 +236,7 @@ def test_copier_template_script_content(
     assert "set -eu" in script_content
 
     # Verify output directory
-    assert 'od=derivatives/bids-validator' in script_content
+    assert "od=derivatives/bids-validator" in script_content
 
     # Verify validator detection order (uvx > bids-validator > deno > npx)
     assert "uvx bids-validator" in script_content
@@ -242,13 +254,18 @@ def test_copier_template_script_content(
 def test_copier_excludes_config(template_dir: Path, study_workspace: Path) -> None:
     """Test that copier.yaml is excluded from output."""
     subprocess.run(
-        get_copier_cmd() + [
+        get_copier_cmd()
+        + [
             "copy",
             "--force",
-            "--data", "study_id=study-ds000001",
-            "--data", "dataset_id=ds000001",
-            "--data", "template_version=1.0.0",
-            "--data", "github_org=OpenNeuroStudies",
+            "--data",
+            "study_id=study-ds000001",
+            "--data",
+            "dataset_id=ds000001",
+            "--data",
+            "template_version=1.0.0",
+            "--data",
+            "github_org=OpenNeuroStudies",
             str(template_dir),
             str(study_workspace),
         ],
@@ -262,18 +279,21 @@ def test_copier_excludes_config(template_dir: Path, study_workspace: Path) -> No
 
 
 @pytest.mark.integration
-def test_copier_template_readme_structure(
-    template_dir: Path, study_workspace: Path
-) -> None:
+def test_copier_template_readme_structure(template_dir: Path, study_workspace: Path) -> None:
     """Test that README.md has expected sections."""
     subprocess.run(
-        get_copier_cmd() + [
+        get_copier_cmd()
+        + [
             "copy",
             "--force",
-            "--data", "study_id=study-ds000001",
-            "--data", "dataset_id=ds000001",
-            "--data", "template_version=1.0.0",
-            "--data", "github_org=OpenNeuroStudies",
+            "--data",
+            "study_id=study-ds000001",
+            "--data",
+            "dataset_id=ds000001",
+            "--data",
+            "template_version=1.0.0",
+            "--data",
+            "github_org=OpenNeuroStudies",
             str(template_dir),
             str(study_workspace),
         ],
@@ -307,13 +327,18 @@ def test_copier_creates_directories(template_dir: Path, tmp_path: Path) -> None:
     study_workspace.mkdir()
 
     subprocess.run(
-        get_copier_cmd() + [
+        get_copier_cmd()
+        + [
             "copy",
             "--force",
-            "--data", "study_id=study-ds000001",
-            "--data", "dataset_id=ds000001",
-            "--data", "template_version=1.0.0",
-            "--data", "github_org=OpenNeuroStudies",
+            "--data",
+            "study_id=study-ds000001",
+            "--data",
+            "dataset_id=ds000001",
+            "--data",
+            "template_version=1.0.0",
+            "--data",
+            "github_org=OpenNeuroStudies",
             str(template_dir),
             str(study_workspace),
         ],
@@ -332,13 +357,18 @@ def test_copier_idempotent(template_dir: Path, study_workspace: Path) -> None:
     """Test that running copier twice produces same result."""
     # First run
     subprocess.run(
-        get_copier_cmd() + [
+        get_copier_cmd()
+        + [
             "copy",
             "--force",
-            "--data", "study_id=study-ds000001",
-            "--data", "dataset_id=ds000001",
-            "--data", "template_version=1.0.0",
-            "--data", "github_org=OpenNeuroStudies",
+            "--data",
+            "study_id=study-ds000001",
+            "--data",
+            "dataset_id=ds000001",
+            "--data",
+            "template_version=1.0.0",
+            "--data",
+            "github_org=OpenNeuroStudies",
             str(template_dir),
             str(study_workspace),
         ],
@@ -350,19 +380,22 @@ def test_copier_idempotent(template_dir: Path, study_workspace: Path) -> None:
     # Capture content
     readme_first = (study_workspace / "README.md").read_text()
     script_first = (study_workspace / "code" / "run-bids-validator").read_text()
-    version_first = (
-        study_workspace / ".openneuro-studies" / "template-version"
-    ).read_text()
+    version_first = (study_workspace / ".openneuro-studies" / "template-version").read_text()
 
     # Second run
     subprocess.run(
-        get_copier_cmd() + [
+        get_copier_cmd()
+        + [
             "copy",
             "--force",
-            "--data", "study_id=study-ds000001",
-            "--data", "dataset_id=ds000001",
-            "--data", "template_version=1.0.0",
-            "--data", "github_org=OpenNeuroStudies",
+            "--data",
+            "study_id=study-ds000001",
+            "--data",
+            "dataset_id=ds000001",
+            "--data",
+            "template_version=1.0.0",
+            "--data",
+            "github_org=OpenNeuroStudies",
             str(template_dir),
             str(study_workspace),
         ],
@@ -404,9 +437,7 @@ def test_provisioner_copier_integration(study_workspace: Path) -> None:
     assert (study_workspace / ".openneuro-studies" / "template-version").exists()
 
     # Verify template version
-    version = (
-        study_workspace / ".openneuro-studies" / "template-version"
-    ).read_text().strip()
+    version = (study_workspace / ".openneuro-studies" / "template-version").read_text().strip()
     assert version == TEMPLATE_VERSION
 
     # Verify README content

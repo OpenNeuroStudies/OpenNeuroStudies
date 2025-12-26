@@ -70,8 +70,11 @@ def extract_subject_stats(
         "bold_duration_mean": None,
         "bold_voxels_total": None,
         "bold_voxels_mean": None,
-        "datatypes": set(),
+        "datatypes": "",  # Will be set at the end
     }
+
+    # Track datatypes separately for type safety
+    datatypes: set[str] = set()
 
     # Get files for this subject/session
     all_files = ds.list_files("*")
@@ -109,7 +112,7 @@ def extract_subject_stats(
         parts = f.split("/")
         for part in parts:
             if part in BIDS_DATATYPES:
-                result["datatypes"].add(part)
+                datatypes.add(part)
                 break
 
     # Extract imaging metrics if requested
@@ -117,9 +120,7 @@ def extract_subject_stats(
         _extract_imaging_metrics(ds, bold_files, result)
 
     # Convert datatypes set to sorted comma-separated string
-    result["datatypes"] = (
-        ",".join(sorted(result["datatypes"])) if result["datatypes"] else "n/a"
-    )
+    result["datatypes"] = ",".join(sorted(datatypes)) if datatypes else "n/a"
 
     return result
 
@@ -192,7 +193,7 @@ def extract_subjects_stats(
     Returns:
         List of per-subject statistics dictionaries
     """
-    results = []
+    results: list[dict[str, Any]] = []
 
     try:
         with SparseDataset(source_path) as ds:

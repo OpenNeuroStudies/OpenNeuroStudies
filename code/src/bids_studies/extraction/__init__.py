@@ -6,20 +6,20 @@ Provides extraction functions for:
 - Per-study aggregation
 """
 
-from bids_studies.extraction.subject import (
-    extract_subject_stats,
-    extract_subjects_stats,
-)
 from bids_studies.extraction.dataset import aggregate_to_dataset
 from bids_studies.extraction.study import (
     aggregate_to_study,
     extract_study_stats,
 )
+from bids_studies.extraction.subject import (
+    extract_subject_stats,
+    extract_subjects_stats,
+)
 from bids_studies.extraction.tsv import (
-    write_subjects_tsv,
-    write_datasets_tsv,
-    SUBJECTS_COLUMNS,
     DATASETS_COLUMNS,
+    SUBJECTS_COLUMNS,
+    write_datasets_tsv,
+    write_subjects_tsv,
 )
 
 __all__ = [

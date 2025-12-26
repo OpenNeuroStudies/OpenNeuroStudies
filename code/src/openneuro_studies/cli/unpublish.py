@@ -79,7 +79,7 @@ def unpublish(
     try:
         publisher = GitHubPublisher(token, organization)
     except PublishError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
 
     tracker = PublicationTracker(config_dir)
 
@@ -98,7 +98,7 @@ def unpublish(
         return
 
     # Show what will be deleted
-    click.echo(f"The following repositories will be PERMANENTLY DELETED from GitHub:")
+    click.echo("The following repositories will be PERMANENTLY DELETED from GitHub:")
     click.echo(f"Organization: {organization}")
     click.echo()
     for study_id in studies_to_delete:

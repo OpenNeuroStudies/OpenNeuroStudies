@@ -1,7 +1,6 @@
 """CLI command for publishing study repositories to GitHub."""
 
 import logging
-import os
 from pathlib import Path
 
 import click
@@ -10,7 +9,6 @@ from openneuro_studies.publishing import (
     GitHubPublisher,
     PublicationTracker,
     PublishError,
-    save_publication_status,
     sync_publication_status,
 )
 from openneuro_studies.publishing.github_publisher import datalad_push_since
@@ -130,7 +128,7 @@ def publish(
                 click.echo(f"\n{config_dir}/published-studies.json already up-to-date")
 
         except Exception as e:
-            raise click.ClickException(f"Sync failed: {e}")
+            raise click.ClickException(f"Sync failed: {e}") from e
 
         return
 
@@ -167,7 +165,7 @@ def publish(
                         click.echo(f"  ... and {len(pushed_paths) - 20} more")
 
         except Exception as e:
-            raise click.ClickException(f"datalad push failed: {e}")
+            raise click.ClickException(f"datalad push failed: {e}") from e
 
         return
 
@@ -175,7 +173,7 @@ def publish(
     try:
         publisher = GitHubPublisher(token, organization)
     except PublishError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
 
     # Load publication tracker
     tracker = PublicationTracker(config_dir)
@@ -199,7 +197,9 @@ def publish(
             studies_to_publish.append(study_path)
     else:
         # Find all study-* directories
-        studies_to_publish = [p for p in Path(".").iterdir() if p.is_dir() and p.name.startswith("study-")]
+        studies_to_publish = [
+            p for p in Path(".").iterdir() if p.is_dir() and p.name.startswith("study-")
+        ]
 
         if not studies_to_publish:
             click.echo("No study directories found. Run 'openneuro-studies organize' first.")
@@ -239,9 +239,7 @@ def publish(
                         click.echo(" already up-to-date")
                         continue
 
-            github_url, commit_sha, was_created = publisher.publish_study(
-                study_path, force=force
-            )
+            github_url, commit_sha, was_created = publisher.publish_study(study_path, force=force)
 
             # Update tracking
             tracker.mark_published(study_id, github_url, commit_sha)

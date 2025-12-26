@@ -37,27 +37,13 @@ STUDIES_DERIVATIVES_JSON = {
     "derivative_id": {
         "Description": "Identifier for the derivative directory (e.g., fMRIPrep-24.1.1)"
     },
-    "tool_name": {
-        "Description": "Name of the processing tool/pipeline"
-    },
-    "tool_version": {
-        "Description": "Version of the processing tool"
-    },
-    "datalad_uuid": {
-        "Description": "DataLad dataset UUID for disambiguation, or 'n/a'"
-    },
-    "url": {
-        "Description": "Git URL of the derivative dataset"
-    },
-    "size_total": {
-        "Description": "Total size of the derivative dataset in bytes"
-    },
-    "size_annexed": {
-        "Description": "Size of annexed (large) files in bytes"
-    },
-    "file_count": {
-        "Description": "Number of files in the derivative dataset"
-    },
+    "tool_name": {"Description": "Name of the processing tool/pipeline"},
+    "tool_version": {"Description": "Version of the processing tool"},
+    "datalad_uuid": {"Description": "DataLad dataset UUID for disambiguation, or 'n/a'"},
+    "url": {"Description": "Git URL of the derivative dataset"},
+    "size_total": {"Description": "Total size of the derivative dataset in bytes"},
+    "size_annexed": {"Description": "Size of annexed (large) files in bytes"},
+    "file_count": {"Description": "Number of files in the derivative dataset"},
     "outdatedness": {
         "Description": "Number of commits the processed raw version is behind current raw version"
     },
@@ -125,7 +111,7 @@ def collect_derivatives_for_study(study_path: Path) -> list[dict[str, Any]]:
     submodules = _parse_gitmodules(gitmodules_path)
 
     derivatives = []
-    for name, config in submodules.items():
+    for _name, config in submodules.items():
         path = config.get("path", "")
         url = config.get("url", "")
         datalad_id = config.get("datalad-id", "n/a")
@@ -137,19 +123,21 @@ def collect_derivatives_for_study(study_path: Path) -> list[dict[str, Any]]:
         deriv_dir = path.split("/")[-1]
         tool_name, tool_version = _parse_derivative_name(deriv_dir)
 
-        derivatives.append({
-            "study_id": study_id,
-            "derivative_id": deriv_dir,
-            "tool_name": tool_name,
-            "tool_version": tool_version,
-            "datalad_uuid": datalad_id,
-            "url": url,
-            "size_total": "n/a",  # TODO: Get from git-annex info
-            "size_annexed": "n/a",
-            "file_count": "n/a",
-            "outdatedness": "n/a",  # TODO: Implement (FR-028-030)
-            "processed_raw_version": "n/a",  # TODO: Implement
-        })
+        derivatives.append(
+            {
+                "study_id": study_id,
+                "derivative_id": deriv_dir,
+                "tool_name": tool_name,
+                "tool_version": tool_version,
+                "datalad_uuid": datalad_id,
+                "url": url,
+                "size_total": "n/a",  # TODO: Get from git-annex info
+                "size_annexed": "n/a",
+                "file_count": "n/a",
+                "outdatedness": "n/a",  # TODO: Implement (FR-028-030)
+                "processed_raw_version": "n/a",  # TODO: Implement
+            }
+        )
 
     return derivatives
 

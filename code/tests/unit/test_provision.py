@@ -117,6 +117,7 @@ class TestProvisionStudy:
 
         # Check script is executable
         import stat
+
         mode = script_path.stat().st_mode
         assert mode & stat.S_IXUSR  # User execute permission
 
@@ -253,10 +254,10 @@ class TestValidatorScriptContent:
         script_path = study_path / "code" / "run-bids-validator"
         content = script_path.read_text()
 
-        assert 'od=derivatives/bids-validator' in content
-        assert 'version.txt' in content
-        assert 'report.json' in content
-        assert 'report.txt' in content
+        assert "od=derivatives/bids-validator" in content
+        assert "version.txt" in content
+        assert "report.json" in content
+        assert "report.txt" in content
 
     def test_script_has_error_handling(self, tmp_path: Path):
         """Script should have proper error handling."""

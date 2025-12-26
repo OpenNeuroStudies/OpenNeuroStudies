@@ -210,7 +210,8 @@ class DatasetFinder:
 
                 if progress_callback:
                     progress_callback(
-                        "scan", f"Scanning {len(filtered_repos)} repos in {org_name} for derivatives..."
+                        "scan",
+                        f"Scanning {len(filtered_repos)} repos in {org_name} for derivatives...",
                     )
 
                 # Process repositories to find derivatives

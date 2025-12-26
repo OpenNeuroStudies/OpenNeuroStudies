@@ -220,7 +220,10 @@ def test_sanitize_name_preserves_valid_characters() -> None:
     # These should be unchanged
     assert sanitize_name("xcp_d-0.10.6") == "xcp_d-0.10.6"
     assert sanitize_name("fMRIPrep-24.1.1") == "fMRIPrep-24.1.1"
-    assert sanitize_name("qsiprep-1.0.1.dev0+gee9aa2e.d20250115") == "qsiprep-1.0.1.dev0+gee9aa2e.d20250115"
+    assert (
+        sanitize_name("qsiprep-1.0.1.dev0+gee9aa2e.d20250115")
+        == "qsiprep-1.0.1.dev0+gee9aa2e.d20250115"
+    )
     assert sanitize_name("MRIQC-25.0.0rc0") == "MRIQC-25.0.0rc0"
 
 

@@ -152,7 +152,9 @@ def organize(
 
             # TODO: Support URLs and paths
             raw_datasets = [d for d in raw_datasets if d.dataset_id in normalized_targets]
-            derivative_datasets = [d for d in derivative_datasets if d.dataset_id in normalized_targets]
+            derivative_datasets = [
+                d for d in derivative_datasets if d.dataset_id in normalized_targets
+            ]
 
         # Display plan
         total_datasets = len(raw_datasets) + len(derivative_datasets)

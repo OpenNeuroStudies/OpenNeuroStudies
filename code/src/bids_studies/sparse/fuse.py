@@ -5,7 +5,6 @@ without full clones. Supports FR-032/033 for imaging metrics extraction.
 """
 
 import logging
-import os
 import shutil
 import subprocess
 import sys
@@ -140,7 +139,9 @@ class FuseMount:
         self.mount()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self, exc_type: type | None, exc_val: BaseException | None, exc_tb: object
+    ) -> None:
         """Unmount the filesystem on context exit."""
         self.unmount()
 
@@ -175,7 +176,8 @@ class FuseMount:
         cmd = [
             datalad_cmd,
             "fusefs",
-            "--dataset", str(self.dataset_path),
+            "--dataset",
+            str(self.dataset_path),
             "--mode-transparent",  # Expose .git directory
         ]
 

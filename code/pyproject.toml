@@ -130,6 +130,10 @@ strict_equality = true
 [[tool.mypy.overrides]]
 module = [
     "datalad.*",
+    "datalad_fuse.*",
     "requests_cache.*",
+    "fsspec.*",
+    "nibabel.*",
+    "numpy.*",
 ]
 ignore_missing_imports = true

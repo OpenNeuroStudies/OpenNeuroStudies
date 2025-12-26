@@ -8,9 +8,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from bids_studies.extraction.subject import extract_subjects_stats
 from bids_studies.extraction.dataset import aggregate_to_dataset
-from bids_studies.extraction.tsv import write_subjects_tsv, write_datasets_tsv
+from bids_studies.extraction.subject import extract_subjects_stats
+from bids_studies.extraction.tsv import write_datasets_tsv, write_subjects_tsv
 from bids_studies.schemas import get_schema_path
 
 logger = logging.getLogger(__name__)
@@ -32,41 +32,21 @@ def aggregate_to_study(
 
     # Sum across all datasets
     total_subjects = sum(
-        d["subjects_num"]
-        for d in datasets_stats
-        if isinstance(d["subjects_num"], int)
+        d["subjects_num"] for d in datasets_stats if isinstance(d["subjects_num"], int)
     )
-    total_bold_num = sum(
-        d["bold_num"] for d in datasets_stats if isinstance(d["bold_num"], int)
-    )
-    total_t1w_num = sum(
-        d["t1w_num"] for d in datasets_stats if isinstance(d["t1w_num"], int)
-    )
-    total_t2w_num = sum(
-        d["t2w_num"] for d in datasets_stats if isinstance(d["t2w_num"], int)
-    )
-    total_bold_size = sum(
-        d["bold_size"] for d in datasets_stats if isinstance(d["bold_size"], int)
-    )
-    total_t1w_size = sum(
-        d["t1w_size"] for d in datasets_stats if isinstance(d["t1w_size"], int)
-    )
+    total_bold_num = sum(d["bold_num"] for d in datasets_stats if isinstance(d["bold_num"], int))
+    total_t1w_num = sum(d["t1w_num"] for d in datasets_stats if isinstance(d["t1w_num"], int))
+    total_t2w_num = sum(d["t2w_num"] for d in datasets_stats if isinstance(d["t2w_num"], int))
+    total_bold_size = sum(d["bold_size"] for d in datasets_stats if isinstance(d["bold_size"], int))
+    total_t1w_size = sum(d["t1w_size"] for d in datasets_stats if isinstance(d["t1w_size"], int))
 
     # Session stats
-    session_nums = [
-        d["sessions_num"] for d in datasets_stats if d["sessions_num"] != "n/a"
-    ]
-    session_mins = [
-        d["sessions_min"] for d in datasets_stats if d["sessions_min"] != "n/a"
-    ]
-    session_maxs = [
-        d["sessions_max"] for d in datasets_stats if d["sessions_max"] != "n/a"
-    ]
+    session_nums = [d["sessions_num"] for d in datasets_stats if d["sessions_num"] != "n/a"]
+    session_mins = [d["sessions_min"] for d in datasets_stats if d["sessions_min"] != "n/a"]
+    session_maxs = [d["sessions_max"] for d in datasets_stats if d["sessions_max"] != "n/a"]
 
     # Max bold size
-    bold_size_maxs = [
-        d["bold_size_max"] for d in datasets_stats if d["bold_size_max"] != "n/a"
-    ]
+    bold_size_maxs = [d["bold_size_max"] for d in datasets_stats if d["bold_size_max"] != "n/a"]
 
     # Duration and voxels (weighted by bold_num)
     total_duration = 0.0
@@ -75,14 +55,10 @@ def aggregate_to_study(
     voxels_weights = 0
 
     for d in datasets_stats:
-        if d["bold_duration_total"] != "n/a" and isinstance(
-            d["bold_duration_total"], (int, float)
-        ):
+        if d["bold_duration_total"] != "n/a" and isinstance(d["bold_duration_total"], (int, float)):
             total_duration += d["bold_duration_total"]
             duration_weights += d["bold_num"]
-        if d["bold_voxels_total"] != "n/a" and isinstance(
-            d["bold_voxels_total"], (int, float)
-        ):
+        if d["bold_voxels_total"] != "n/a" and isinstance(d["bold_voxels_total"], (int, float)):
             total_voxels += int(d["bold_voxels_total"])
             voxels_weights += d["bold_num"]
 
@@ -109,9 +85,7 @@ def aggregate_to_study(
             total_duration / duration_weights if duration_weights > 0 else "n/a"
         ),
         "bold_voxels_total": total_voxels if voxels_weights > 0 else "n/a",
-        "bold_voxels_mean": (
-            total_voxels / voxels_weights if voxels_weights > 0 else "n/a"
-        ),
+        "bold_voxels_mean": (total_voxels / voxels_weights if voxels_weights > 0 else "n/a"),
         "datatypes": ",".join(sorted(all_datatypes)) if all_datatypes else "n/a",
     }
 
@@ -142,9 +116,7 @@ def extract_study_stats(
 
     # Find all source datasets
     source_dirs = [
-        d
-        for d in sourcedata_path.iterdir()
-        if d.is_dir() and not d.name.startswith(".")
+        d for d in sourcedata_path.iterdir() if d.is_dir() and not d.name.startswith(".")
     ]
 
     if not source_dirs:

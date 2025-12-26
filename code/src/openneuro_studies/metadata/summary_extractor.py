@@ -13,7 +13,6 @@ avoiding full clones of source datasets.
 
 import json
 import logging
-import re
 import subprocess
 from pathlib import Path
 from typing import Any, Optional
@@ -51,7 +50,9 @@ def extract_raw_metadata(study_path: Path) -> dict[str, Any]:
     if not sourcedata_path.exists():
         return result
 
-    source_dirs = [d for d in sourcedata_path.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    source_dirs = [
+        d for d in sourcedata_path.iterdir() if d.is_dir() and not d.name.startswith(".")
+    ]
 
     if not source_dirs:
         return result
@@ -165,7 +166,9 @@ def extract_directory_summary(study_path: Path) -> dict[str, Any]:
     if not sourcedata_path.exists():
         return result
 
-    source_dirs = [d for d in sourcedata_path.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    source_dirs = [
+        d for d in sourcedata_path.iterdir() if d.is_dir() and not d.name.startswith(".")
+    ]
 
     if not source_dirs:
         return result
@@ -237,7 +240,9 @@ def extract_file_counts(study_path: Path) -> dict[str, Any]:
     if not sourcedata_path.exists():
         return result
 
-    source_dirs = [d for d in sourcedata_path.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    source_dirs = [
+        d for d in sourcedata_path.iterdir() if d.is_dir() and not d.name.startswith(".")
+    ]
 
     if not source_dirs:
         return result
@@ -298,7 +303,9 @@ def extract_file_sizes(study_path: Path) -> dict[str, Any]:
     if not sourcedata_path.exists():
         return result
 
-    source_dirs = [d for d in sourcedata_path.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    source_dirs = [
+        d for d in sourcedata_path.iterdir() if d.is_dir() and not d.name.startswith(".")
+    ]
 
     if not source_dirs:
         return result
@@ -374,7 +381,9 @@ def extract_voxel_counts(study_path: Path) -> dict[str, Any]:
     if not sourcedata_path.exists():
         return result
 
-    source_dirs = [d for d in sourcedata_path.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    source_dirs = [
+        d for d in sourcedata_path.iterdir() if d.is_dir() and not d.name.startswith(".")
+    ]
 
     if not source_dirs:
         return result

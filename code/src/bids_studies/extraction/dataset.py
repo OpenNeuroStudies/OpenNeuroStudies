@@ -41,10 +41,10 @@ def aggregate_to_dataset(
         }
 
     # Count unique subjects
-    unique_subjects = set(s["subject_id"] for s in subjects_stats)
+    unique_subjects = {s["subject_id"] for s in subjects_stats}
 
     # Count sessions per subject
-    session_counts = {}
+    session_counts: dict[str, int] = {}
     for s in subjects_stats:
         subj = s["subject_id"]
         if s["session_id"] != "n/a":
@@ -54,12 +54,8 @@ def aggregate_to_dataset(
     total_bold_num = sum(s["bold_num"] for s in subjects_stats)
     total_t1w_num = sum(s["t1w_num"] for s in subjects_stats)
     total_t2w_num = sum(s["t2w_num"] for s in subjects_stats)
-    total_bold_size = sum(
-        s["bold_size"] for s in subjects_stats if isinstance(s["bold_size"], int)
-    )
-    total_t1w_size = sum(
-        s["t1w_size"] for s in subjects_stats if isinstance(s["t1w_size"], int)
-    )
+    total_bold_size = sum(s["bold_size"] for s in subjects_stats if isinstance(s["bold_size"], int))
+    total_t1w_size = sum(s["t1w_size"] for s in subjects_stats if isinstance(s["t1w_size"], int))
 
     # Find max BOLD size (approximation from average)
     bold_size_max = total_bold_size // total_bold_num if total_bold_num > 0 else None
@@ -98,13 +94,9 @@ def aggregate_to_dataset(
         "t1w_size": total_t1w_size,
         "bold_size_max": bold_size_max if bold_size_max else "n/a",
         "bold_duration_total": total_duration if duration_count > 0 else "n/a",
-        "bold_duration_mean": (
-            total_duration / duration_count if duration_count > 0 else "n/a"
-        ),
+        "bold_duration_mean": (total_duration / duration_count if duration_count > 0 else "n/a"),
         "bold_voxels_total": total_voxels if voxels_count > 0 else "n/a",
-        "bold_voxels_mean": (
-            total_voxels / voxels_count if voxels_count > 0 else "n/a"
-        ),
+        "bold_voxels_mean": (total_voxels / voxels_count if voxels_count > 0 else "n/a"),
         "datatypes": ",".join(sorted(all_datatypes)) if all_datatypes else "n/a",
     }
 

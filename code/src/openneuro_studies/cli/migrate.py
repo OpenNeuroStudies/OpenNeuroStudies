@@ -9,7 +9,7 @@ from typing import Optional
 
 import click
 
-from openneuro_studies.organization import get_derivative_dir_name, sanitize_name
+from openneuro_studies.organization import sanitize_name
 
 logger = logging.getLogger(__name__)
 
@@ -105,12 +105,12 @@ def _migrate_validation_output(
         if has_old_json:
             new_json = new_dir / "report.json"
             old_json.rename(new_json)
-            click.echo(f"    Moved: bids-validator.json -> bids-validator/report.json")
+            click.echo("    Moved: bids-validator.json -> bids-validator/report.json")
 
         if has_old_txt:
             new_txt = new_dir / "report.txt"
             old_txt.rename(new_txt)
-            click.echo(f"    Moved: bids-validator.txt -> bids-validator/report.txt")
+            click.echo("    Moved: bids-validator.txt -> bids-validator/report.txt")
 
         # Stage changes
         subprocess.run(
@@ -148,7 +148,6 @@ def _rename_submodule_path(
         True if renamed, False if skipped or failed
     """
     gitmodules_path = repo_path / ".gitmodules"
-    old_dir = repo_path / old_path
     new_dir = repo_path / new_path
 
     if dry_run:
@@ -173,8 +172,8 @@ def _rename_submodule_path(
         # Replace path = old_path with path = new_path
         # Use a more robust pattern that handles the multiline section
         updated_content = re.sub(
-            rf'(path\s*=\s*){re.escape(old_path)}(\s*\n)',
-            rf'\g<1>{new_path}\g<2>',
+            rf"(path\s*=\s*){re.escape(old_path)}(\s*\n)",
+            rf"\g<1>{new_path}\g<2>",
             content,
         )
         gitmodules_path.write_text(updated_content)
@@ -190,7 +189,7 @@ def _rename_submodule_path(
         return True
 
     except subprocess.CalledProcessError as e:
-        stderr = e.stderr if hasattr(e, 'stderr') and e.stderr else str(e)
+        stderr = e.stderr if hasattr(e, "stderr") and e.stderr else str(e)
         logger.error(f"Failed to rename {old_path} -> {new_path}: {stderr}")
         click.echo(f"    ERROR: Failed to rename {old_path} -> {new_path}: {stderr}", err=True)
         return False
@@ -347,10 +346,10 @@ def migrate(
                         check=True,
                         capture_output=True,
                     )
-                    click.echo(f"  ✓ Committed changes")
+                    click.echo("  ✓ Committed changes")
                 except subprocess.CalledProcessError as e:
                     if b"nothing to commit" in e.stdout or b"nothing to commit" in e.stderr:
-                        click.echo(f"  (no changes to commit)")
+                        click.echo("  (no changes to commit)")
                     else:
                         click.echo(f"  ✗ Commit failed: {e.stderr.decode()}", err=True)
         elif not changes_made:

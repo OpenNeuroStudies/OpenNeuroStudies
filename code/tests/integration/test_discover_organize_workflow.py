@@ -208,7 +208,9 @@ def test_full_workflow(test_workspace: Path) -> None:
     deriv_ids = {d["dataset_id"] for d in deriv_datasets}
     print(f"Derivative IDs found: {deriv_ids}")
     for expected_id in EXPECTED_DERIVATIVE_DATASETS:
-        assert expected_id in deriv_ids, f"Should discover derivative {expected_id} via --include-derivatives"
+        assert (
+            expected_id in deriv_ids
+        ), f"Should discover derivative {expected_id} via --include-derivatives"
 
     # Step 3: Organize datasets (with parallel workers if specified)
     print("\n=== Step 3: Organize datasets ===")

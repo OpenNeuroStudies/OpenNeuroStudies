@@ -2,7 +2,6 @@
 
 import logging
 from datetime import datetime
-from pathlib import Path
 
 from github import Github, GithubException, UnknownObjectException
 
@@ -37,13 +36,10 @@ class SyncResult:
         if self.added > 0:
             lines.append(f"  Added {self.added} studies: {', '.join(self.added_studies)}")
         if self.removed > 0:
-            lines.append(
-                f"  Removed {self.removed} studies: {', '.join(self.removed_studies)}"
-            )
+            lines.append(f"  Removed {self.removed} studies: {', '.join(self.removed_studies)}")
         if self.updated > 0:
             update_details = [
-                f"{sid} ({old[:8]} → {new[:8]})"
-                for sid, old, new in self.updated_studies
+                f"{sid} ({old[:8]} → {new[:8]})" for sid, old, new in self.updated_studies
             ]
             lines.append(f"  Updated {self.updated} studies: {', '.join(update_details)}")
         if self.added == 0 and self.removed == 0 and self.updated == 0:
@@ -80,12 +76,12 @@ def sync_publication_status(
 
     try:
         organization = github.get_organization(organization_name)
-    except UnknownObjectException:
+    except UnknownObjectException as e:
         raise GithubException(
             status=404,
             data={"message": f"Organization '{organization_name}' not found"},
             headers={},
-        )
+        ) from e
 
     # Get all study-* repositories from GitHub
     try:
@@ -141,7 +137,7 @@ def sync_publication_status(
             logger.info(f"Removed {study_id} from tracking (deleted from GitHub)")
 
     # Update commit SHAs for studies that exist in both places
-    for study_id, (github_url, github_sha) in github_studies.items():
+    for study_id, (_github_url, github_sha) in github_studies.items():
         tracked_study = status.get_study(study_id)
         if tracked_study and tracked_study.last_push_commit_sha != github_sha:
             # Update with new SHA
@@ -156,8 +152,6 @@ def sync_publication_status(
             status.add_study(updated_study)
             result.updated += 1
             result.updated_studies.append((study_id, old_sha, github_sha))
-            logger.info(
-                f"Updated {study_id} commit SHA: {old_sha[:8]} → {github_sha[:8]}"
-            )
+            logger.info(f"Updated {study_id} commit SHA: {old_sha[:8]} → {github_sha[:8]}")
 
     return result

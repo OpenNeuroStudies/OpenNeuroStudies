@@ -5,15 +5,15 @@ This module re-exports from bids_studies.extraction for backwards compatibility.
 
 # Re-export from bids_studies
 from bids_studies.extraction import (
-    extract_subject_stats,
-    extract_subjects_stats,
+    DATASETS_COLUMNS,
+    SUBJECTS_COLUMNS,
     aggregate_to_dataset,
     aggregate_to_study,
     extract_study_stats,
-    write_subjects_tsv,
+    extract_subject_stats,
+    extract_subjects_stats,
     write_datasets_tsv,
-    SUBJECTS_COLUMNS,
-    DATASETS_COLUMNS,
+    write_subjects_tsv,
 )
 
 # Backwards compatibility alias

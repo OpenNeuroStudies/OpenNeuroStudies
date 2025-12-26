@@ -141,9 +141,14 @@ def needs_validation(study_path: Path) -> bool:
         # (the commit that added/modified the validation output)
         result = subprocess.run(
             [
-                "git", "-C", str(study_path),
-                "log", "-1", "--format=%H",
-                "--", f"derivatives/{VALIDATOR_OUTPUT_DIR}",
+                "git",
+                "-C",
+                str(study_path),
+                "log",
+                "-1",
+                "--format=%H",
+                "--",
+                f"derivatives/{VALIDATOR_OUTPUT_DIR}",
             ],
             capture_output=True,
             text=True,
@@ -159,10 +164,14 @@ def needs_validation(study_path: Path) -> bool:
         # (excluding the validation directory itself)
         result = subprocess.run(
             [
-                "git", "-C", str(study_path),
-                "log", "--oneline",
+                "git",
+                "-C",
+                str(study_path),
+                "log",
+                "--oneline",
                 f"{last_validation_commit}..HEAD",
-                "--", ".",
+                "--",
+                ".",
                 f":!derivatives/{VALIDATOR_OUTPUT_DIR}",
             ],
             capture_output=True,

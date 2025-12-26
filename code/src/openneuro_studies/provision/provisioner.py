@@ -128,10 +128,14 @@ def _run_copier(
     cmd = _get_copier_cmd() + [
         "copy",
         "--force",  # Overwrite existing files
-        "--data", f"study_id={study_id}",
-        "--data", f"dataset_id={dataset_id}",
-        "--data", f"template_version={TEMPLATE_VERSION}",
-        "--data", f"github_org={github_org}",
+        "--data",
+        f"study_id={study_id}",
+        "--data",
+        f"dataset_id={dataset_id}",
+        "--data",
+        f"template_version={TEMPLATE_VERSION}",
+        "--data",
+        f"github_org={github_org}",
         str(TEMPLATE_DIR),
         str(study_path),
     ]
@@ -234,9 +238,7 @@ def provision_study(
 
     try:
         logger.info(f"Provisioning {study_id} with copier template")
-        files_created, files_updated = _run_copier(
-            study_path, study_id, dataset_id, github_org
-        )
+        files_created, files_updated = _run_copier(study_path, study_id, dataset_id, github_org)
 
         return ProvisionResult(
             study_id=study_id,

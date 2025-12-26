@@ -139,7 +139,9 @@ def discover(
                         filtered = [
                             r
                             for r in filtered
-                            if not any(re.match(p, r["name"]) for p in source_spec.exclusion_patterns)
+                            if not any(
+                                re.match(p, r["name"]) for p in source_spec.exclusion_patterns
+                            )
                         ]
                     total_repos += len(filtered)
 

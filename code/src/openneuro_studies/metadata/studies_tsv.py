@@ -10,7 +10,7 @@ import csv
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from openneuro_studies.metadata.summary_extractor import extract_all_summaries
 
@@ -49,84 +49,42 @@ STUDIES_COLUMNS = [
 
 # JSON sidecar descriptions (FR-011)
 STUDIES_JSON = {
-    "study_id": {
-        "Description": "Unique identifier for the study dataset (e.g., study-ds000001)"
-    },
-    "name": {
-        "Description": "Human-readable name of the study dataset"
-    },
-    "version": {
-        "Description": "Version of the study dataset"
-    },
+    "study_id": {"Description": "Unique identifier for the study dataset (e.g., study-ds000001)"},
+    "name": {"Description": "Human-readable name of the study dataset"},
+    "version": {"Description": "Version of the study dataset"},
     "raw_version": {
         "Description": "Version/tag of the raw source dataset, or 'n/a' if multiple sources or no release"
     },
-    "bids_version": {
-        "Description": "BIDS specification version used by the study"
-    },
-    "hed_version": {
-        "Description": "HED schema version if applicable, or 'n/a'"
-    },
-    "license": {
-        "Description": "License for the study dataset"
-    },
-    "authors": {
-        "Description": "Authors of the study dataset from git shortlog"
-    },
+    "bids_version": {"Description": "BIDS specification version used by the study"},
+    "hed_version": {"Description": "HED schema version if applicable, or 'n/a'"},
+    "license": {"Description": "License for the study dataset"},
+    "authors": {"Description": "Authors of the study dataset from git shortlog"},
     "author_lead_raw": {
         "Description": "First author from raw dataset's Authors field, or 'n/a' if multiple conflicting sources"
     },
     "author_senior_raw": {
         "Description": "Last author from raw dataset's Authors field, or 'n/a' if multiple conflicting sources"
     },
-    "source_count": {
-        "Description": "Number of sourcedata subdatasets"
-    },
+    "source_count": {"Description": "Number of sourcedata subdatasets"},
     "source_types": {
         "Description": "Comma-separated set of BIDS DatasetTypes from source datasets (e.g., 'raw', 'derivative', 'raw,derivative')"
     },
-    "derivative_count": {
-        "Description": "Number of derivative subdatasets"
-    },
-    "subjects_num": {
-        "Description": "Number of subjects in the raw dataset"
-    },
-    "sessions_num": {
-        "Description": "Total number of sessions across all subjects"
-    },
-    "sessions_min": {
-        "Description": "Minimum number of sessions per subject"
-    },
-    "sessions_max": {
-        "Description": "Maximum number of sessions per subject"
-    },
-    "bold_num": {
-        "Description": "Number of BOLD fMRI files"
-    },
-    "t1w_num": {
-        "Description": "Number of T1-weighted structural files"
-    },
-    "t2w_num": {
-        "Description": "Number of T2-weighted structural files"
-    },
-    "bold_size": {
-        "Description": "Total size of BOLD files in bytes"
-    },
-    "t1w_size": {
-        "Description": "Total size of T1w files in bytes"
-    },
-    "bold_size_max": {
-        "Description": "Size of largest BOLD file in bytes"
-    },
-    "bold_voxels": {
-        "Description": "Total number of voxels across all BOLD files"
-    },
+    "derivative_count": {"Description": "Number of derivative subdatasets"},
+    "subjects_num": {"Description": "Number of subjects in the raw dataset"},
+    "sessions_num": {"Description": "Total number of sessions across all subjects"},
+    "sessions_min": {"Description": "Minimum number of sessions per subject"},
+    "sessions_max": {"Description": "Maximum number of sessions per subject"},
+    "bold_num": {"Description": "Number of BOLD fMRI files"},
+    "t1w_num": {"Description": "Number of T1-weighted structural files"},
+    "t2w_num": {"Description": "Number of T2-weighted structural files"},
+    "bold_size": {"Description": "Total size of BOLD files in bytes"},
+    "t1w_size": {"Description": "Total size of T1w files in bytes"},
+    "bold_size_max": {"Description": "Size of largest BOLD file in bytes"},
+    "bold_voxels": {"Description": "Total number of voxels across all BOLD files"},
     "datatypes": {
         "Description": "Comma-separated list of BIDS datatypes present (e.g., 'anat,func,dwi')"
     },
-    "derivative_ids": {
-        "Description": "Comma-separated list of derivative identifiers"
-    },
+    "derivative_ids": {"Description": "Comma-separated list of derivative identifiers"},
     "bids_valid": {
         "Description": "BIDS validation status: 'valid', 'warnings', 'errors', or 'n/a'"
     },
@@ -167,7 +125,7 @@ def _count_submodules(study_path: Path) -> tuple[int, int, list[str]]:
     derivative_paths: set[str] = set()
     derivative_ids: list[str] = []
 
-    for name, config in submodules.items():
+    for _name, config in submodules.items():
         path = config.get("path", "")
         if path.startswith("sourcedata/"):
             source_paths.add(path)
@@ -199,7 +157,7 @@ def _get_source_types(study_path: Path) -> str:
     submodules = _parse_gitmodules(gitmodules_path)
 
     source_types = set()
-    for name, config in submodules.items():
+    for _name, config in submodules.items():
         path = config.get("path", "")
         if path.startswith("sourcedata/"):
             # Default to 'raw' - would need to fetch actual type

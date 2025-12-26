@@ -24,9 +24,7 @@ def load_publication_status(config_dir: Path = Path(".openneuro-studies")) -> Pu
     status_file = config_dir / "published-studies.json"
     if not status_file.exists():
         # Return empty status - will need organization set later
-        return PublicationStatus(
-            studies=[], organization="", last_updated=datetime.utcnow()
-        )
+        return PublicationStatus(studies=[], organization="", last_updated=datetime.utcnow())
 
     with open(status_file) as f:
         data = json.load(f)
