@@ -1,0 +1,50 @@
+{
+  "source_id": {
+    "Description": "Sourcedata dataset ID (e.g., ds000001)"
+  },
+  "subject_id": {
+    "Description": "Subject ID from BIDS naming (e.g., sub-01)"
+  },
+  "session_id": {
+    "Description": "Session ID if multi-session dataset, else 'n/a'"
+  },
+  "bold_num": {
+    "Description": "Number of BOLD fMRI files for this subject/session",
+    "Units": "count"
+  },
+  "t1w_num": {
+    "Description": "Number of T1-weighted structural files for this subject/session",
+    "Units": "count"
+  },
+  "t2w_num": {
+    "Description": "Number of T2-weighted structural files for this subject/session",
+    "Units": "count"
+  },
+  "bold_size": {
+    "Description": "Total size of BOLD files for this subject/session",
+    "Units": "bytes"
+  },
+  "t1w_size": {
+    "Description": "Total size of T1w files for this subject/session",
+    "Units": "bytes"
+  },
+  "bold_duration_total": {
+    "Description": "Total BOLD acquisition duration for this subject/session (TR × volumes summed across runs)",
+    "Units": "seconds"
+  },
+  "bold_duration_mean": {
+    "Description": "Mean BOLD run duration for this subject/session",
+    "Units": "seconds"
+  },
+  "bold_voxels_total": {
+    "Description": "Total number of voxels across all BOLD files for this subject/session",
+    "Units": "count"
+  },
+  "bold_voxels_mean": {
+    "Description": "Mean number of voxels per BOLD file for this subject/session",
+    "Units": "count"
+  },
+  "datatypes": {
+    "Description": "Comma-separated list of BIDS datatypes present for this subject/session (e.g., 'anat,func,dwi')"
+  }
+}

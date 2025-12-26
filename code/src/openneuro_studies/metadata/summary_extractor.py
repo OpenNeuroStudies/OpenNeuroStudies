@@ -18,7 +18,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
-from openneuro_studies.lib.sparse_access import SparseDataset, is_sparse_access_available
+from bids_studies.sparse import SparseDataset, is_sparse_access_available
 
 logger = logging.getLogger(__name__)
 

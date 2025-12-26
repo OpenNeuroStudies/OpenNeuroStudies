@@ -68,8 +68,21 @@
   "bold_size_max": {
     "Description": "Size of largest BOLD file in bytes"
   },
-  "bold_voxels": {
-    "Description": "Total number of voxels across all BOLD files"
+  "bold_duration_total": {
+    "Description": "Total BOLD acquisition duration across all subjects (sum of TR × volumes)",
+    "Units": "seconds"
+  },
+  "bold_duration_mean": {
+    "Description": "Mean BOLD run duration, weighted by number of runs per subject",
+    "Units": "seconds"
+  },
+  "bold_voxels_total": {
+    "Description": "Total number of voxels across all BOLD files",
+    "Units": "count"
+  },
+  "bold_voxels_mean": {
+    "Description": "Mean voxels per BOLD file, weighted by duration",
+    "Units": "count"
   },
   "datatypes": {
     "Description": "Comma-separated list of BIDS datatypes present (e.g., 'anat,func,dwi')"

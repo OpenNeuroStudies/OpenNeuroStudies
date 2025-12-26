@@ -1,0 +1,39 @@
+{
+  "derivative_id": {
+    "Description": "Derivative directory name (e.g., fMRIPrep-21.0.1, MRIQC-0.16.1)"
+  },
+  "subjects_num": {
+    "Description": "Number of subjects with outputs in this derivative",
+    "Units": "count"
+  },
+  "sessions_num": {
+    "Description": "Total number of sessions with outputs, or 'n/a' if single-session",
+    "Units": "count"
+  },
+  "output_num": {
+    "Description": "Total number of output files in this derivative",
+    "Units": "count"
+  },
+  "output_size": {
+    "Description": "Total size of output files in this derivative",
+    "Units": "bytes"
+  },
+  "html_num": {
+    "Description": "Total number of HTML report files in this derivative",
+    "Units": "count"
+  },
+  "nifti_num": {
+    "Description": "Total number of NIfTI output files in this derivative",
+    "Units": "count"
+  },
+  "nifti_size": {
+    "Description": "Total size of NIfTI output files in this derivative",
+    "Units": "bytes"
+  },
+  "tool_name": {
+    "Description": "Name of the processing tool (e.g., fMRIPrep, MRIQC)"
+  },
+  "tool_version": {
+    "Description": "Version of the processing tool"
+  }
+}

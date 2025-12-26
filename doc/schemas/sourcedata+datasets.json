@@ -1,0 +1,64 @@
+{
+  "source_id": {
+    "Description": "Sourcedata dataset ID (e.g., ds000001)"
+  },
+  "subjects_num": {
+    "Description": "Number of subjects in this source dataset",
+    "Units": "count"
+  },
+  "sessions_num": {
+    "Description": "Total number of sessions across all subjects, or 'n/a' if single-session",
+    "Units": "count"
+  },
+  "sessions_min": {
+    "Description": "Minimum number of sessions per subject, or 'n/a' if single-session",
+    "Units": "count"
+  },
+  "sessions_max": {
+    "Description": "Maximum number of sessions per subject, or 'n/a' if single-session",
+    "Units": "count"
+  },
+  "bold_num": {
+    "Description": "Total number of BOLD fMRI files in this source dataset",
+    "Units": "count"
+  },
+  "t1w_num": {
+    "Description": "Total number of T1-weighted structural files in this source dataset",
+    "Units": "count"
+  },
+  "t2w_num": {
+    "Description": "Total number of T2-weighted structural files in this source dataset",
+    "Units": "count"
+  },
+  "bold_size": {
+    "Description": "Total size of BOLD files in this source dataset",
+    "Units": "bytes"
+  },
+  "t1w_size": {
+    "Description": "Total size of T1w files in this source dataset",
+    "Units": "bytes"
+  },
+  "bold_size_max": {
+    "Description": "Size of largest BOLD file in this source dataset",
+    "Units": "bytes"
+  },
+  "bold_duration_total": {
+    "Description": "Total BOLD acquisition duration across all subjects (sum of TR × volumes)",
+    "Units": "seconds"
+  },
+  "bold_duration_mean": {
+    "Description": "Mean BOLD run duration, weighted by number of runs per subject",
+    "Units": "seconds"
+  },
+  "bold_voxels_total": {
+    "Description": "Total number of voxels across all BOLD files in this source dataset",
+    "Units": "count"
+  },
+  "bold_voxels_mean": {
+    "Description": "Mean voxels per BOLD file, weighted by duration",
+    "Units": "count"
+  },
+  "datatypes": {
+    "Description": "Comma-separated list of BIDS datatypes present (e.g., 'anat,func,dwi')"
+  }
+}

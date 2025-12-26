@@ -46,6 +46,14 @@ dev = [
     "types-pyyaml>=6.0.0",
     "types-requests>=2.31.0",
 ]
+sparse = [
+    "datalad-fuse>=0.4.0",
+    "fsspec>=2023.1.0",
+    "aiohttp>=3.8.0",
+]
+imaging = [
+    "nibabel>=5.0.0",
+]
 
 [project.scripts]
 openneuro-studies = "openneuro_studies.cli.main:cli"
@@ -57,9 +65,11 @@ Issues = "https://github.com/OpenNeuroStudies/OpenNeuroStudies/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["openneuro_studies*", "bids_studies*"]
 
 [tool.setuptools.package-data]
 openneuro_studies = ["py.typed"]
+bids_studies = ["py.typed", "schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -102,7 +112,7 @@ ignore = [
 ]
 
 [tool.ruff.isort]
-known-first-party = ["openneuro_studies"]
+known-first-party = ["openneuro_studies", "bids_studies"]
 
 [tool.mypy]
 python_version = "3.10"
