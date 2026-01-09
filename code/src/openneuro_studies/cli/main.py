@@ -221,7 +221,8 @@ def metadata_generate(
     if studies_tsv:
         click.echo("\nGenerating studies.tsv...")
         try:
-            generate_studies_tsv(study_paths, root_path / "studies.tsv")
+            # Use "sizes" stage to get counts and file sizes via git tree/annex
+            generate_studies_tsv(study_paths, root_path / "studies.tsv", stage="sizes")
             generate_studies_json(root_path / "studies.json")
             click.echo("  ✓ studies.tsv")
             click.echo("  ✓ studies.json")
