@@ -221,7 +221,7 @@ commands:
     is_group: true
     help: |
       Commands for generating and synchronizing metadata files (dataset_description.json,
-      studies.tsv, studies_derivatives.tsv).
+      studies.tsv, studies+derivatives.tsv).
 
     subcommands:
       generate:
@@ -280,8 +280,8 @@ commands:
           output_files:
             - "studies.tsv"
             - "studies.json"
-            - "studies_derivatives.tsv"
-            - "studies_derivatives.json"
+            - "studies+derivatives.tsv"
+            - "studies+derivatives.json"
             - "study-*/dataset_description.json"
 
       sync:

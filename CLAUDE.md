@@ -63,8 +63,8 @@ OpenNeuroStudies/                    # Repository root (BEP035 BIDS mega-analysi
 ├── .bidsignore                      # Exclude study-* from top-level validation
 ├── studies.tsv                      # Study metadata (wide format)
 ├── studies.json                     # Column descriptions
-├── studies_derivatives.tsv          # Derivative metadata (tall format)
-├── studies_derivatives.json         # Column descriptions
+├── studies+derivatives.tsv          # Derivative metadata (tall format, BIDS #2273)
+├── studies+derivatives.json         # Column descriptions
 ├── .openneuro-studies/
 │   ├── config.yaml                  # Source specifications (user config)
 │   └── cache/                       # API response cache
@@ -350,7 +350,7 @@ This repository is itself a **BIDS dataset** following [BEP035 (Mega-analysis)](
   - Use `/openneuro-studies.release` command to generate new release entries from git history (see `.specify/commands/openneuro-studies.release.md`)
 - **.bidsignore**: Excludes `study-*` subdirectories from top-level BIDS validation
   - Each `study-{id}/` is its own BIDS dataset (DatasetType: "study")
-  - Top-level validation focuses on metadata files (studies.tsv, studies_derivatives.tsv)
+  - Top-level validation focuses on metadata files (studies.tsv, studies+derivatives.tsv)
 
 ## Constitution Compliance
 
@@ -360,7 +360,7 @@ This project follows the [OpenNeuroStudies Constitution](/.specify/memory/consti
 ✅ **Automation**: All operations scripted and idempotent
 ✅ **Standard Formats**: TSV/JSON/YAML only, no binary formats
 ✅ **Git/DataLad-First**: All state changes via datalad run or git commits
-✅ **Observability**: Complete status via studies.tsv and studies_derivatives.tsv
+✅ **Observability**: Complete status via studies.tsv and studies+derivatives.tsv
 
 ## Recent Changes
 - 001-read-file-doc: Added Python 3.10+

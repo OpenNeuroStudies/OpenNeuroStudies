@@ -46,7 +46,7 @@ Separating this into its own package:
 | `lib/datalad_utils.py` | DataLad operations | Study organization |
 | `models/` | Pydantic models | OpenNeuro entities |
 | `metadata/studies_tsv.py` | studies.tsv generation | OpenNeuro-specific format |
-| `metadata/studies_derivatives_tsv.py` | Derivatives TSV | OpenNeuro-specific format |
+| `metadata/studies_plus_derivatives_tsv.py` | Derivatives TSV (studies+derivatives.tsv) | OpenNeuro-specific format |
 | `metadata/dataset_description.py` | dataset_description.json | Study metadata |
 
 ## Proposed Package Structure
@@ -86,7 +86,7 @@ code/src/
     ├── metadata/                    # Metadata generation
     │   ├── __init__.py
     │   ├── studies_tsv.py           # Uses bids_studies
-    │   ├── studies_derivatives_tsv.py
+    │   ├── studies_plus_derivatives_tsv.py
     │   └── dataset_description.py
     ├── lib/                         # Utilities
     │   ├── __init__.py

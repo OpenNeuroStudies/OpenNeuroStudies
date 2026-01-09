@@ -114,7 +114,7 @@ Derivative datasets MUST include version information:
 
 - Folder naming: `toolname-version` (e.g., `fmriprep-21.0.1`)
 - Support multiple versions of same tool simultaneously by adding first 8 letters of DataLad UUID (under `.datalad/config`)
-- studies_derivatives.tsv (tall format at top level) MUST list all study-derivative pairs with versions, extracted statistics of size (from `git annex info`), execution metrics if collected using `con-duct`, and potentially other metrics such as successful completion, outdatedness, etc
+- studies+derivatives.tsv (tall format at top level, named per BIDS #2273) MUST list all study-derivative pairs with versions, extracted statistics of size (from `git annex info`), execution metrics if collected using `con-duct`, and potentially other metrics such as successful completion, outdatedness, etc
 
 ### Metadata Completeness
 

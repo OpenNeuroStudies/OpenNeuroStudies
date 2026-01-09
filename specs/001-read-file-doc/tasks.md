@@ -525,7 +525,7 @@ if __name__ == "__main__":
 
 **Duration**: 1 week
 
-**Independent Test**: Verify metadata generation produces correct dataset_description.json, populates studies.tsv with accurate data, and creates studies_derivatives.tsv with derivative tracking.
+**Independent Test**: Verify metadata generation produces correct dataset_description.json, populates studies.tsv with accurate data, and creates studies+derivatives.tsv with derivative tracking.
 
 ### T028: [US2] Implement Study dataset_description.json Generator
 
@@ -566,11 +566,11 @@ if __name__ == "__main__":
 
 ---
 
-### T030: [US2] Implement studies_derivatives.tsv Generator
+### T030: [US2] Implement studies+derivatives.tsv Generator
 
 **File**: `code/src/openneuro_studies/metadata/derivatives_tsv.py`
 
-**Task**: Generate studies_derivatives.tsv (tall format) per FR-010:
+**Task**: Generate studies+derivatives.tsv (tall format) per FR-010:
 - Function `generate_derivatives_tsv(study_paths: List[Path]) -> pd.DataFrame`
 - Columns: study_id, derivative_id, dataset_id, tool_name, version, datalad_uuid, total_size, annexed_size, file_count, execution_time, peak_memory, processed_raw_version, outdatedness, status
 - One row per study-derivative pair
@@ -581,7 +581,7 @@ if __name__ == "__main__":
 
 **Reference**: spec.md lines 41-42, FR-010, FR-028, FR-029
 
-**Deliverable**: studies_derivatives.tsv generation (tall format)
+**Deliverable**: studies+derivatives.tsv generation (tall format)
 
 ---
 
@@ -592,7 +592,7 @@ if __name__ == "__main__":
 **Task**: Generate JSON sidecar files describing TSV columns per FR-011:
 - Function `generate_tsv_sidecar(tsv_path: Path, column_descriptions: dict)`
 - Create studies.json describing studies.tsv columns
-- Create studies_derivatives.json describing studies_derivatives.tsv columns
+- Create studies+derivatives.json describing studies+derivatives.tsv columns
 - Follow BIDS sidecar conventions (column name → description dict)
 
 **Reference**: FR-011, BIDS specification
@@ -678,7 +678,7 @@ if __name__ == "__main__":
 **Task**: Write unit tests for metadata module:
 - Test dataset_description.json generation (all required fields)
 - Test studies.tsv generation (column count, snake_case naming)
-- Test studies_derivatives.tsv generation (tall format correctness)
+- Test studies+derivatives.tsv generation (tall format correctness)
 - Test author extraction logic (single author, multiple authors, conflicting authors)
 - Test "n/a" handling for missing values
 - Test JSON sidecar generation
@@ -694,7 +694,7 @@ if __name__ == "__main__":
 **Task**: Write end-to-end integration test for US2:
 - Setup: Create mock study datasets with sourcedata and derivatives
 - Test basic metadata generation: Verify studies.tsv columns and values
-- Test derivatives metadata: Verify studies_derivatives.tsv rows
+- Test derivatives metadata: Verify studies+derivatives.tsv rows
 - Test incremental sync: Update one study, verify only that study regenerated
 - Test multi-source derivative handling: Verify author_lead_raw/author_senior_raw logic
 - Mark with `@pytest.mark.integration` and `@pytest.mark.ai_generated`
@@ -712,7 +712,7 @@ if __name__ == "__main__":
 **Task**: Manually test metadata generation with real studies:
 - Test with organized datasets from T027
 - Verify studies.tsv has all required columns populated or "n/a"
-- Verify studies_derivatives.tsv correctly tracks derivatives
+- Verify studies+derivatives.tsv correctly tracks derivatives
 - Verify JSON sidecars describe columns accurately
 - Test incremental sync with modified studies
 - Document any edge cases or data quality issues
@@ -903,7 +903,7 @@ if __name__ == "__main__":
 **Task**: Write comprehensive end-to-end test:
 - Setup: Clean environment with mock GitHub API
 - Execute full workflow: discover → organize → metadata → validate
-- Verify all outputs: studies.tsv, studies_derivatives.tsv, validation results
+- Verify all outputs: studies.tsv, studies+derivatives.tsv, validation results
 - Test incremental updates: Modify one dataset, re-run, verify only that study updated
 - Test error recovery: Introduce errors, verify graceful handling
 - Mark with `@pytest.mark.integration` and `@pytest.mark.ai_generated`
@@ -1032,7 +1032,7 @@ Each phase must pass quality gate before proceeding:
 
 **Phase 4 (US2) Success**:
 - Generates studies.tsv with all 24 columns
-- Generates studies_derivatives.tsv with correct row count
+- Generates studies+derivatives.tsv with correct row count
 - Incremental sync updates only modified studies
 - Tests pass: T036, T037
 

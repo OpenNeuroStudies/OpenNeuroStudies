@@ -9,7 +9,7 @@ This guide will help you set up the OpenNeuroStudies infrastructure and organize
 
 - Discovered datasets from OpenNeuro sources
 - Organized them into BIDS study structures
-- Generated metadata files (studies.tsv, studies_derivatives.tsv)
+- Generated metadata files (studies.tsv, studies+derivatives.tsv)
 - Validated BIDS compliance
 
 **Note**: This repository is itself a BIDS dataset following [BEP035 (Mega-analysis)](https://bids.neuroimaging.io/extensions/beps/bep_035.html) with `DatasetType: "study"`. The repository root contains `dataset_description.json` and `.bidsignore` to exclude individual `study-*` subdirectories from top-level validation.
@@ -247,7 +247,7 @@ study-ds000001/
 
 ### Step 3: Generate Metadata
 
-Generate studies.tsv and studies_derivatives.tsv:
+Generate studies.tsv and studies+derivatives.tsv:
 
 ```bash
 # Generate basic metadata (no cloning required)
@@ -258,15 +258,15 @@ head studies.tsv
 visidata studies.tsv  # Interactive viewer (if installed)
 
 # View derivatives (tall table)
-head studies_derivatives.tsv
+head studies+derivatives.tsv
 ```
 
 **Expected files**:
 ```
 studies.tsv                    # Wide format, study-centric
 studies.json                   # Column descriptions
-studies_derivatives.tsv        # Tall format, derivative-centric
-studies_derivatives.json       # Column descriptions
+studies+derivatives.tsv        # Tall format, derivative-centric
+studies+derivatives.json       # Column descriptions
 ```
 
 ### Step 4: Validate (Optional)
@@ -309,7 +309,7 @@ ls -d study-*/
 
 # 6. Check metadata was generated
 test -f studies.tsv && echo "✓ studies.tsv exists"
-test -f studies_derivatives.tsv && echo "✓ studies_derivatives.tsv exists"
+test -f studies+derivatives.tsv && echo "✓ studies+derivatives.tsv exists"
 
 # 7. Check status
 openneuro-studies status
@@ -371,8 +371,8 @@ Calculate how many commits derivatives are behind current raw versions:
 # Calculate derivative outdatedness (may clone repos)
 openneuro-studies metadata generate --stage outdatedness
 
-# Check results in studies_derivatives.tsv
-cut -f1,2,12,13 studies_derivatives.tsv | head
+# Check results in studies+derivatives.tsv
+cut -f1,2,12,13 studies+derivatives.tsv | head
 ```
 
 ### Clean Up
@@ -478,7 +478,7 @@ cat derivatives/bids-validator.json | jq '.issues'
    # Edit and commit
    ```
 
-3. **Generate Dashboards**: Use studies.tsv and studies_derivatives.tsv
+3. **Generate Dashboards**: Use studies.tsv and studies+derivatives.tsv
    ```bash
    # Example: Dataset statistics
    python scripts/generate_dashboard.py

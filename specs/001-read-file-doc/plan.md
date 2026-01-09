@@ -11,7 +11,7 @@ This feature implements infrastructure to discover, organize, and maintain OpenN
 
 1. Discover raw and derivative datasets from GitHub organizations (OpenNeuroDatasets, OpenNeuroDerivatives) without cloning
 2. Create study-{id} folders as DataLad datasets with sourcedata/ and derivatives/ linked as git submodules
-3. Generate comprehensive metadata (dataset_description.json, studies.tsv, studies_derivatives.tsv)
+3. Generate comprehensive metadata (dataset_description.json, studies.tsv, studies+derivatives.tsv)
 4. Validate BIDS compliance and track dataset status
 
 **Primary Technical Approach**: Python CLI using DataLad API, GitHub REST API for discovery, git submodules for linking, TSV/JSON for metadata following BIDS conventions.
@@ -146,7 +146,7 @@ code/
 │       │   ├── __init__.py
 │       │   ├── dataset_description.py  # study dataset_description.json
 │       │   ├── studies_tsv.py    # studies.tsv generation
-│       │   └── derivatives_tsv.py # studies_derivatives.tsv generation
+│       │   └── derivatives_tsv.py # studies+derivatives.tsv generation
 │       ├── validation/
 │       │   ├── __init__.py
 │       │   └── bids_validator.py # bids-validator-deno integration
@@ -231,7 +231,7 @@ Based on Technical Context analysis, the following areas require research:
 **Contents**:
 - Entity definitions: StudyDataset, SourceDataset, DerivativeDataset, SourceSpecification
 - Pydantic models with validation
-- TSV schema for studies.tsv and studies_derivatives.tsv
+- TSV schema for studies.tsv and studies+derivatives.tsv
 - State transitions and data flows
 - Validation rules
 
@@ -384,12 +384,12 @@ Per Constitution Principle VI (No Silent Failures), all discovered datasets must
 
 ### Phase 4: Metadata Generation (Week 3-4)
 
-**Goal**: Generate studies.tsv, studies_derivatives.tsv, and dataset_description.json.
+**Goal**: Generate studies.tsv, studies+derivatives.tsv, and dataset_description.json.
 
 **Deliverables**:
 1. dataset_description.json generation for studies
 2. studies.tsv generation (wide format)
-3. studies_derivatives.tsv generation (tall format)
+3. studies+derivatives.tsv generation (tall format)
 4. JSON sidecar generation
 5. `metadata generate` and `metadata sync` commands
 6. Unit and integration tests
@@ -812,7 +812,7 @@ openneuro-studies organize --no-publish
 2. **Phase 4: Metadata Generation** (Priority: HIGH)
    - Generate dataset_description.json for studies
    - Generate studies.tsv (wide format)
-   - Generate studies_derivatives.tsv (tall format)
+   - Generate studies+derivatives.tsv (tall format)
    - JSON sidecar generation
    - **Estimated**: 1-2 weeks
    - **Can run after Phase 8**

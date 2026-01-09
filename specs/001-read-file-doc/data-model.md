@@ -51,7 +51,7 @@ This data model defines the core entities for organizing 1000+ OpenNeuro dataset
 │  - One row per study                              │
 │  - derivative_ids column (list)                   │
 │                                                    │
-│  studies_derivatives.tsv (TALL format)            │
+│  studies+derivatives.tsv (TALL format)            │
 │  - One row per study-derivative pair              │
 │  - Lead columns: study_id, derivative_id          │
 │  - Detailed metrics per derivative                │
@@ -214,7 +214,7 @@ class SourceDataset(BaseModel):
 | `outdatedness` | int | No | Commits behind current raw version | 0 = up-to-date, >0 = outdated |
 
 **Relationships**:
-- **Many-to-many** with StudyDataset: A derivative can be linked to multiple studies (via tall table studies_derivatives.tsv)
+- **Many-to-many** with StudyDataset: A derivative can be linked to multiple studies (via tall table studies+derivatives.tsv)
 
 **Disambiguation Logic**:
 ```python
@@ -381,7 +381,7 @@ class OpenNeuroStudiesConfig(BaseModel):
 
 **Companion Sidecar**: `studies.json` (JSON describing each column)
 
-#### studies_derivatives.tsv (Tall Format - Derivative-Centric)
+#### studies+derivatives.tsv (Tall Format - Derivative-Centric)
 
 **Implementation**: `code/src/openneuro_studies/metadata/derivatives_tsv.py`
 
@@ -404,7 +404,7 @@ class OpenNeuroStudiesConfig(BaseModel):
 | `outdatedness` | int | Commits behind current | 0 = up-to-date |
 | `status` | str | Processing status | "complete" \| "incomplete" \| "failed" |
 
-**Companion Sidecar**: `studies_derivatives.json`
+**Companion Sidecar**: `studies+derivatives.json`
 
 ---
 
@@ -440,7 +440,7 @@ study-{id}/dataset_description.json
     ↓ (metadata/studies_tsv.py)
 studies.tsv (wide format)
     ↓ (metadata/derivatives_tsv.py)
-studies_derivatives.tsv (tall format)
+studies+derivatives.tsv (tall format)
     ↓ (update state)
 StudyDataset (state=metadata_generated)
 ```
@@ -505,7 +505,7 @@ StudyDataset (state=validated)
 
 4. **Cross-Entity**:
    - studies.tsv derivative_ids must match actual derivatives linked
-   - studies_derivatives.tsv rows must have corresponding study in studies.tsv
+   - studies+derivatives.tsv rows must have corresponding study in studies.tsv
    - Outdatedness calculation only valid when processed_raw_version is known
 
 ---

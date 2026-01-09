@@ -10,7 +10,7 @@ OpenNeuroStudies provides tools to discover, organize, and maintain 1000+ OpenNe
 
 - **Dataset Discovery**: Discovers raw and derivative datasets from GitHub organizations (OpenNeuroDatasets, OpenNeuroDerivatives) without cloning
 - **Study Organization**: Creates study-{id} folders as DataLad datasets with sourcedata/ and derivatives/ linked as git submodules
-- **Metadata Generation**: Generates comprehensive metadata (dataset_description.json, studies.tsv, studies_derivatives.tsv)
+- **Metadata Generation**: Generates comprehensive metadata (dataset_description.json, studies.tsv, studies+derivatives.tsv)
 - **BIDS Validation**: Integrates bids-validator-deno to track compliance status
 
 ## Installation

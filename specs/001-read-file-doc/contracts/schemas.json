@@ -417,7 +417,7 @@
     },
     "DerivativesRow": {
       "title": "DerivativesRow",
-      "description": "Row schema for studies_derivatives.tsv (tall format)",
+      "description": "Row schema for studies+derivatives.tsv (tall format)",
       "type": "object",
       "properties": {
         "study_id": {"type": "string"},
