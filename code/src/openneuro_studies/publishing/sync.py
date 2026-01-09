@@ -22,7 +22,7 @@ class SyncResult:
         updated_studies: List of updated study IDs with old/new SHAs
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.added = 0
         self.removed = 0
         self.updated = 0

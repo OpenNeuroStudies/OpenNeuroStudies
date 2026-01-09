@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 
 
 class PublishedStudy(BaseModel):
@@ -20,7 +20,7 @@ class PublishedStudy(BaseModel):
     """
 
     study_id: str = Field(..., pattern=r"^study-ds\d+$")
-    github_url: HttpUrl
+    github_url: str
     published_at: datetime
     last_push_commit_sha: str = Field(..., min_length=40, max_length=40)
     last_push_at: datetime

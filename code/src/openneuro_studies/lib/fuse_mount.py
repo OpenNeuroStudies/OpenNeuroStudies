@@ -139,7 +139,9 @@ class FuseMount:
         self.mount()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self, exc_type: type | None, exc_val: BaseException | None, exc_tb: object
+    ) -> None:
         """Unmount the filesystem on context exit."""
         self.unmount()
 

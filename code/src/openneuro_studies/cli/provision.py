@@ -145,12 +145,12 @@ def provision(
                 try:
                     import subprocess
 
-                    result = subprocess.run(
+                    git_result = subprocess.run(
                         ["git", "-C", str(study_path), "status", "--porcelain"],
                         capture_output=True,
                         text=True,
                     )
-                    if result.stdout.strip():
+                    if git_result.stdout.strip():
                         subprocess.run(
                             ["git", "-C", str(study_path), "add", "-A"],
                             check=True,

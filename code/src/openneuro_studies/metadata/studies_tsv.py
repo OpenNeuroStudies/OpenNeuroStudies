@@ -171,7 +171,8 @@ def _load_dataset_description(study_path: Path) -> dict[str, Any]:
     desc_path = study_path / "dataset_description.json"
     if desc_path.exists():
         with open(desc_path) as f:
-            return json.load(f)
+            data: dict[str, Any] = json.load(f)
+            return data
     return {}
 
 

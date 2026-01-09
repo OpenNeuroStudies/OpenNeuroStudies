@@ -153,7 +153,7 @@ def extract_directory_summary(study_path: Path) -> dict[str, Any]:
         Dictionary with subjects_num, sessions_num, sessions_min,
         sessions_max, datatypes
     """
-    result = {
+    result: dict[str, Any] = {
         "subjects_num": "n/a",
         "sessions_num": "n/a",
         "sessions_min": "n/a",
@@ -229,7 +229,7 @@ def extract_file_counts(study_path: Path) -> dict[str, Any]:
     Returns:
         Dictionary with bold_num, t1w_num, t2w_num
     """
-    result = {
+    result: dict[str, Any] = {
         "bold_num": "n/a",
         "t1w_num": "n/a",
         "t2w_num": "n/a",
@@ -292,7 +292,7 @@ def extract_file_sizes(study_path: Path) -> dict[str, Any]:
     Returns:
         Dictionary with bold_size, t1w_size, bold_size_max
     """
-    result = {
+    result: dict[str, Any] = {
         "bold_size": "n/a",
         "t1w_size": "n/a",
         "bold_size_max": "n/a",
@@ -362,7 +362,7 @@ def extract_voxel_counts(study_path: Path) -> dict[str, Any]:
     Returns:
         Dictionary with bold_voxels
     """
-    result = {"bold_voxels": "n/a"}
+    result: dict[str, Any] = {"bold_voxels": "n/a"}
 
     # Check if sparse access and nibabel are available
     if not is_sparse_access_available():
