@@ -125,6 +125,75 @@ def extract_subject_stats(
     return result
 
 
+def _extract_nifti_header_from_gzip_stream(f: Any) -> Optional[tuple[tuple[int, ...], float]]:
+    """Extract NIfTI header info from a gzipped HTTP stream.
+
+    For gzipped NIfTI files over HTTP, we need to read enough data
+    to decompress the header (first 352 bytes). This function reads
+    ~1MB which is typically sufficient to decompress the header.
+
+    Args:
+        f: File-like object (HTTP stream)
+
+    Returns:
+        Tuple of (shape, tr) or None if extraction fails
+    """
+    import struct
+    import zlib
+
+    # Read enough gzip data to decompress header (~1MB should suffice)
+    chunk_size = 1024 * 1024  # 1MB
+    try:
+        gzip_data = f.read(chunk_size)
+    except Exception as e:
+        logger.debug(f"Failed to read from stream: {e}")
+        return None
+
+    if len(gzip_data) < 100:
+        logger.debug(f"Not enough data read: {len(gzip_data)} bytes")
+        return None
+
+    # Check for gzip magic number
+    if gzip_data[:2] != b"\x1f\x8b":
+        logger.debug("Not a gzip file")
+        return None
+
+    # Decompress using zlib (gzip is zlib with extra header)
+    try:
+        decompressor = zlib.decompressobj(wbits=zlib.MAX_WBITS | 16)  # 16 for gzip
+        decompressed = decompressor.decompress(gzip_data)
+    except zlib.error as e:
+        logger.debug(f"Decompression failed: {e}")
+        return None
+
+    if len(decompressed) < 352:
+        logger.debug(f"Not enough decompressed data: {len(decompressed)} bytes")
+        return None
+
+    # Parse NIfTI header
+    # sizeof_hdr at offset 0 (int32)
+    sizeof_hdr = struct.unpack("<i", decompressed[:4])[0]
+    if sizeof_hdr != 348:
+        logger.debug(f"Invalid sizeof_hdr: {sizeof_hdr}")
+        return None
+
+    # Dimensions at offset 40: dim[0..7] as int16
+    dims = struct.unpack("<8h", decompressed[40:56])
+    n_dims = dims[0]
+    if n_dims < 3 or n_dims > 7:
+        logger.debug(f"Invalid n_dims: {n_dims}")
+        return None
+
+    # Extract shape
+    shape = tuple(dims[1 : n_dims + 1])
+
+    # Pixel dimensions at offset 76: pixdim[0..7] as float32
+    pixdim = struct.unpack("<8f", decompressed[76:108])
+    tr = pixdim[4] if len(pixdim) > 4 else 0.0
+
+    return shape, tr
+
+
 def _extract_imaging_metrics(
     ds: SparseDataset,
     bold_files: list[str],
@@ -132,17 +201,16 @@ def _extract_imaging_metrics(
 ) -> None:
     """Extract imaging metrics from BOLD files.
 
+    For gzipped NIfTI files over HTTP, we read ~1MB of data
+    to decompress and parse the header. This avoids downloading
+    the entire file while still extracting shape and TR.
+
     Args:
         ds: SparseDataset instance
         bold_files: List of BOLD file paths
         result: Result dict to update in place
     """
-    try:
-        import nibabel as nib
-        import numpy as np
-    except ImportError:
-        logger.debug("nibabel not available for imaging extraction")
-        return
+    import numpy as np
 
     durations = []
     voxel_counts = []
@@ -150,10 +218,12 @@ def _extract_imaging_metrics(
     for bold_file in bold_files:
         try:
             with ds.open_file(bold_file) as f:
-                img = nib.Nifti1Image.from_stream(f)
-                shape = img.shape
-                zooms = img.header.get_zooms()
-                tr = zooms[3] if len(zooms) > 3 else None
+                header_info = _extract_nifti_header_from_gzip_stream(f)
+                if header_info is None:
+                    logger.debug(f"Could not extract header from {bold_file}")
+                    continue
+
+                shape, tr = header_info
 
                 # Calculate voxels (X * Y * Z)
                 voxels = int(np.prod(shape[:3]))

@@ -346,15 +346,85 @@ def extract_file_sizes(study_path: Path) -> dict[str, Any]:
 
 
 # ============================================================================
-# Phase 5: Voxel Counts (requires nibabel)
+# Phase 5: Voxel Counts (requires sparse access)
 # ============================================================================
 
 
-def extract_voxel_counts(study_path: Path) -> dict[str, Any]:
-    """Extract total voxel counts via sparse access and nibabel.
+def _extract_nifti_header_from_gzip_stream(f: Any) -> Optional[tuple[tuple[int, ...], float]]:
+    """Extract NIfTI header info from a gzipped HTTP stream.
 
-    This function requires nibabel and sparse access (datalad-fuse or fsspec).
-    If not available, returns n/a.
+    For gzipped NIfTI files over HTTP, we need to read enough data
+    to decompress the header (first 352 bytes). This function reads
+    ~1MB which is typically sufficient to decompress the header.
+
+    Args:
+        f: File-like object (HTTP stream)
+
+    Returns:
+        Tuple of (shape, tr) or None if extraction fails
+    """
+    import struct
+    import zlib
+
+    # Read enough gzip data to decompress header (~1MB should suffice)
+    chunk_size = 1024 * 1024  # 1MB
+    try:
+        gzip_data = f.read(chunk_size)
+    except Exception as e:
+        logger.debug(f"Failed to read from stream: {e}")
+        return None
+
+    if len(gzip_data) < 100:
+        logger.debug(f"Not enough data read: {len(gzip_data)} bytes")
+        return None
+
+    # Check for gzip magic number
+    if gzip_data[:2] != b"\x1f\x8b":
+        logger.debug("Not a gzip file")
+        return None
+
+    # Decompress using zlib (gzip is zlib with extra header)
+    try:
+        decompressor = zlib.decompressobj(wbits=zlib.MAX_WBITS | 16)  # 16 for gzip
+        decompressed = decompressor.decompress(gzip_data)
+    except zlib.error as e:
+        logger.debug(f"Decompression failed: {e}")
+        return None
+
+    if len(decompressed) < 352:
+        logger.debug(f"Not enough decompressed data: {len(decompressed)} bytes")
+        return None
+
+    # Parse NIfTI header
+    # sizeof_hdr at offset 0 (int32)
+    sizeof_hdr = struct.unpack("<i", decompressed[:4])[0]
+    if sizeof_hdr != 348:
+        logger.debug(f"Invalid sizeof_hdr: {sizeof_hdr}")
+        return None
+
+    # Dimensions at offset 40: dim[0..7] as int16
+    dims = struct.unpack("<8h", decompressed[40:56])
+    n_dims = dims[0]
+    if n_dims < 3 or n_dims > 7:
+        logger.debug(f"Invalid n_dims: {n_dims}")
+        return None
+
+    # Extract shape
+    shape = tuple(dims[1 : n_dims + 1])
+
+    # Pixel dimensions at offset 76: pixdim[0..7] as float32
+    pixdim = struct.unpack("<8f", decompressed[76:108])
+    tr = pixdim[4] if len(pixdim) > 4 else 0.0
+
+    return shape, tr
+
+
+def extract_voxel_counts(study_path: Path) -> dict[str, Any]:
+    """Extract total voxel counts via sparse access.
+
+    For gzipped NIfTI files over HTTP, reads ~1MB of data per file
+    to decompress and parse the header. This avoids downloading
+    the entire file while still extracting shape info.
 
     Args:
         study_path: Path to study directory
@@ -362,18 +432,13 @@ def extract_voxel_counts(study_path: Path) -> dict[str, Any]:
     Returns:
         Dictionary with bold_voxels
     """
+    import numpy as np
+
     result: dict[str, Any] = {"bold_voxels": "n/a"}
 
-    # Check if sparse access and nibabel are available
+    # Check if sparse access is available
     if not is_sparse_access_available():
         logger.info("Sparse access not available, skipping voxel extraction")
-        return result
-
-    try:
-        import nibabel as nib
-        import numpy as np
-    except ImportError:
-        logger.info("nibabel not installed, skipping voxel extraction")
         return result
 
     # Find sourcedata subdatasets
@@ -399,9 +464,12 @@ def extract_voxel_counts(study_path: Path) -> dict[str, Any]:
                 for bold_file in bold_files:
                     try:
                         with ds.open_file(bold_file) as f:
-                            # Read NIfTI header
-                            img = nib.Nifti1Image.from_stream(f)
-                            shape = img.shape
+                            header_info = _extract_nifti_header_from_gzip_stream(f)
+                            if header_info is None:
+                                logger.debug(f"Could not extract header from {bold_file}")
+                                continue
+
+                            shape, _tr = header_info
 
                             # Calculate voxels (X * Y * Z * time if 4D)
                             voxels = int(np.prod(shape[:3]))

@@ -2,6 +2,7 @@
 
 Tests the FuseMount context manager for sparse data access.
 Requires datalad-fuse to be installed: pip install datalad-fuse
+Also requires fusermount to be available (FUSE support in kernel/container).
 """
 
 import shutil
@@ -17,10 +18,23 @@ from openneuro_studies.lib.fuse_mount import (
 )
 
 
-# Skip entire module if datalad-fuse not available
+def is_fuse_usable() -> bool:
+    """Check if FUSE is actually usable (not just installed).
+
+    Returns True only if:
+    1. datalad fusefs is available
+    2. fusermount is available (FUSE kernel support)
+    """
+    if not is_fuse_available():
+        return False
+    # Check fusermount is available (required for actual FUSE operations)
+    return shutil.which("fusermount") is not None
+
+
+# Skip entire module if FUSE not usable
 pytestmark = pytest.mark.skipif(
-    not is_fuse_available(),
-    reason="datalad-fuse not installed (pip install datalad-fuse)",
+    not is_fuse_usable(),
+    reason="FUSE not usable (requires datalad-fuse and fusermount/FUSE support)",
 )
 
 
@@ -50,7 +64,9 @@ def test_is_fuse_available() -> None:
     """Test that datalad-fuse availability check works."""
     # This test only runs if datalad-fuse is available (pytestmark)
     assert is_fuse_available() is True
-    assert shutil.which("datalad-fuse") is not None
+    # Note: datalad-fuse is a datalad extension, not a standalone binary.
+    # The command is 'datalad fusefs', not 'datalad-fuse'.
+    assert shutil.which("datalad") is not None
 
 
 @pytest.mark.integration

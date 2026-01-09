@@ -137,6 +137,11 @@ def metadata() -> None:
     default=True,
     help="Commit changes with datalad save (includes descriptive stats)",
 )
+@click.option(
+    "--imaging/--no-imaging",
+    default=False,
+    help="Extract imaging metrics (voxel counts, durations) - requires nibabel and sparse access",
+)
 @click.pass_context
 def metadata_generate(
     ctx: click.Context,
@@ -146,6 +151,7 @@ def metadata_generate(
     derivatives_tsv: bool,
     overwrite: bool,
     commit: bool,
+    imaging: bool,
 ) -> None:
     """Generate metadata for study datasets.
 
@@ -219,16 +225,41 @@ def metadata_generate(
 
     # Generate studies.tsv and studies.json at root level
     if studies_tsv:
-        click.echo("\nGenerating studies.tsv...")
+        # Determine extraction stage
+        stage = "imaging" if imaging else "sizes"
+        click.echo(f"\nGenerating studies.tsv (stage={stage})...")
         try:
-            # Use "sizes" stage to get counts and file sizes via git tree/annex
-            generate_studies_tsv(study_paths, root_path / "studies.tsv", stage="sizes")
+            generate_studies_tsv(study_paths, root_path / "studies.tsv", stage=stage)
             generate_studies_json(root_path / "studies.json")
             click.echo("  ✓ studies.tsv")
             click.echo("  ✓ studies.json")
             modified_paths.extend([root_path / "studies.tsv", root_path / "studies.json"])
         except Exception as e:
             click.echo(f"  ✗ Failed: {e}", err=True)
+
+    # Generate hierarchical sourcedata TSV files when imaging is enabled
+    if imaging:
+        from bids_studies.extraction import extract_study_stats
+
+        click.echo("\nGenerating per-source hierarchical statistics...")
+        for study_path in study_paths:
+            try:
+                extract_study_stats(
+                    study_path,
+                    sourcedata_subdir="sourcedata",
+                    include_imaging=True,
+                    write_files=True,
+                )
+                click.echo(f"  ✓ {study_path.name}/sourcedata/*.tsv")
+                # Add sourcedata files to modified paths
+                sourcedata_path = study_path / "sourcedata"
+                if sourcedata_path.exists():
+                    for tsv in sourcedata_path.glob("sourcedata+*.tsv"):
+                        modified_paths.append(tsv)
+                    for json_file in sourcedata_path.glob("sourcedata+*.json"):
+                        modified_paths.append(json_file)
+            except Exception as e:
+                click.echo(f"  ✗ {study_path.name}: {e}", err=True)
 
     # Generate studies_derivatives.tsv and studies_derivatives.json at root level
     if derivatives_tsv:

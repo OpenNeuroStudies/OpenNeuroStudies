@@ -142,11 +142,35 @@ def collect_derivatives_for_study(study_path: Path) -> list[dict[str, Any]]:
     return derivatives
 
 
+def _load_existing_derivatives(output_path: Path) -> dict[tuple[str, str], dict[str, Any]]:
+    """Load existing studies_derivatives.tsv entries indexed by (study_id, derivative_id).
+
+    Args:
+        output_path: Path to existing studies_derivatives.tsv
+
+    Returns:
+        Dictionary mapping (study_id, derivative_id) to row data
+    """
+    existing: dict[tuple[str, str], dict[str, Any]] = {}
+    if output_path.exists():
+        with open(output_path, newline="") as f:
+            reader = csv.DictReader(f, delimiter="\t")
+            for row in reader:
+                key = (row.get("study_id", ""), row.get("derivative_id", ""))
+                if key[0] and key[1]:
+                    existing[key] = dict(row)
+    return existing
+
+
 def generate_studies_derivatives_tsv(
     studies: list[Path],
     output_path: Path,
 ) -> Path:
     """Generate studies_derivatives.tsv from list of study directories.
+
+    This function implements FR-012a: when updating specific studies,
+    existing entries for other studies are preserved. New/updated entries
+    are merged with existing data rather than replacing the entire file.
 
     Args:
         studies: List of study directory paths
@@ -155,16 +179,33 @@ def generate_studies_derivatives_tsv(
     Returns:
         Path to generated file
     """
-    rows = []
-    for study_path in sorted(studies, key=lambda p: p.name):
+    # Load existing entries (FR-012a: preserve unmodified studies)
+    existing = _load_existing_derivatives(output_path)
+
+    # Track which studies are being updated
+    updated_study_ids: set[str] = set()
+
+    for study_path in studies:
         try:
+            study_id = study_path.name
+            updated_study_ids.add(study_id)
+
+            # Remove old entries for this study (will be replaced)
+            keys_to_remove = [k for k in existing if k[0] == study_id]
+            for key in keys_to_remove:
+                del existing[key]
+
+            # Add new entries
             derivatives = collect_derivatives_for_study(study_path)
-            rows.extend(derivatives)
+            for deriv in derivatives:
+                key = (deriv["study_id"], deriv["derivative_id"])
+                existing[key] = deriv
+
         except Exception as e:
             logger.warning(f"Failed to collect derivatives for {study_path.name}: {e}")
 
     # Sort by study_id, then derivative_id
-    rows.sort(key=lambda r: (r["study_id"], r["derivative_id"]))
+    rows = [existing[k] for k in sorted(existing.keys())]
 
     # Write TSV
     with open(output_path, "w", newline="") as f:
@@ -172,7 +213,11 @@ def generate_studies_derivatives_tsv(
         writer.writeheader()
         writer.writerows(rows)
 
-    logger.info(f"Generated {output_path} with {len(rows)} derivative entries")
+    preserved_count = len([k for k in existing if k[0] not in updated_study_ids])
+    logger.info(
+        f"Generated {output_path} with {len(rows)} derivative entries "
+        f"({len(updated_study_ids)} studies updated, {preserved_count} entries preserved)"
+    )
     return output_path
 
 

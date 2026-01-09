@@ -68,7 +68,12 @@ where = ["src"]
 include = ["openneuro_studies*", "bids_studies*"]
 
 [tool.setuptools.package-data]
-openneuro_studies = ["py.typed", "provision/templates/**/*"]
+openneuro_studies = [
+    "py.typed",
+    "provision/templates/**/*",
+    "provision/templates/**/.*",
+    "provision/templates/**/.openneuro-studies/*",
+]
 bids_studies = ["py.typed", "schemas/*.json"]
 
 [tool.pytest.ini_options]

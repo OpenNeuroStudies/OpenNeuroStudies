@@ -237,12 +237,36 @@ def collect_study_metadata(
     }
 
 
+def _load_existing_studies(output_path: Path) -> dict[str, dict[str, Any]]:
+    """Load existing studies.tsv entries indexed by study_id.
+
+    Args:
+        output_path: Path to existing studies.tsv
+
+    Returns:
+        Dictionary mapping study_id to row data
+    """
+    existing: dict[str, dict[str, Any]] = {}
+    if output_path.exists():
+        with open(output_path, newline="") as f:
+            reader = csv.DictReader(f, delimiter="\t")
+            for row in reader:
+                study_id = row.get("study_id", "")
+                if study_id:
+                    existing[study_id] = dict(row)
+    return existing
+
+
 def generate_studies_tsv(
     studies: list[Path],
     output_path: Path,
     stage: str = "basic",
 ) -> Path:
     """Generate studies.tsv from list of study directories.
+
+    This function implements FR-012a: when updating specific studies,
+    existing entries for other studies are preserved. New/updated entries
+    are merged with existing data rather than replacing the entire file.
 
     Args:
         studies: List of study directory paths
@@ -256,21 +280,32 @@ def generate_studies_tsv(
     Returns:
         Path to generated file
     """
-    rows = []
-    for study_path in sorted(studies, key=lambda p: p.name):
+    # Load existing entries (FR-012a: preserve unmodified studies)
+    existing = _load_existing_studies(output_path)
+
+    # Collect metadata for specified studies
+    updated_ids: set[str] = set()
+    for study_path in studies:
         try:
             metadata = collect_study_metadata(study_path, stage=stage)
-            rows.append(metadata)
+            study_id = metadata["study_id"]
+            existing[study_id] = metadata
+            updated_ids.add(study_id)
         except Exception as e:
             logger.warning(f"Failed to collect metadata for {study_path.name}: {e}")
 
-    # Write TSV
+    # Sort by study_id and write
+    rows = [existing[sid] for sid in sorted(existing.keys())]
+
     with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=STUDIES_COLUMNS, delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
 
-    logger.info(f"Generated {output_path} with {len(rows)} studies")
+    logger.info(
+        f"Generated {output_path} with {len(rows)} studies "
+        f"({len(updated_ids)} updated, {len(rows) - len(updated_ids)} preserved)"
+    )
     return output_path
 
 
