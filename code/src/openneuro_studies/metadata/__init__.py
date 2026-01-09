@@ -3,12 +3,16 @@
 This module provides functions for generating:
 - dataset_description.json for each study (FR-005 to FR-008)
 - studies.tsv and studies.json at top level (FR-009, FR-011)
-- studies_derivatives.tsv and studies_derivatives.json (FR-010, FR-011)
+- studies+derivatives.tsv and studies+derivatives.json (FR-010, FR-011)
 - Summary extraction from source datasets (FR-031 to FR-033)
+
+Note: The '+' naming convention follows BIDS issue #2273 for TSV files
+with compound primary keys (e.g., study_id + derivative_id).
+See: https://github.com/bids-standard/bids-specification/issues/2273
 """
 
 from openneuro_studies.metadata.dataset_description import generate_dataset_description
-from openneuro_studies.metadata.studies_derivatives_tsv import (
+from openneuro_studies.metadata.studies_plus_derivatives_tsv import (
     collect_derivatives_for_study,
     generate_studies_derivatives_json,
     generate_studies_derivatives_tsv,

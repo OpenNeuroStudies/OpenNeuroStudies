@@ -103,7 +103,7 @@ cli.add_command(unpublish_cmd, name="unpublish")
 def metadata() -> None:
     """Generate and synchronize metadata files.
 
-    Commands for creating dataset_description.json, studies.tsv, studies_derivatives.tsv,
+    Commands for creating dataset_description.json, studies.tsv, studies+derivatives.tsv,
     and their JSON sidecars.
     """
     pass
@@ -124,7 +124,7 @@ def metadata() -> None:
 @click.option(
     "--derivatives-tsv/--no-derivatives-tsv",
     default=True,
-    help="Generate studies_derivatives.tsv and studies_derivatives.json at root level",
+    help="Generate studies+derivatives.tsv and studies+derivatives.json at root level",
 )
 @click.option(
     "--overwrite",
@@ -155,7 +155,7 @@ def metadata_generate(
 ) -> None:
     """Generate metadata for study datasets.
 
-    Creates dataset_description.json, studies.tsv, studies_derivatives.tsv, and JSON sidecars.
+    Creates dataset_description.json, studies.tsv, studies+derivatives.tsv, and JSON sidecars.
 
     Arguments:
         STUDY_IDS: Optional list of study IDs. If not provided, generates for all studies.
@@ -261,18 +261,18 @@ def metadata_generate(
             except Exception as e:
                 click.echo(f"  ✗ {study_path.name}: {e}", err=True)
 
-    # Generate studies_derivatives.tsv and studies_derivatives.json at root level
+    # Generate studies+derivatives.tsv and studies+derivatives.json at root level
     if derivatives_tsv:
-        click.echo("\nGenerating studies_derivatives.tsv...")
+        click.echo("\nGenerating studies+derivatives.tsv...")
         try:
-            generate_studies_derivatives_tsv(study_paths, root_path / "studies_derivatives.tsv")
-            generate_studies_derivatives_json(root_path / "studies_derivatives.json")
-            click.echo("  ✓ studies_derivatives.tsv")
-            click.echo("  ✓ studies_derivatives.json")
+            generate_studies_derivatives_tsv(study_paths, root_path / "studies+derivatives.tsv")
+            generate_studies_derivatives_json(root_path / "studies+derivatives.json")
+            click.echo("  ✓ studies+derivatives.tsv")
+            click.echo("  ✓ studies+derivatives.json")
             modified_paths.extend(
                 [
-                    root_path / "studies_derivatives.tsv",
-                    root_path / "studies_derivatives.json",
+                    root_path / "studies+derivatives.tsv",
+                    root_path / "studies+derivatives.json",
                 ]
             )
         except Exception as e:

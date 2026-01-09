@@ -3,3 +3,9 @@
 # managed separately, not part of the top-level BEP035 mega-analysis dataset
 
 study-*
+
+# Non-standard TSV files using '+' naming convention (BIDS #2273)
+# These files have compound primary keys and use '+' to indicate joined tables
+# See: https://github.com/bids-standard/bids-specification/issues/2273
+studies+derivatives.tsv
+studies+derivatives.json

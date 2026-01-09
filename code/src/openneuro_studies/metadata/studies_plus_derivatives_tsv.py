@@ -1,8 +1,15 @@
-"""Generate studies_derivatives.tsv and studies_derivatives.json.
+"""Generate studies+derivatives.tsv and studies+derivatives.json.
 
 Implements FR-010 and FR-011:
-- FR-010: Generate studies_derivatives.tsv (tall format) with study-derivative pairs
-- FR-011: Generate studies_derivatives.json describing column purposes
+- FR-010: Generate studies+derivatives.tsv (tall format) with study-derivative pairs
+- FR-011: Generate studies+derivatives.json describing column purposes
+
+Note: The '+' naming convention follows BIDS issue #2273 for TSV files
+with compound primary keys (e.g., study_id + derivative_id).
+See: https://github.com/bids-standard/bids-specification/issues/2273
+
+As this naming convention is not yet part of the BIDS standard,
+studies+derivatives.tsv must be listed in .bidsignore.
 """
 
 import configparser
@@ -14,7 +21,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Column definitions for studies_derivatives.tsv (FR-010)
+# Column definitions for studies+derivatives.tsv (FR-010)
 STUDIES_DERIVATIVES_COLUMNS = [
     "study_id",
     "derivative_id",
@@ -143,10 +150,10 @@ def collect_derivatives_for_study(study_path: Path) -> list[dict[str, Any]]:
 
 
 def _load_existing_derivatives(output_path: Path) -> dict[tuple[str, str], dict[str, Any]]:
-    """Load existing studies_derivatives.tsv entries indexed by (study_id, derivative_id).
+    """Load existing studies+derivatives.tsv entries indexed by (study_id, derivative_id).
 
     Args:
-        output_path: Path to existing studies_derivatives.tsv
+        output_path: Path to existing studies+derivatives.tsv
 
     Returns:
         Dictionary mapping (study_id, derivative_id) to row data
@@ -166,15 +173,17 @@ def generate_studies_derivatives_tsv(
     studies: list[Path],
     output_path: Path,
 ) -> Path:
-    """Generate studies_derivatives.tsv from list of study directories.
+    """Generate studies+derivatives.tsv from list of study directories.
 
     This function implements FR-012a: when updating specific studies,
     existing entries for other studies are preserved. New/updated entries
     are merged with existing data rather than replacing the entire file.
 
+    Note: Output filename should be studies+derivatives.tsv per BIDS #2273.
+
     Args:
         studies: List of study directory paths
-        output_path: Path to output studies_derivatives.tsv
+        output_path: Path to output studies+derivatives.tsv
 
     Returns:
         Path to generated file
@@ -222,10 +231,12 @@ def generate_studies_derivatives_tsv(
 
 
 def generate_studies_derivatives_json(output_path: Path) -> Path:
-    """Generate studies_derivatives.json sidecar.
+    """Generate studies+derivatives.json sidecar.
+
+    Note: Output filename should be studies+derivatives.json per BIDS #2273.
 
     Args:
-        output_path: Path to output studies_derivatives.json
+        output_path: Path to output studies+derivatives.json
 
     Returns:
         Path to generated file
