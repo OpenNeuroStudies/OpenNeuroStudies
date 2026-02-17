@@ -179,12 +179,12 @@ def _write_sourcedata_files(
         shutil.copy(schema_path, json_path)
 
     if datasets_stats:
-        datasets_tsv = sourcedata_path / "sourcedata+datasets.tsv"
+        datasets_tsv = sourcedata_path / "sourcedata.tsv"
         write_datasets_tsv(datasets_tsv, datasets_stats)
         logger.info(f"Wrote {len(datasets_stats)} rows to {datasets_tsv}")
 
         # Copy JSON sidecar
-        schema_path = get_schema_path("sourcedata+datasets")
+        schema_path = get_schema_path("sourcedata")
         if schema_path.exists():
             json_path = datasets_tsv.with_suffix(".json")
             shutil.copy(schema_path, json_path)

@@ -67,7 +67,7 @@ This ensures:
     ┌─────────────────────┴─────────────────────┐
     │                                           │
     ▼                                           ▼
-sourcedata+datasets.tsv              derivatives+datasets.tsv
+sourcedata.tsv              derivatives+datasets.tsv
     │                                           │
     └─────────────────────┬─────────────────────┘
                           ▼
@@ -96,7 +96,7 @@ One row per (source_dataset, subject) or (source_dataset, subject, session):
 | `bold_voxels_mean` | Mean voxels per BOLD file | Mean per subject |
 | `datatypes` | Datatypes present for this subject | Set union |
 
-### sourcedata+datasets.tsv
+### sourcedata.tsv
 
 One row per sourcedata dataset (aggregated from subjects):
 
@@ -132,18 +132,18 @@ Similar structure to sourcedata, but for derivatives:
 
 ### studies.tsv Columns (Updated)
 
-Aggregate from `sourcedata+datasets.tsv` and `derivatives+datasets.tsv`:
+Aggregate from `sourcedata.tsv` and `derivatives+datasets.tsv`:
 
 | Column | Source | Aggregation |
 |--------|--------|-------------|
-| `subjects_num` | sourcedata+datasets.tsv | Sum across sources |
-| `sessions_num` | sourcedata+datasets.tsv | Sum across sources |
-| `bold_num` | sourcedata+datasets.tsv | Sum across sources |
-| `bold_size` | sourcedata+datasets.tsv | Sum across sources |
-| `bold_duration_total` | sourcedata+datasets.tsv | Sum across sources |
-| `bold_duration_mean` | sourcedata+datasets.tsv | Weighted mean by bold_num |
-| `bold_voxels_total` | sourcedata+datasets.tsv | Sum across sources |
-| `bold_voxels_mean` | sourcedata+datasets.tsv | Weighted mean by duration |
+| `subjects_num` | sourcedata.tsv | Sum across sources |
+| `sessions_num` | sourcedata.tsv | Sum across sources |
+| `bold_num` | sourcedata.tsv | Sum across sources |
+| `bold_size` | sourcedata.tsv | Sum across sources |
+| `bold_duration_total` | sourcedata.tsv | Sum across sources |
+| `bold_duration_mean` | sourcedata.tsv | Weighted mean by bold_num |
+| `bold_voxels_total` | sourcedata.tsv | Sum across sources |
+| `bold_voxels_mean` | sourcedata.tsv | Weighted mean by duration |
 | ... | | |
 
 ## New Metrics
@@ -189,11 +189,11 @@ This gives more weight to longer runs, which is more meaningful for fMRI analysi
 - Handle both single-session and multi-session datasets
 
 ### Phase 2: Dataset Aggregation
-- Aggregate subject stats to `sourcedata+datasets.tsv`
+- Aggregate subject stats to `sourcedata.tsv`
 - Implement weighted averaging for duration-weighted metrics
 
 ### Phase 3: Study Aggregation
-- Update `studies.tsv` generation to use `sourcedata+datasets.tsv`
+- Update `studies.tsv` generation to use `sourcedata.tsv`
 - Ensure consistent aggregation methodology
 
 ### Phase 4: Derivatives Support
@@ -221,7 +221,7 @@ for study in studies:
 
 # 2. Aggregate to per-dataset
     datasets_stats = aggregate_subjects_to_datasets(subjects_stats)
-    write_tsv(study / "sourcedata" / "sourcedata+datasets.tsv", datasets_stats)
+    write_tsv(study / "sourcedata" / "sourcedata.tsv", datasets_stats)
 
 # 3. Aggregate to study level (for studies.tsv)
     study_stats = aggregate_datasets_to_study(datasets_stats)
@@ -239,7 +239,7 @@ ds000001	sub-03	n/a	3	1	144567890	720.0	12582912	anat,func
 ...
 ```
 
-### sourcedata+datasets.tsv (study-ds000001)
+### sourcedata.tsv (study-ds000001)
 
 ```tsv
 source_id	subjects_num	sessions_num	bold_num	t1w_num	bold_size	bold_duration_total	bold_duration_mean	bold_voxels_total	bold_voxels_mean	datatypes
@@ -278,7 +278,7 @@ imaging = [
 ## Next Steps
 
 1. Add new columns to spec.md (bold_duration_total, bold_duration_mean, bold_voxels_total, bold_voxels_mean)
-2. Define TSV schemas for sourcedata+subjects.tsv and sourcedata+datasets.tsv
+2. Define TSV schemas for sourcedata+subjects.tsv and sourcedata.tsv
 3. Implement per-subject extraction with duration calculation
 4. Implement aggregation logic with weighted means
 5. Update studies_tsv.py to use aggregated data

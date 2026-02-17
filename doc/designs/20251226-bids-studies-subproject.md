@@ -66,7 +66,7 @@ code/src/
 │   │   └── study.py                 # Study-level aggregation
 │   ├── schemas/                     # JSON sidecar schemas
 │   │   ├── sourcedata+subjects.json
-│   │   ├── sourcedata+datasets.json
+│   │   ├── sourcedata.json
 │   │   ├── derivatives+subjects.json
 │   │   └── derivatives+datasets.json
 │   └── utils/                       # Utilities

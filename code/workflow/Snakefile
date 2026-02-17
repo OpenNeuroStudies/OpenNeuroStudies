@@ -1,0 +1,247 @@
+"""OpenNeuroStudies Snakemake workflow.
+
+This workflow extracts metadata from study datasets and aggregates
+them into studies.tsv. It uses git SHA-based dependency tracking
+to determine when recomputation is needed.
+
+Usage (from repository root):
+    # Run full workflow
+    snakemake -s code/workflow/Snakefile --cores 4
+
+    # Dry run - show what would be done
+    snakemake -s code/workflow/Snakefile -n
+
+    # Rerun based on git SHA changes (not just mtime)
+    snakemake -s code/workflow/Snakefile --rerun-triggers params
+
+    # Force rerun of specific study
+    snakemake -s code/workflow/Snakefile --forcerun stats/.prov/study-ds000001.json
+
+    # Clean up
+    snakemake -s code/workflow/Snakefile --delete-all-output
+
+    # Show DAG
+    snakemake -s code/workflow/Snakefile --dag | dot -Tpng > dag.png
+"""
+
+import json
+import sys
+from pathlib import Path
+
+# Add code/src to path for imports
+sys.path.insert(0, str(Path(workflow.basedir).parent / "src"))
+
+# Import workflow utilities
+sys.path.insert(0, str(Path(workflow.basedir).parent))
+from workflow.lib.git_utils import get_gitlink_sha, get_sourcedata_shas, get_tree_sha
+from workflow.lib.provenance import ProvenanceManager, clean_stale_provenance
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+# Provenance directory (inside .snakemake to keep it clean)
+PROV_DIR = ".snakemake/prov"
+
+# Workflow outputs go under stats/ to avoid clobbering the canonical TSV.
+# The canonical studies.tsv is managed by `openneuro-studies metadata generate`
+# and merges data from many sources. The workflow produces per-study JSON
+# intermediates; merging into the canonical TSV is a separate manual step.
+STATS_DIR = "stats"
+WORKFLOW_TSV = f"{STATS_DIR}/studies-extracted.tsv"
+
+# Extraction stages (columns depend on stage)
+STAGES = {
+    "basic": ["author_lead_raw", "author_senior_raw", "raw_version"],
+    "counts": ["subjects_num", "sessions_num", "sessions_min", "sessions_max", "datatypes"],
+    "sizes": ["bold_num", "t1w_num", "t2w_num", "bold_size", "t1w_size", "bold_size_max"],
+    "imaging": ["bold_voxels_total", "bold_voxels_mean", "bold_duration_total", "bold_duration_mean"],
+}
+
+# ============================================================================
+# Dynamic study discovery
+# ============================================================================
+
+def get_studies() -> list[str]:
+    """Discover all study directories in repository root."""
+    studies = []
+    for path in Path(".").iterdir():
+        if path.is_dir() and path.name.startswith("study-"):
+            studies.append(path.name)
+    return sorted(studies)
+
+STUDIES = get_studies()
+
+# ============================================================================
+# Provenance helpers
+# ============================================================================
+
+prov_manager = ProvenanceManager(PROV_DIR)
+
+def get_study_deps(study: str) -> dict:
+    """Get dependency SHAs for a study."""
+    try:
+        study_sha = get_gitlink_sha(study)
+    except Exception:
+        study_sha = get_tree_sha(study)
+
+    return {
+        "study_sha": study_sha,
+        "sourcedata_shas": get_sourcedata_shas(study),
+    }
+
+# ============================================================================
+# Rules
+# ============================================================================
+
+rule all:
+    """Default target: extract per-study metadata into stats/."""
+    input:
+        WORKFLOW_TSV
+
+
+rule extract_study:
+    """Extract metadata for a single study.
+
+    This rule produces a JSON file with all extracted metadata
+    for one study. The params include git SHAs which trigger
+    recomputation when dependencies change.
+    """
+    output:
+        json_file = f"stats/.prov/{{study}}.json"
+    params:
+        # Git SHAs as params - changes trigger rerun with --rerun-triggers params
+        deps = lambda wc: get_study_deps(wc.study)
+    run:
+        from openneuro_studies.metadata.summary_extractor import extract_all_summaries
+
+        study_path = Path(wildcards.study)
+
+        # Extract all stages
+        result = extract_all_summaries(study_path, stage="imaging")
+        result["study_id"] = wildcards.study
+
+        # Ensure output directory exists
+        Path(output.json_file).parent.mkdir(parents=True, exist_ok=True)
+
+        # Write result
+        with open(output.json_file, "w") as f:
+            json.dump(result, f, indent=2)
+
+        # Record provenance
+        prov_manager.record(
+            output_path=output.json_file,
+            rule_name="extract_study",
+            dependencies=params.deps,
+        )
+
+        print(f"Extracted metadata for {wildcards.study}")
+
+
+rule aggregate_studies:
+    """Aggregate per-study JSONs into stats/studies-extracted.tsv.
+
+    NOTE: This does NOT write to the canonical studies.tsv, which is
+    managed by `openneuro-studies metadata generate` and contains
+    additional columns (name, version, bids_version, license, authors,
+    source_count, derivative_ids, bids_valid, bold_voxels, etc.).
+
+    The output here is an intermediate for inspection and future merging.
+    """
+    input:
+        study_jsons = expand("stats/.prov/{study}.json", study=STUDIES)
+    output:
+        tsv = WORKFLOW_TSV
+    params:
+        # Track aggregate dependencies
+        all_deps = lambda wc, input: {
+            Path(f).stem: get_study_deps(Path(f).stem)
+            for f in input.study_jsons
+        }
+    run:
+        import pandas as pd
+
+        rows = []
+        for json_file in input.study_jsons:
+            with open(json_file) as f:
+                data = json.load(f)
+            rows.append(data)
+
+        # Create DataFrame and sort
+        df = pd.DataFrame(rows)
+        if "study_id" in df.columns:
+            df = df.sort_values("study_id")
+            cols = ["study_id"] + [c for c in df.columns if c != "study_id"]
+            df = df[cols]
+
+        Path(output.tsv).parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(output.tsv, sep="\t", index=False)
+
+        # Record provenance
+        prov_manager.record(
+            output_path=output.tsv,
+            rule_name="aggregate_studies",
+            dependencies=params.all_deps,
+        )
+
+        print(f"Aggregated {len(rows)} studies into {output.tsv}")
+        print(f"NOTE: Canonical studies.tsv is NOT modified. Use 'openneuro-studies metadata generate' to update it.")
+
+
+rule clean_provenance:
+    """Remove stale provenance entries for deleted outputs."""
+    run:
+        # Get current outputs
+        existing = set()
+        for study in STUDIES:
+            json_file = f"stats/.prov/{study}.json"
+            if Path(json_file).exists():
+                existing.add(json_file)
+        if Path(STUDIES_TSV).exists():
+            existing.add(STUDIES_TSV)
+
+        # Clean stale entries
+        stale = clean_stale_provenance(PROV_DIR, existing)
+        if stale:
+            print(f"Removed {len(stale)} stale provenance entries")
+        else:
+            print("No stale provenance entries found")
+
+
+rule show_provenance:
+    """Show provenance summary for all outputs."""
+    run:
+        from workflow.lib.provenance import get_provenance_summary
+
+        summary = get_provenance_summary(PROV_DIR)
+        print(f"\nProvenance Summary")
+        print(f"==================")
+        print(f"Total outputs tracked: {summary['total_outputs']}")
+        print(f"Last updated: {summary['updated']}")
+        print(f"\nOutputs:")
+        for output in sorted(summary['outputs']):
+            print(f"  - {output}")
+
+
+rule show_deps:
+    """Show current dependency SHAs for all studies."""
+    run:
+        print("\nStudy Dependencies (git SHAs)")
+        print("=" * 60)
+        for study in STUDIES:
+            deps = get_study_deps(study)
+            print(f"\n{study}:")
+            print(f"  study_sha: {deps['study_sha'][:12]}...")
+            if deps['sourcedata_shas']:
+                print("  sourcedata:")
+                for src, sha in deps['sourcedata_shas'].items():
+                    print(f"    {src}: {sha[:12]}...")
+
+
+# ============================================================================
+# Include additional rule files
+# ============================================================================
+
+# Uncomment to include modular rule files:
+# include: "rules/derivatives.smk"
+# include: "rules/validation.smk"
