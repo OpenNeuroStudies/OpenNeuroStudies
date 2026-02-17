@@ -10,7 +10,6 @@ These tests require copier to be installed:
     pip install copier
 """
 
-import os
 import shutil
 import subprocess
 import sys

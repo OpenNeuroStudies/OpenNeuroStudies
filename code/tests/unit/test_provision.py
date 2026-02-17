@@ -1,12 +1,10 @@
 """Unit tests for study dataset provisioning (FR-041)."""
 
-import pytest
 from pathlib import Path
 
 from openneuro_studies.provision import (
     TEMPLATE_VERSION_DIR,
     TEMPLATE_VERSION_FILE,
-    ProvisionResult,
     needs_provisioning,
     provision_study,
 )

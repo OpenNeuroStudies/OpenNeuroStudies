@@ -230,6 +230,16 @@ class FuseMount:
         if self.mount_point is None:
             raise FuseMountError("Mount point not initialized")
 
+        # TODO: race condition — an empty directory also passes iterdir() without
+        # OSError, so this loop exits immediately before the FUSE daemon has
+        # actually connected.  Fix: poll until the mount point has at least one
+        # entry, or mount a sentinel file into the dataset, or check
+        # /proc/mounts for the mount point path.  The same shallow check in
+        # is_fuse_usable() (tool presence only, no trial mount) means tests run
+        # instead of skipping on machines where the kernel FUSE module is
+        # blocked (containers without --privileged, etc.).  Consider gating
+        # these tests behind an explicit env-var opt-in rather than capability
+        # detection.  See discussion in code review 2026-02-17.
         start_time = time.time()
         while time.time() - start_time < timeout:
             # Check if mount point is accessible

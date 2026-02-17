@@ -1,12 +1,11 @@
 """Unit tests for publishing functionality."""
 
-import json
 from datetime import datetime
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
-from github import GithubException, UnknownObjectException
+from github import UnknownObjectException
+from pydantic import ValidationError
 
 from openneuro_studies.models import PublicationStatus, PublishedStudy
 from openneuro_studies.publishing import (
@@ -38,7 +37,7 @@ class TestPublishedStudy:
     @pytest.mark.ai_generated
     def test_invalid_study_id(self):
         """Test that invalid study ID patterns are rejected."""
-        with pytest.raises(Exception):  # Pydantic validation error
+        with pytest.raises(ValidationError):
             PublishedStudy(
                 study_id="invalid-id",
                 github_url="https://github.com/test/repo",
@@ -50,7 +49,7 @@ class TestPublishedStudy:
     @pytest.mark.ai_generated
     def test_invalid_commit_sha(self):
         """Test that invalid commit SHA is rejected."""
-        with pytest.raises(Exception):  # Pydantic validation error
+        with pytest.raises(ValidationError):
             PublishedStudy(
                 study_id="study-ds000001",
                 github_url="https://github.com/test/repo",
