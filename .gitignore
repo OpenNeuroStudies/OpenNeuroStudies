@@ -1,7 +1,8 @@
 # OpenNeuroStudies .gitignore
 
-# Cache directories
+# Cache and build directories
 .cache/
+.snakemake/
 
 # Python
 __pycache__/

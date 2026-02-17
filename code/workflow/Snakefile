@@ -15,7 +15,7 @@ Usage (from repository root):
     snakemake -s code/workflow/Snakefile --rerun-triggers params
 
     # Force rerun of specific study
-    snakemake -s code/workflow/Snakefile --forcerun stats/.prov/study-ds000001.json
+    snakemake -s code/workflow/Snakefile --forcerun .snakemake/extracted/study-ds000001.json
 
     # Clean up
     snakemake -s code/workflow/Snakefile --delete-all-output
@@ -40,15 +40,14 @@ from workflow.lib.provenance import ProvenanceManager, clean_stale_provenance
 # Configuration
 # ============================================================================
 
-# Provenance directory (inside .snakemake to keep it clean)
+# All workflow-internal outputs live under .snakemake/ so they don't
+# pollute the repository root. .snakemake/ is already gitignored.
+#   .snakemake/extracted/{study}.json  — per-study intermediate
+#   .snakemake/extracted/studies.tsv   — aggregated staging output
+#   .snakemake/prov/                   — git-SHA provenance records
+EXTRACTED_DIR = ".snakemake/extracted"
 PROV_DIR = ".snakemake/prov"
-
-# Workflow outputs go under stats/ to avoid clobbering the canonical TSV.
-# The canonical studies.tsv is managed by `openneuro-studies metadata generate`
-# and merges data from many sources. The workflow produces per-study JSON
-# intermediates; merging into the canonical TSV is a separate manual step.
-STATS_DIR = "stats"
-WORKFLOW_TSV = f"{STATS_DIR}/studies-extracted.tsv"
+WORKFLOW_TSV = f"{EXTRACTED_DIR}/studies.tsv"
 
 # Extraction stages (columns depend on stage)
 STAGES = {
@@ -95,7 +94,7 @@ def get_study_deps(study: str) -> dict:
 # ============================================================================
 
 rule all:
-    """Default target: extract per-study metadata into stats/."""
+    """Default target: extract per-study metadata into .snakemake/extracted/."""
     input:
         WORKFLOW_TSV
 
@@ -108,7 +107,7 @@ rule extract_study:
     recomputation when dependencies change.
     """
     output:
-        json_file = f"stats/.prov/{{study}}.json"
+        json_file = f".snakemake/extracted/{{study}}.json"
     params:
         # Git SHAs as params - changes trigger rerun with --rerun-triggers params
         deps = lambda wc: get_study_deps(wc.study)
@@ -139,17 +138,18 @@ rule extract_study:
 
 
 rule aggregate_studies:
-    """Aggregate per-study JSONs into stats/studies-extracted.tsv.
+    """Aggregate per-study JSONs into .snakemake/extracted/studies.tsv.
 
     NOTE: This does NOT write to the canonical studies.tsv, which is
     managed by `openneuro-studies metadata generate` and contains
     additional columns (name, version, bids_version, license, authors,
     source_count, derivative_ids, bids_valid, bold_voxels, etc.).
 
-    The output here is an intermediate for inspection and future merging.
+    All outputs stay under .snakemake/ (gitignored); the canonical
+    studies.tsv is updated separately by merging from sourcedata.tsv.
     """
     input:
-        study_jsons = expand("stats/.prov/{study}.json", study=STUDIES)
+        study_jsons = expand(".snakemake/extracted/{study}.json", study=STUDIES)
     output:
         tsv = WORKFLOW_TSV
     params:
@@ -194,7 +194,7 @@ rule clean_provenance:
         # Get current outputs
         existing = set()
         for study in STUDIES:
-            json_file = f"stats/.prov/{study}.json"
+            json_file = f".snakemake/extracted/{study}.json"
             if Path(json_file).exists():
                 existing.add(json_file)
         if Path(STUDIES_TSV).exists():
