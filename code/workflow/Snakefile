@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(workflow.basedir).parent / "src"))
 
 # Import workflow utilities
 sys.path.insert(0, str(Path(workflow.basedir).parent))
-from workflow.lib.git_utils import get_gitlink_sha, get_sourcedata_shas, get_tree_sha
+from workflow.lib.git_utils import get_file_blob_sha, get_gitlink_sha, get_sourcedata_shas, get_tree_sha
 from workflow.lib.provenance import ProvenanceManager, clean_stale_provenance
 
 # ============================================================================
@@ -48,6 +48,9 @@ from workflow.lib.provenance import ProvenanceManager, clean_stale_provenance
 EXTRACTED_DIR = ".snakemake/extracted"
 PROV_DIR = ".snakemake/prov"
 WORKFLOW_TSV = f"{EXTRACTED_DIR}/studies.tsv"
+
+# Columns populated by external tools (not this workflow) — preserve across merges
+PRESERVED_COLS = {"bids_valid"}
 
 # Extraction stages (columns depend on stage)
 STAGES = {
@@ -94,9 +97,9 @@ def get_study_deps(study: str) -> dict:
 # ============================================================================
 
 rule all:
-    """Default target: extract per-study metadata into .snakemake/extracted/."""
+    """Default target: merge extracted metadata into canonical studies.tsv."""
     input:
-        WORKFLOW_TSV
+        "studies.tsv"
 
 
 rule extract_study:
@@ -112,13 +115,12 @@ rule extract_study:
         # Git SHAs as params - changes trigger rerun with --rerun-triggers params
         deps = lambda wc: get_study_deps(wc.study)
     run:
-        from openneuro_studies.metadata.summary_extractor import extract_all_summaries
+        from openneuro_studies.metadata.studies_tsv import collect_study_metadata
 
         study_path = Path(wildcards.study)
 
-        # Extract all stages
-        result = extract_all_summaries(study_path, stage="imaging")
-        result["study_id"] = wildcards.study
+        # Extract all columns (collect_study_metadata sets study_id internally)
+        result = collect_study_metadata(study_path, stage="imaging")
 
         # Ensure output directory exists
         Path(output.json_file).parent.mkdir(parents=True, exist_ok=True)
@@ -186,6 +188,68 @@ rule aggregate_studies:
 
         print(f"Aggregated {len(rows)} studies into {output.tsv}")
         print(f"NOTE: Canonical studies.tsv is NOT modified. Use 'openneuro-studies metadata generate' to update it.")
+
+
+rule merge_into_canonical:
+    """Merge per-study extracted JSONs into the canonical studies.tsv.
+
+    Reads .snakemake/extracted/{study}.json for every study, updates the
+    canonical studies.tsv with all computed columns while preserving
+    bids_valid (set by openneuro-studies validate).
+
+    Trigger conditions:
+      - mtime-based (default): any per-study JSON is newer than studies.tsv
+      - SHA-based (preferred): any study's gitlink SHA changed
+        → snakemake -s code/workflow/Snakefile --rerun-triggers params
+    """
+    input:
+        study_jsons = expand(".snakemake/extracted/{study}.json", study=STUDIES)
+    output:
+        canonical = "studies.tsv"
+    params:
+        all_deps = lambda wc, input: {
+            Path(f).stem: get_study_deps(Path(f).stem)
+            for f in input.study_jsons
+        },
+        # Track canonical SHA so params change when bids_valid is updated
+        # externally — lets user trigger a re-merge if columns were reset.
+        canonical_sha = lambda wc: (
+            get_file_blob_sha("studies.tsv") if Path("studies.tsv").exists() else "absent"
+        ),
+    run:
+        import csv
+        from openneuro_studies.metadata.studies_tsv import STUDIES_COLUMNS
+
+        canonical_path = Path(output.canonical)
+
+        # Load existing studies.tsv to preserve PRESERVED_COLS (e.g. bids_valid)
+        existing = {}
+        if canonical_path.exists():
+            with open(canonical_path, newline="") as f:
+                for row in csv.DictReader(f, delimiter="\t"):
+                    existing[row["study_id"]] = dict(row)
+
+        # Overlay extracted data, restoring preserved columns
+        for json_file in input.study_jsons:
+            with open(json_file) as f:
+                data = json.load(f)
+            sid = data["study_id"]
+            if sid in existing:
+                for col in PRESERVED_COLS:
+                    data.setdefault(col, existing[sid].get(col, "n/a"))
+            existing[sid] = data
+
+        # Write canonical file in defined column order
+        rows = [existing[sid] for sid in sorted(existing)]
+        with open(canonical_path, "w", newline="") as f:
+            writer = csv.DictWriter(
+                f, fieldnames=STUDIES_COLUMNS, delimiter="\t", extrasaction="ignore"
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+
+        prov_manager.record(output.canonical, "merge_into_canonical", params.all_deps)
+        print(f"Updated {output.canonical}: {len(rows)} studies")
 
 
 rule clean_provenance:
