@@ -249,7 +249,13 @@ def metadata_generate(
 
     # Generate studies.tsv and studies.json at root level
     if studies_tsv:
+        import logging
+        logger = logging.getLogger(__name__)
+
         click.echo(f"\nGenerating studies.tsv (stage={stage})...")
+        click.echo(f"  Processing {len(study_paths)} studies: {[p.name for p in study_paths]}")
+        logger.info(f"Generating studies.tsv for {len(study_paths)} studies at stage={stage}")
+
         try:
             generate_studies_tsv(study_paths, root_path / "studies.tsv", stage=stage)
             generate_studies_json(root_path / "studies.json")
@@ -257,6 +263,7 @@ def metadata_generate(
             click.echo("  ✓ studies.json")
             modified_paths.extend([root_path / "studies.tsv", root_path / "studies.json"])
         except Exception as e:
+            logger.error(f"Failed to generate studies.tsv: {e}", exc_info=True)
             click.echo(f"  ✗ Failed: {e}", err=True)
 
     # Generate hierarchical sourcedata TSV files for counts/sizes/imaging stages
@@ -272,15 +279,21 @@ def metadata_generate(
 
         def process_study(study_path: Path) -> tuple[Path, bool, str | None]:
             """Process a single study, returning (path, success, error_msg)."""
+            import logging
+            logger = logging.getLogger(__name__)
+
             try:
+                logger.info(f"Processing hierarchical stats for {study_path.name} (include_imaging={include_imaging})")
                 extract_study_stats(
                     study_path,
                     sourcedata_subdir="sourcedata",
                     include_imaging=include_imaging,
                     write_files=True,
                 )
+                logger.info(f"  ✓ {study_path.name} hierarchical extraction complete")
                 return study_path, True, None
             except Exception as e:
+                logger.error(f"  ✗ {study_path.name} failed: {e}", exc_info=True)
                 return study_path, False, str(e)
 
         # Process studies in parallel or sequential

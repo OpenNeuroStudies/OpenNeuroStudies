@@ -282,20 +282,27 @@ def generate_studies_tsv(
     """
     # Load existing entries (FR-012a: preserve unmodified studies)
     existing = _load_existing_studies(output_path)
+    logger.info(
+        f"Loaded {len(existing)} existing studies from {output_path}: "
+        f"{sorted(existing.keys())[:5]}{'...' if len(existing) > 5 else ''}"
+    )
 
     # Collect metadata for specified studies
     updated_ids: set[str] = set()
     for study_path in studies:
         try:
+            logger.info(f"Extracting metadata for {study_path.name} (stage={stage})")
             metadata = collect_study_metadata(study_path, stage=stage)
             study_id = metadata["study_id"]
             existing[study_id] = metadata
             updated_ids.add(study_id)
+            logger.info(f"  ✓ {study_id} extracted successfully")
         except Exception as e:
-            logger.warning(f"Failed to collect metadata for {study_path.name}: {e}")
+            logger.warning(f"Failed to collect metadata for {study_path.name}: {e}", exc_info=True)
 
     # Sort by study_id and write
     rows = [existing[sid] for sid in sorted(existing.keys())]
+    logger.info(f"Writing {len(rows)} total studies ({len(updated_ids)} updated, {len(rows) - len(updated_ids)} preserved)")
 
     with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=STUDIES_COLUMNS, delimiter="\t")
