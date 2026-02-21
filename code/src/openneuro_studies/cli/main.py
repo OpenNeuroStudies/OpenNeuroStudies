@@ -145,6 +145,13 @@ def metadata() -> None:
          "sizes (+ file sizes), imaging (+ voxel counts, requires fsspec/datalad-fuse)",
     show_default=True,
 )
+@click.option(
+    "--jobs",
+    type=int,
+    default=1,
+    help="Number of parallel jobs for study processing (useful for --stage imaging)",
+    show_default=True,
+)
 @click.pass_context
 def metadata_generate(
     ctx: click.Context,
@@ -155,6 +162,7 @@ def metadata_generate(
     overwrite: bool,
     commit: bool,
     stage: str,
+    jobs: int,
 ) -> None:
     """Generate metadata for study datasets.
 
@@ -165,7 +173,7 @@ def metadata_generate(
 
     Example:
         openneuro-studies metadata generate
-        openneuro-studies metadata generate --stage imaging
+        openneuro-studies metadata generate --stage imaging --jobs 4
         openneuro-studies metadata generate study-ds000001 --stage basic
         openneuro-studies metadata generate --no-commit
     """
@@ -253,11 +261,17 @@ def metadata_generate(
 
     # Generate hierarchical sourcedata TSV files for counts/sizes/imaging stages
     if stage in ("counts", "sizes", "imaging"):
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         from bids_studies.extraction import extract_study_stats
 
         include_imaging = stage == "imaging"
-        click.echo("\nGenerating per-source hierarchical statistics...")
-        for study_path in study_paths:
+        click.echo(
+            f"\nGenerating per-source hierarchical statistics "
+            f"({'parallel' if jobs > 1 else 'sequential'}, {jobs} job{'s' if jobs > 1 else ''})..."
+        )
+
+        def process_study(study_path: Path) -> tuple[Path, bool, str | None]:
+            """Process a single study, returning (path, success, error_msg)."""
             try:
                 extract_study_stats(
                     study_path,
@@ -265,16 +279,41 @@ def metadata_generate(
                     include_imaging=include_imaging,
                     write_files=True,
                 )
-                click.echo(f"  ✓ {study_path.name}/sourcedata/*.tsv")
-                # Add sourcedata files to modified paths
-                sourcedata_path = study_path / "sourcedata"
-                if sourcedata_path.exists():
-                    for tsv in sourcedata_path.glob("sourcedata+*.tsv"):
-                        modified_paths.append(tsv)
-                    for json_file in sourcedata_path.glob("sourcedata+*.json"):
-                        modified_paths.append(json_file)
+                return study_path, True, None
             except Exception as e:
-                click.echo(f"  ✗ {study_path.name}: {e}", err=True)
+                return study_path, False, str(e)
+
+        # Process studies in parallel or sequential
+        if jobs > 1:
+            with ThreadPoolExecutor(max_workers=jobs) as executor:
+                futures = {executor.submit(process_study, sp): sp for sp in study_paths}
+                for future in as_completed(futures):
+                    study_path, success, error = future.result()
+                    if success:
+                        click.echo(f"  ✓ {study_path.name}/sourcedata/*.tsv")
+                        # Add sourcedata files to modified paths
+                        sourcedata_path = study_path / "sourcedata"
+                        if sourcedata_path.exists():
+                            for tsv in sourcedata_path.glob("sourcedata+*.tsv"):
+                                modified_paths.append(tsv)
+                            for json_file in sourcedata_path.glob("sourcedata+*.json"):
+                                modified_paths.append(json_file)
+                    else:
+                        click.echo(f"  ✗ {study_path.name}: {error}", err=True)
+        else:
+            # Sequential processing (jobs=1)
+            for study_path in study_paths:
+                study_path, success, error = process_study(study_path)
+                if success:
+                    click.echo(f"  ✓ {study_path.name}/sourcedata/*.tsv")
+                    sourcedata_path = study_path / "sourcedata"
+                    if sourcedata_path.exists():
+                        for tsv in sourcedata_path.glob("sourcedata+*.tsv"):
+                            modified_paths.append(tsv)
+                        for json_file in sourcedata_path.glob("sourcedata+*.json"):
+                            modified_paths.append(json_file)
+                else:
+                    click.echo(f"  ✗ {study_path.name}: {error}", err=True)
 
     # Generate studies+derivatives.tsv and studies+derivatives.json at root level
     if derivatives_tsv:
