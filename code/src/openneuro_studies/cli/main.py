@@ -210,13 +210,12 @@ def metadata_generate(
 
         if not is_sparse_access_available():
             click.echo(
-                "\nWarning: Imaging metrics require sparse access (fsspec or datalad-fuse).\n"
+                "Error: --stage imaging requires sparse access dependencies.\n"
                 "  Install with: pip install fsspec aiohttp\n"
-                "  Or: pip install datalad-fuse\n"
-                "Falling back to 'sizes' stage (file sizes without voxel counts).\n",
+                "  Or: pip install datalad-fuse\n",
                 err=True,
             )
-            stage = "sizes"
+            raise click.Abort()
 
     # Track statistics for commit message
     stats: dict[str, int | str] = {"studies": len(study_paths)}
