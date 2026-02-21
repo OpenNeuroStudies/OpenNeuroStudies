@@ -138,9 +138,12 @@ def metadata() -> None:
     help="Commit changes with datalad save (includes descriptive stats)",
 )
 @click.option(
-    "--imaging/--no-imaging",
-    default=False,
-    help="Extract imaging metrics (voxel counts, durations) - requires nibabel and sparse access",
+    "--stage",
+    type=click.Choice(["basic", "counts", "sizes", "imaging"], case_sensitive=False),
+    default="sizes",
+    help="Extraction stage: basic (cached only), counts (+ file counts), "
+         "sizes (+ file sizes), imaging (+ voxel counts, requires fsspec/datalad-fuse)",
+    show_default=True,
 )
 @click.pass_context
 def metadata_generate(
@@ -151,7 +154,7 @@ def metadata_generate(
     derivatives_tsv: bool,
     overwrite: bool,
     commit: bool,
-    imaging: bool,
+    stage: str,
 ) -> None:
     """Generate metadata for study datasets.
 
@@ -162,8 +165,8 @@ def metadata_generate(
 
     Example:
         openneuro-studies metadata generate
-        openneuro-studies metadata generate study-ds000001
-        openneuro-studies metadata generate --no-studies-tsv
+        openneuro-studies metadata generate --stage imaging
+        openneuro-studies metadata generate study-ds000001 --stage basic
         openneuro-studies metadata generate --no-commit
     """
     from openneuro_studies.lib import save_with_stats
@@ -201,6 +204,20 @@ def metadata_generate(
 
     click.echo(f"Generating metadata for {len(study_paths)} studies...")
 
+    # Check sparse access availability for imaging stage
+    if stage == "imaging":
+        from bids_studies.sparse import is_sparse_access_available
+
+        if not is_sparse_access_available():
+            click.echo(
+                "\nWarning: Imaging metrics require sparse access (fsspec or datalad-fuse).\n"
+                "  Install with: pip install fsspec aiohttp\n"
+                "  Or: pip install datalad-fuse\n"
+                "Falling back to 'sizes' stage (file sizes without voxel counts).\n",
+                err=True,
+            )
+            stage = "sizes"
+
     # Track statistics for commit message
     stats: dict[str, int | str] = {"studies": len(study_paths)}
     modified_paths: list[Path] = []
@@ -225,8 +242,6 @@ def metadata_generate(
 
     # Generate studies.tsv and studies.json at root level
     if studies_tsv:
-        # Determine extraction stage
-        stage = "imaging" if imaging else "sizes"
         click.echo(f"\nGenerating studies.tsv (stage={stage})...")
         try:
             generate_studies_tsv(study_paths, root_path / "studies.tsv", stage=stage)
@@ -237,17 +252,18 @@ def metadata_generate(
         except Exception as e:
             click.echo(f"  ✗ Failed: {e}", err=True)
 
-    # Generate hierarchical sourcedata TSV files when imaging is enabled
-    if imaging:
+    # Generate hierarchical sourcedata TSV files for counts/sizes/imaging stages
+    if stage in ("counts", "sizes", "imaging"):
         from bids_studies.extraction import extract_study_stats
 
+        include_imaging = stage == "imaging"
         click.echo("\nGenerating per-source hierarchical statistics...")
         for study_path in study_paths:
             try:
                 extract_study_stats(
                     study_path,
                     sourcedata_subdir="sourcedata",
-                    include_imaging=True,
+                    include_imaging=include_imaging,
                     write_files=True,
                 )
                 click.echo(f"  ✓ {study_path.name}/sourcedata/*.tsv")
