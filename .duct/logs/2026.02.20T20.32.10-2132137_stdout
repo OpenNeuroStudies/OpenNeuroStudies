@@ -1,0 +1,27 @@
+Generating metadata for 7 studies...
+
+Generating dataset_description.json files...
+  ✓ study-ds000001
+  ✓ study-ds005256
+  ✓ study-ds006131
+  ✓ study-ds006189
+  ✓ study-ds006190
+  ✓ study-ds006191
+  ✓ study-ds006192
+
+Generating per-source hierarchical statistics (sequential, 1 job)...
+  ✓ study-ds000001/sourcedata/*.tsv
+  ✓ study-ds005256/sourcedata/*.tsv
+  ✓ study-ds006131/sourcedata/*.tsv
+  ✓ study-ds006189/sourcedata/*.tsv
+  ✓ study-ds006190/sourcedata/*.tsv
+  ✓ study-ds006191/sourcedata/*.tsv
+  ✓ study-ds006192/sourcedata/*.tsv
+
+Generating studies+derivatives.tsv...
+  ✓ studies+derivatives.tsv
+  ✓ studies+derivatives.json
+
+Metadata generation complete.
+
+Committing changes...

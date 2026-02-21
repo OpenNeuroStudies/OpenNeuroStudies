@@ -1,0 +1,5 @@
+Error: --stage imaging requires sparse access dependencies.
+  Install with: pip install fsspec aiohttp
+  Or: pip install datalad-fuse
+
+Aborted!
