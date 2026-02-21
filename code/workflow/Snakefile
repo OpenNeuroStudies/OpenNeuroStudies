@@ -5,14 +5,18 @@ them into studies.tsv. It uses git SHA-based dependency tracking
 to determine when recomputation is needed.
 
 Usage (from repository root):
-    # Run full workflow
+    # Run full workflow (all studies)
     snakemake -s code/workflow/Snakefile --cores 4
+
+    # Process only specific studies
+    snakemake -s code/workflow/Snakefile --cores 4 \
+      --config studies="study-ds000001,study-ds000030"
 
     # Dry run - show what would be done
     snakemake -s code/workflow/Snakefile -n
 
     # Rerun based on git SHA changes (not just mtime)
-    snakemake -s code/workflow/Snakefile --rerun-triggers params
+    snakemake -s code/workflow/Snakefile --rerun-triggers params --cores 4
 
     # Force rerun of specific study
     snakemake -s code/workflow/Snakefile --forcerun .snakemake/extracted/study-ds000001.json
@@ -65,7 +69,29 @@ STAGES = {
 # ============================================================================
 
 def get_studies() -> list[str]:
-    """Discover all study directories in repository root."""
+    """Discover all study directories in repository root.
+
+    Can be filtered via config: --config studies="study-ds000001,study-ds000030"
+    """
+    # Check if studies filter provided via config
+    if "studies" in config:
+        # Parse comma-separated study list
+        studies = [s.strip() for s in config["studies"].split(",")]
+        # Normalize: accept both "ds000001" and "study-ds000001"
+        studies = [
+            s if s.startswith("study-") else f"study-{s}"
+            for s in studies
+        ]
+        # Verify they exist
+        existing = []
+        for study in studies:
+            if Path(study).is_dir():
+                existing.append(study)
+            else:
+                print(f"Warning: {study} not found, skipping", file=sys.stderr)
+        return sorted(existing)
+
+    # Default: discover all study directories
     studies = []
     for path in Path(".").iterdir():
         if path.is_dir() and path.name.startswith("study-"):
