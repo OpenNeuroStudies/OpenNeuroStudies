@@ -258,6 +258,35 @@ def fetch_dataset_metadata(dataset_id: str) -> dict:
     pass
 ```
 
+### Shell Script Conventions
+- **ALWAYS run shellcheck** on all shell scripts before committing
+- **Use strict mode**: `set -e` (exit on error) and `set -u` (exit on undefined variable)
+- **Quote variables**: Always quote variables to prevent word splitting
+- **Use arrays**: Prefer arrays over space-separated strings for lists
+- **Shebang**: Use `#!/bin/bash` (not `#!/bin/sh` for bash-specific features)
+- **Error messages**: Write to stderr with `>&2` or use a logging function
+
+```bash
+# Example: proper shell script structure
+#!/bin/bash
+set -e  # Exit on error
+set -u  # Exit on undefined variable
+
+# Always run shellcheck during development:
+# shellcheck script.sh
+
+# Good: quoted variables, arrays, error handling
+files=("file1.txt" "file2.txt")
+for file in "${files[@]}"; do
+    if [ -f "$file" ]; then
+        echo "Processing: $file"
+    else
+        echo "Error: $file not found" >&2
+        exit 1
+    fi
+done
+```
+
 ## Testing Strategy
 
 ### Sample Datasets for Testing
