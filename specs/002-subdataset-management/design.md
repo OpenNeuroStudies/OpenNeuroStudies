@@ -75,13 +75,27 @@ parent_ds.drop(str(subdataset_path), what='datasets')
 - **No silent failures**: All errors either retry or raise exceptions
 - **Observability**: Log all operations (install/drop) and errors
 
-**Functions**:
+**Module Structure**:
 
 ```python
+# code/src/bids_studies/subdatasets/__init__.py
+"""Subdataset management utilities for BIDS study datasets."""
+
+import logging
+import time
 from pathlib import Path
 from typing import Iterator
+
 from datalad.distribution.dataset import Dataset
+from datalad.support.exceptions import IncompleteResultsError
 import datalad.api as dl
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Low-level utilities
+# ============================================================================
 
 def iter_sourcedata_subdatasets(study_path: Path) -> Iterator[Path]:
     """Iterate over sourcedata subdataset paths in a study.
@@ -141,13 +155,8 @@ def ensure_subdatasets_installed(
     Raises:
         Exception: If installation fails after retries or on non-transient errors
     """
-    import logging
-    import time
-    from datalad.support.exceptions import IncompleteResultsError
-
     newly_installed = set()
     already_installed = set()
-    logger = logging.getLogger(__name__)
 
     parent_ds = Dataset(str(study_path))
 
@@ -219,12 +228,7 @@ def drop_subdatasets(
     Raises:
         Exception: If drop fails after retries or on non-transient errors
     """
-    import logging
-    import time
-    from datalad.support.exceptions import IncompleteResultsError
-
     dropped = set()
-    logger = logging.getLogger(__name__)
     parent_ds = Dataset(str(study_path))
 
     for sd_path in subdataset_paths:
@@ -302,28 +306,132 @@ class TemporarySubdatasetInstall:
             drop_subdatasets(self.newly_installed, self.study_path,
                            reckless=self.reckless_drop)
         return False  # Don't suppress exceptions
+
+
+# ============================================================================
+# High-level interface for extraction with managed subdatasets
+# ============================================================================
+
+def extract_study_with_subdatasets(
+    study_path: Path,
+    stage: str = "basic",
+    get_data: bool = False,
+    reckless_drop: bool = False
+) -> dict:
+    """Extract study metadata with automatic subdataset management.
+
+    High-level function that:
+    1. Installs sourcedata subdatasets if needed
+    2. Extracts metadata at specified stage
+    3. Drops newly-installed subdatasets (preserves existing ones)
+
+    This is the main entry point for both CLI and Snakemake workflows.
+
+    Args:
+        study_path: Path to study directory
+        stage: Extraction stage ("basic", "counts", "sizes", "imaging")
+        get_data: If True, also get file content (not just git tree)
+        reckless_drop: Skip safety checks when dropping subdatasets
+
+    Returns:
+        Dictionary with extracted metadata (all studies.tsv columns)
+
+    Raises:
+        Exception: If subdataset installation/drop or extraction fails
+
+    Example:
+        # Use from CLI or Snakemake
+        from bids_studies.subdatasets import extract_study_with_subdatasets
+
+        result = extract_study_with_subdatasets(
+            Path('study-ds000001'),
+            stage='imaging'
+        )
+        # result contains: study_id, subjects_num, bold_num, etc.
+    """
+    # Import here to avoid circular dependencies
+    # NOTE: This assumes bids_studies.extraction module exists with this function
+    # or we import from openneuro_studies if extraction lives there
+    from bids_studies.extraction import extract_metadata
+
+    with TemporarySubdatasetInstall(study_path, get_data, reckless_drop) as (newly, existing):
+        if newly:
+            logger.info(f"Installed {len(newly)} sourcedata subdatasets for {study_path.name}")
+        if existing:
+            logger.info(f"Using {len(existing)} already-installed subdatasets")
+
+        # Extract metadata with subdatasets now available
+        result = extract_metadata(study_path, stage=stage)
+        logger.info(f"Extracted metadata for {study_path.name}")
+
+    # Subdatasets automatically dropped on context exit
+    return result
 ```
 
 **Design Notes**:
+- **Module-level imports and logger** - proper Python style, not inside functions
+- **High-level interface** - `extract_study_with_subdatasets()` does everything
+- **CLI-ready** - can be called directly without Snakemake
+- **Snakemake-friendly** - Snakemake just calls this one function
+
+**Design Notes**:
+- **Module-level imports and logger** - proper Python style, not inside functions
 - **Pure DataLad API** - no raw git submodule commands
 - **Generic BIDS utilities** - works with any BIDS study dataset, not OpenNeuro-specific
 - **State preservation** - tracks what was already installed vs newly installed
 - **Context manager pattern** - automatic cleanup via `__exit__`
+- **High-level interface** - `extract_study_with_subdatasets()` for CLI and Snakemake
 - **Thread-safe** - DataLad handles locking internally
 - **Robust error handling** - retries transient errors, fails on unexpected errors
 - **No relative path computation** - DataLad accepts absolute paths directly
 - **Guaranteed operation** - failures raise exceptions, not just logged
 
-### Layer 2: Snakemake Workflow Integration
+### Layer 2: bids_studies.extraction Integration
+**File**: `code/src/bids_studies/extraction/study.py` (or similar)
+
+**Purpose**: Wrap existing extraction logic to use subdataset management.
+
+**Note**: This assumes `bids_studies.extraction` module exists or will be created. If extraction logic currently lives in `openneuro_studies.metadata`, it should be moved to `bids_studies` for reusability.
+
+```python
+# code/src/bids_studies/extraction/study.py (or appropriate location)
+"""Study-level metadata extraction."""
+
+import logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+def extract_metadata(study_path: Path, stage: str = "basic") -> dict:
+    """Extract all metadata for a study.
+
+    This function performs the actual extraction logic that currently lives in
+    openneuro_studies.metadata.studies_tsv.collect_study_metadata().
+
+    Args:
+        study_path: Path to study directory
+        stage: Extraction stage ("basic", "counts", "sizes", "imaging")
+
+    Returns:
+        Dictionary with all studies.tsv columns
+    """
+    # TODO: Move extraction logic from openneuro_studies to here
+    # For now, delegate to existing implementation
+    from openneuro_studies.metadata.studies_tsv import collect_study_metadata
+    return collect_study_metadata(study_path, stage=stage)
+```
+
+### Layer 3: Snakemake Workflow Integration
 **File**: `code/workflow/Snakefile` (minimal modification)
 
-**Approach**: Use context manager in `extract_study` rule.
+**Approach**: Just call the high-level `extract_study_with_subdatasets()` function.
 
 **Modified Rule**:
 
 ```python
 rule extract_study:
-    """Extract metadata from study with temporary subdataset installation."""
+    """Extract metadata from study with automatic subdataset management."""
     output:
         json_file = ".snakemake/extracted/{study}.json"
     params:
@@ -331,57 +439,68 @@ rule extract_study:
     run:
         from pathlib import Path
         import json
-        from openneuro_studies.metadata.studies_tsv import collect_study_metadata
-        from bids_studies.subdatasets import TemporarySubdatasetInstall
+        from bids_studies.subdatasets import extract_study_with_subdatasets
 
         study_path = Path(wildcards.study)
 
-        # Temporarily install sourcedata subdatasets for extraction
-        with TemporarySubdatasetInstall(study_path) as (newly, existing):
-            if newly:
-                logger.info(f"Installed {len(newly)} sourcedata subdatasets for {wildcards.study}")
-            if existing:
-                logger.info(f"Using {len(existing)} already-installed subdatasets")
+        # Single function call - all logic in bids_studies
+        result = extract_study_with_subdatasets(study_path, stage="imaging")
 
-            # Extract metadata (subdatasets now available)
-            result = collect_study_metadata(study_path, stage="imaging")
+        # Save result
+        Path(output.json_file).parent.mkdir(parents=True, exist_ok=True)
+        with open(output.json_file, "w") as f:
+            json.dump(result, f, indent=2)
 
-            Path(output.json_file).parent.mkdir(parents=True, exist_ok=True)
-            with open(output.json_file, "w") as f:
-                json.dump(result, f, indent=2)
-
-            prov_manager.record(output.json_file, "extract_study", params.deps)
-            logger.info(f"Extracted metadata for {wildcards.study}")
-
-        # Subdatasets automatically dropped on context exit
+        prov_manager.record(output.json_file, "extract_study", params.deps)
 ```
 
 **Why This Design**:
-- ✅ Minimal Snakemake code - just 3-line context manager usage
-- ✅ All logic in reusable `bids_studies` module
-- ✅ Preserves state automatically via context manager
-- ✅ Efficient - only installs what's needed
-- ✅ Observable - logs installation/drop operations
-- ✅ Fail-safe - context manager ensures cleanup even on errors
-- ✅ Uses DataLad's native API - no reinventing subdataset management
+- ✅ **Ultra-minimal Snakemake code** - just one function call
+- ✅ **All logic in bids_studies** - reusable from CLI
+- ✅ **No low-level calls** - Snakemake doesn't manage subdatasets directly
+- ✅ **Testable** - can test `extract_study_with_subdatasets()` independently
+- ✅ **CLI-ready** - same function works outside Snakemake
 
-### Optional: CLI Integration
-**File**: `code/src/openneuro_studies/cli/main.py` (optional enhancement)
+### Layer 4: CLI Integration
+**File**: `code/src/openneuro_studies/cli/main.py`
 
-Could add `--ensure-subdatasets` flag:
+**Approach**: Use the same high-level function, making subdataset management the default.
 
 ```python
-@click.option("--ensure-subdatasets/--no-ensure-subdatasets", default=False,
-              help="Temporarily install sourcedata subdatasets for extraction")
-def metadata_generate(..., ensure_subdatasets: bool):
-    if ensure_subdatasets:
-        from bids_studies.subdatasets import TemporarySubdatasetInstall
+@click.command()
+@click.option("--stage", type=click.Choice(["basic", "counts", "sizes", "imaging"]),
+              default="sizes", help="Extraction stage")
+@click.option("--ensure-subdatasets/--no-ensure-subdatasets", default=True,
+              help="Temporarily install sourcedata subdatasets (default: enabled)")
+@click.argument("studies", nargs=-1)
+def metadata_generate(stage: str, ensure_subdatasets: bool, studies: tuple[str, ...]):
+    """Generate metadata for studies.
 
-        for study_path in study_paths:
-            with TemporarySubdatasetInstall(study_path):
-                # Extract metadata
-                process_study(study_path, ...)
+    By default, automatically manages subdataset installation/uninstallation.
+    Use --no-ensure-subdatasets to skip (useful if subdatasets already installed).
+    """
+    from pathlib import Path
+    from bids_studies.subdatasets import extract_study_with_subdatasets
+    from openneuro_studies.metadata.studies_tsv import collect_study_metadata
+
+    for study in studies:
+        study_path = Path(study)
+
+        if ensure_subdatasets:
+            # Use high-level function with subdataset management
+            result = extract_study_with_subdatasets(study_path, stage=stage)
+        else:
+            # Direct extraction (assumes subdatasets already available)
+            result = collect_study_metadata(study_path, stage=stage)
+
+        # Save or process result...
 ```
+
+**Why This Design**:
+- ✅ **Subdataset management by default** - users don't need to think about it
+- ✅ **Can disable if needed** - via `--no-ensure-subdatasets`
+- ✅ **Same function as Snakemake** - consistent behavior
+- ✅ **Works standalone** - no Snakemake required
 
 ## Implementation Steps
 
@@ -390,25 +509,53 @@ def metadata_generate(..., ensure_subdatasets: bool):
 **File**: `code/src/bids_studies/subdatasets/__init__.py`
 
 Implement:
+- **Module-level setup**: imports, logger at top
 - `iter_sourcedata_subdatasets()` - iterate sourcedata paths using `Dataset.subdatasets()`
 - `get_subdataset_states()` - get current installation states
-- `ensure_subdatasets_installed()` - install using `parent_ds.get(path, get_data=False)`
-- `drop_subdatasets()` - uninstall using `dl.drop(path, what='datasets', reckless='kill')`
+- `ensure_subdatasets_installed()` - install using `parent_ds.get(path, get_data=False)` with retry
+- `drop_subdatasets()` - uninstall using `parent_ds.drop(path, what='datasets')` with retry
 - `TemporarySubdatasetInstall` - context manager combining install + drop
+- **`extract_study_with_subdatasets()`** - high-level function for CLI and Snakemake
 
 **Error Handling**:
-- Log warnings for failed installations (don't fail entire workflow)
-- Return success/failure tracking for observability
+- Retry transient errors with exponential backoff
+- Raise exceptions on failures (no silent failures)
+- Log all operations for observability
 
-### 2. Modify Snakemake Workflow
+### 2. Create/Update bids_studies.extraction Module (Optional)
+
+**File**: `code/src/bids_studies/extraction/study.py`
+
+If extraction logic should move from `openneuro_studies.metadata` to `bids_studies`:
+- Create `extract_metadata(study_path, stage)` function
+- Move study-level extraction logic from openneuro_studies
+- Make it generic (not OpenNeuro-specific)
+
+Otherwise, `extract_study_with_subdatasets()` can delegate to existing `openneuro_studies` code.
+
+### 3. Modify Snakemake Workflow
 
 **File**: `code/workflow/Snakefile`
 
-- Import `TemporarySubdatasetInstall` from `bids_studies.subdatasets`
-- Wrap extraction logic in context manager
-- Add logging statements
+- Import `extract_study_with_subdatasets` from `bids_studies.subdatasets`
+- **Single function call** - no direct subdataset management
+- Let bids_studies handle all the complexity
 
-### 3. Add Tests
+### 4. Update CLI
+
+**File**: `code/src/openneuro_studies/cli/main.py`
+
+- Import `extract_study_with_subdatasets` from `bids_studies.subdatasets`
+- Make `--ensure-subdatasets` default to True
+- Use same high-level function as Snakemake
+
+### 5. Update Automation Script
+
+**File**: `.openneuro-studies/process_openneuro_todo`
+
+No changes needed — the script calls Snakemake, which now handles subdataset management automatically.
+
+### 6. Add Tests
 
 **File**: `code/tests/unit/test_bids_subdatasets.py` (new)
 
@@ -428,9 +575,9 @@ Integration test:
 - Verify sourcedata is dropped after extraction (state='absent' again)
 - Verify extracted metadata is NOT all n/a
 
-### 4. Update pyproject.toml
+### 7. Update pyproject.toml
 
-Ensure `bids_studies.subdatasets` is included in package discovery.
+Ensure `bids_studies.subdatasets` (and optionally `bids_studies.extraction`) are included in package discovery.
 
 ## Critical Files
 

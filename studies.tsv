@@ -1,8 +1,41 @@
 study_id	name	version	raw_version	bids_version	hed_version	license	authors	author_lead_raw	author_senior_raw	source_count	source_types	derivative_count	subjects_num	sessions_num	sessions_min	sessions_max	bold_num	t1w_num	t2w_num	bold_size	t1w_size	bold_size_max	bold_voxels	datatypes	derivative_ids	bids_valid
 study-ds000001	Study dataset for ds000001	n/a	1.0.0	1.10.1	n/a	CC0	Yaroslav Halchenko	Tom Schonberg	Russell A. Poldrack	1	raw	2	16	n/a	n/a	n/a	48	16	0	2319818025	85042746	50786740	2001715200	anat,func	fMRIPrep-21.0.1,MRIQC-0.16.1	n/a
+study-ds000030	Study dataset for study-ds000030	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds000113	Study dataset for study-ds000113	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds000221	Study dataset for study-ds000221	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds001499	Study dataset for study-ds001499	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds001506	Study dataset for study-ds001506	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds001894	Study dataset for study-ds001894	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds002345	Study dataset for study-ds002345	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds002685	Study dataset for study-ds002685	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds002766	Study dataset for study-ds002766	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds002785	Study dataset for study-ds002785	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds002790	Study dataset for study-ds002790	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds002843	Study dataset for study-ds002843	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds003020	Study dataset for study-ds003020	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds003097	Study dataset for study-ds003097	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds003592	Study dataset for study-ds003592	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds003604	Study dataset for study-ds003604	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds003643	Study dataset for study-ds003643	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds003798	Study dataset for study-ds003798	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds004044	Study dataset for study-ds004044	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds004078	Study dataset for study-ds004078	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds004146	Study dataset for study-ds004146	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds004169	Study dataset for study-ds004169	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds004488	Study dataset for study-ds004488	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds004496	Study dataset for study-ds004496	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds004636	Study dataset for study-ds004636	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds004746	Study dataset for study-ds004746	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds004884	Study dataset for study-ds004884	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds005165	Study dataset for study-ds005165	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds005237	Study dataset for study-ds005237	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
 study-ds005256	Study dataset for ds005256	n/a	1.1.0	1.10.1	n/a	CC0	Yaroslav Halchenko	Heejung Jung	Tor D. Wager	1	raw	0	117	1504	5	14	4178	117	0	2190296211744	1811215873	1037010752	1630045043872	anat,dwi,fmap,func	n/a	n/a
+study-ds005747	Study dataset for study-ds005747	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds005752	Study dataset for study-ds005752	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
+study-ds005896	Study dataset for study-ds005896	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
 study-ds006131	Study dataset for ds006131	n/a	1.0.0	1.10.1	n/a	CC0	Yaroslav Halchenko	Juliette B. H. Brook	Theodore D. Satterthwaite	1	raw	4	18	106	4	6	480	24	14	337994237050	329761495	1162934399	125975520000	anat,dwi,fmap,func,perf	fMRIPrep-24.1.1,MRIQC-25.0.0rc0,qsiprep-1.0.1.dev0+gee9aa2e.d20250115,ASLPrep-0.7.5	n/a
 study-ds006189	Study dataset for ds006189	n/a	n/a	1.10.1	n/a	CC0	Yaroslav Halchenko	Juliette B. H. Brook	Theodore D. Satterthwaite	2	raw	1	42	202	4	6	864	48	21	642618400201	757161815	1162934399	221372065800	anat,dwi,fmap,func,perf	fMRIPost-AROMA-0.0.10	n/a
 study-ds006190	Study dataset for ds006190	n/a	n/a	1.10.1	n/a	CC0	Yaroslav Halchenko	Juliette B. H. Brook	Theodore D. Satterthwaite	3	raw	1	54	238	3	6	912	48	21	656186548491	757161815	1162934399	234424081140	anat,dwi,fmap,func,perf	tedana-24.0.2	n/a
 study-ds006191	Study dataset for ds006191	n/a	n/a	1.10.1	n/a	CC0	Yaroslav Halchenko	Juliette B. H. Brook	Theodore D. Satterthwaite	4	raw	1	66	274	3	6	1056	48	21	686647150788	757161815	1162934399	272041625940	anat,dwi,fmap,func,perf	custom-ds006191	n/a
 study-ds006192	Study dataset for ds006192	n/a	n/a	1.10.1	n/a	CC0	Yaroslav Halchenko	Juliette B. H. Brook	Theodore D. Satterthwaite	4	raw	1	66	262	2	6	912	48	21	656186548491	757161815	1162934399	234424081140	anat,dwi,fmap,func,perf	xcp_d-0.10.6	n/a
+study-ds006623	Study dataset for study-ds006623	n/a	n/a	1.10.1	n/a	CC0	OpenNeuroStudies Contributors	n/a	n/a	1	raw	0	n/a	n/a	n/a	n/a	0	0	0	n/a	n/a	n/a	n/a	n/a	n/a	n/a
