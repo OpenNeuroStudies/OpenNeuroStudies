@@ -25,3 +25,16 @@ Generating studies+derivatives.tsv...
 Metadata generation complete.
 
 Committing changes...
+add(ok): .duct/logs/2026.02.20T20.31.39-2131421_info.json (file)
+add(ok): .duct/logs/2026.02.20T20.31.39-2131421_stderr (file)
+add(ok): .duct/logs/2026.02.20T20.31.39-2131421_stdout (file)
+add(ok): .duct/logs/2026.02.20T20.31.39-2131421_usage.jsonl (file)
+add(ok): .duct/logs/2026.02.20T20.32.10-2132137_info.json (file)
+add(ok): .duct/logs/2026.02.20T20.32.10-2132137_stderr (file)
+add(ok): .duct/logs/2026.02.20T20.32.10-2132137_stdout (file)
+add(ok): .duct/logs/2026.02.20T20.32.10-2132137_usage.jsonl (file)
+save(ok): . (dataset)
+action summary:
+  add (ok: 8)
+  save (ok: 1)
+  ✓ Changes committed

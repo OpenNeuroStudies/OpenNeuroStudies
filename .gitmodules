@@ -42,3 +42,168 @@
 	url = https://github.com/OpenNeuroStudies/study-ds006192.git
 	datalad-id = 19cf6b4a-6b36-4100-a429-154c055dd9c6
 	datalad-url = https://github.com/OpenNeuroStudies/study-ds006192.git
+[submodule "study-ds000030"]
+	path = study-ds000030
+	url = https://github.com/OpenNeuroStudies/study-ds000030.git
+	datalad-id = 247a52ee-a68b-4b77-944e-8fb8b146f112
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds000030.git
+[submodule "study-ds000113"]
+	path = study-ds000113
+	url = https://github.com/OpenNeuroStudies/study-ds000113.git
+	datalad-id = e12d9c9c-634f-40ca-a3a5-c1fa2b478663
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds000113.git
+[submodule "study-ds000221"]
+	path = study-ds000221
+	url = https://github.com/OpenNeuroStudies/study-ds000221.git
+	datalad-id = cfb695da-a9b9-4cbd-85c8-b9520736e2ad
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds000221.git
+[submodule "study-ds001499"]
+	path = study-ds001499
+	url = https://github.com/OpenNeuroStudies/study-ds001499.git
+	datalad-id = 0afca0f9-fda4-4f95-a4de-9a6044c56686
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds001499.git
+[submodule "study-ds001506"]
+	path = study-ds001506
+	url = https://github.com/OpenNeuroStudies/study-ds001506.git
+	datalad-id = 423c735c-5732-483c-bd6f-0d4f9b6321d2
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds001506.git
+[submodule "study-ds001894"]
+	path = study-ds001894
+	url = https://github.com/OpenNeuroStudies/study-ds001894.git
+	datalad-id = 95d2963b-ee21-4923-8188-a94ec48a2a38
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds001894.git
+[submodule "study-ds002345"]
+	path = study-ds002345
+	url = https://github.com/OpenNeuroStudies/study-ds002345.git
+	datalad-id = 25b5ba7b-570c-4b19-8000-12e769455bd2
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds002345.git
+[submodule "study-ds002685"]
+	path = study-ds002685
+	url = https://github.com/OpenNeuroStudies/study-ds002685.git
+	datalad-id = 09347a13-b527-4028-8a35-d8143fc0841e
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds002685.git
+[submodule "study-ds002766"]
+	path = study-ds002766
+	url = https://github.com/OpenNeuroStudies/study-ds002766.git
+	datalad-id = 5140efb7-6d45-4748-be7f-9aae11574ac6
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds002766.git
+[submodule "study-ds002785"]
+	path = study-ds002785
+	url = https://github.com/OpenNeuroStudies/study-ds002785.git
+	datalad-id = 240d7054-91c1-48e4-a350-c92d14bba22a
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds002785.git
+[submodule "study-ds002790"]
+	path = study-ds002790
+	url = https://github.com/OpenNeuroStudies/study-ds002790.git
+	datalad-id = 2fb75c73-f5d0-44c1-8021-4b5fdc59adfa
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds002790.git
+[submodule "study-ds002843"]
+	path = study-ds002843
+	url = https://github.com/OpenNeuroStudies/study-ds002843.git
+	datalad-id = 929b7ea5-fc35-4d6d-bb5b-0bef674a43a7
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds002843.git
+[submodule "study-ds003020"]
+	path = study-ds003020
+	url = https://github.com/OpenNeuroStudies/study-ds003020.git
+	datalad-id = 10a445b7-1ba7-4e52-8895-1cdcb8930110
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds003020.git
+[submodule "study-ds003097"]
+	path = study-ds003097
+	url = https://github.com/OpenNeuroStudies/study-ds003097.git
+	datalad-id = 20345be2-b51f-4541-a679-cd75f0670934
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds003097.git
+[submodule "study-ds003592"]
+	path = study-ds003592
+	url = https://github.com/OpenNeuroStudies/study-ds003592.git
+	datalad-id = d9488017-cabf-4cd6-a413-02d945f8c73b
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds003592.git
+[submodule "study-ds003604"]
+	path = study-ds003604
+	url = https://github.com/OpenNeuroStudies/study-ds003604.git
+	datalad-id = 34605c81-8660-42f9-90b7-08a0ae95ca94
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds003604.git
+[submodule "study-ds003643"]
+	path = study-ds003643
+	url = https://github.com/OpenNeuroStudies/study-ds003643.git
+	datalad-id = fbbd6762-e3fe-43bb-af46-31215fe6169e
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds003643.git
+[submodule "study-ds003798"]
+	path = study-ds003798
+	url = https://github.com/OpenNeuroStudies/study-ds003798.git
+	datalad-id = b071f119-73e5-4578-b461-d2a262632ad9
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds003798.git
+[submodule "study-ds004044"]
+	path = study-ds004044
+	url = https://github.com/OpenNeuroStudies/study-ds004044.git
+	datalad-id = 4fbdc1f8-6313-44c1-84b9-558dc7d77406
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds004044.git
+[submodule "study-ds004078"]
+	path = study-ds004078
+	url = https://github.com/OpenNeuroStudies/study-ds004078.git
+	datalad-id = 0da2ed22-5221-45e0-a296-7804cfb13815
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds004078.git
+[submodule "study-ds004146"]
+	path = study-ds004146
+	url = https://github.com/OpenNeuroStudies/study-ds004146.git
+	datalad-id = 4f7541fb-968b-46ec-9447-ff8309fe5cd6
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds004146.git
+[submodule "study-ds004169"]
+	path = study-ds004169
+	url = https://github.com/OpenNeuroStudies/study-ds004169.git
+	datalad-id = 6e3ee7a2-8631-41d3-b9c7-dfdc7f7d5a14
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds004169.git
+[submodule "study-ds004488"]
+	path = study-ds004488
+	url = https://github.com/OpenNeuroStudies/study-ds004488.git
+	datalad-id = 382abd42-edba-4694-831a-1fcbf8648d39
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds004488.git
+[submodule "study-ds004496"]
+	path = study-ds004496
+	url = https://github.com/OpenNeuroStudies/study-ds004496.git
+	datalad-id = c1a7303c-a0f2-4437-bdd7-0f0700bad35b
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds004496.git
+[submodule "study-ds004636"]
+	path = study-ds004636
+	url = https://github.com/OpenNeuroStudies/study-ds004636.git
+	datalad-id = 415203a1-424a-4362-986c-815318cecff4
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds004636.git
+[submodule "study-ds004746"]
+	path = study-ds004746
+	url = https://github.com/OpenNeuroStudies/study-ds004746.git
+	datalad-id = a1ed2495-5dff-4bed-8e44-7bccd89c20d6
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds004746.git
+[submodule "study-ds004884"]
+	path = study-ds004884
+	url = https://github.com/OpenNeuroStudies/study-ds004884.git
+	datalad-id = 218d900a-9d21-4449-828a-fb9047436710
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds004884.git
+[submodule "study-ds005165"]
+	path = study-ds005165
+	url = https://github.com/OpenNeuroStudies/study-ds005165.git
+	datalad-id = 63277b6e-0513-496e-a0ee-4740d44ce555
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds005165.git
+[submodule "study-ds005237"]
+	path = study-ds005237
+	url = https://github.com/OpenNeuroStudies/study-ds005237.git
+	datalad-id = 5190a4c8-874d-480a-8c17-109bb4036659
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds005237.git
+[submodule "study-ds005747"]
+	path = study-ds005747
+	url = https://github.com/OpenNeuroStudies/study-ds005747.git
+	datalad-id = 437bcb5f-70e9-44b9-a1af-874578e8d323
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds005747.git
+[submodule "study-ds005752"]
+	path = study-ds005752
+	url = https://github.com/OpenNeuroStudies/study-ds005752.git
+	datalad-id = 82769049-f1d6-423a-bd63-383040c6b65d
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds005752.git
+[submodule "study-ds005896"]
+	path = study-ds005896
+	url = https://github.com/OpenNeuroStudies/study-ds005896.git
+	datalad-id = 45ac1ca2-99b7-46b6-8dae-9204b18d7f45
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds005896.git
+[submodule "study-ds006623"]
+	path = study-ds006623
+	url = https://github.com/OpenNeuroStudies/study-ds006623.git
+	datalad-id = aa6ca0bf-ebe8-4361-9017-a3923868e7c9
+	datalad-url = https://github.com/OpenNeuroStudies/study-ds006623.git
