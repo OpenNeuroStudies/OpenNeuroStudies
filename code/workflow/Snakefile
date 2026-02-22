@@ -141,12 +141,12 @@ rule extract_study:
         # Git SHAs as params - changes trigger rerun with --rerun-triggers params
         deps = lambda wc: get_study_deps(wc.study)
     run:
-        from openneuro_studies.metadata.studies_tsv import collect_study_metadata
+        from bids_studies.subdatasets import extract_study_with_subdatasets
 
         study_path = Path(wildcards.study)
 
-        # Extract all columns (collect_study_metadata sets study_id internally)
-        result = collect_study_metadata(study_path, stage="imaging")
+        # Extract metadata with automatic subdataset management
+        result = extract_study_with_subdatasets(study_path, stage="imaging")
 
         # Ensure output directory exists
         Path(output.json_file).parent.mkdir(parents=True, exist_ok=True)
