@@ -1,0 +1,42 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 4
+Rules claiming more threads will be scaled down.
+Job stats:
+job                     count
+--------------------  -------
+all                         1
+merge_into_canonical        1
+total                       2
+
+Select jobs to execute...
+
+[Sun Feb 22 23:12:23 2026]
+rule merge_into_canonical:
+    input: .snakemake/extracted/study-ds000001.json, .snakemake/extracted/study-ds000030.json, .snakemake/extracted/study-ds000113.json, .snakemake/extracted/study-ds000221.json, .snakemake/extracted/study-ds001499.json, .snakemake/extracted/study-ds001506.json, .snakemake/extracted/study-ds001894.json, .snakemake/extracted/study-ds002345.json, .snakemake/extracted/study-ds002685.json, .snakemake/extracted/study-ds002766.json, .snakemake/extracted/study-ds002785.json, .snakemake/extracted/study-ds002790.json, .snakemake/extracted/study-ds002843.json, .snakemake/extracted/study-ds003020.json, .snakemake/extracted/study-ds003097.json, .snakemake/extracted/study-ds003592.json, .snakemake/extracted/study-ds003604.json, .snakemake/extracted/study-ds003643.json, .snakemake/extracted/study-ds003798.json, .snakemake/extracted/study-ds004044.json, .snakemake/extracted/study-ds004078.json, .snakemake/extracted/study-ds004146.json, .snakemake/extracted/study-ds004169.json, .snakemake/extracted/study-ds004488.json, .snakemake/extracted/study-ds004496.json, .snakemake/extracted/study-ds004636.json, .snakemake/extracted/study-ds004746.json, .snakemake/extracted/study-ds004884.json, .snakemake/extracted/study-ds005165.json, .snakemake/extracted/study-ds005237.json, .snakemake/extracted/study-ds005256.json, .snakemake/extracted/study-ds005747.json, .snakemake/extracted/study-ds005752.json, .snakemake/extracted/study-ds005896.json, .snakemake/extracted/study-ds006131.json, .snakemake/extracted/study-ds006189.json, .snakemake/extracted/study-ds006190.json, .snakemake/extracted/study-ds006191.json, .snakemake/extracted/study-ds006192.json, .snakemake/extracted/study-ds006623.json
+    output: studies.tsv
+    jobid: 1
+    reason: Params have changed since last execution
+    resources: tmpdir=/home/yoh/.tmp
+
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 4
+Rules claiming more threads will be scaled down.
+Select jobs to execute...
+[Sun Feb 22 23:12:24 2026]
+Finished job 1.
+1 of 2 steps (50%) done
+Select jobs to execute...
+
+[Sun Feb 22 23:12:24 2026]
+localrule all:
+    input: studies.tsv
+    jobid: 0
+    reason: Input files updated by another job: studies.tsv
+    resources: tmpdir=/home/yoh/.tmp
+
+[Sun Feb 22 23:12:24 2026]
+Finished job 0.
+2 of 2 steps (100%) done
+Complete log: .snakemake/log/2026-02-22T231222.963401.snakemake.log
