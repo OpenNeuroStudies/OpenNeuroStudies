@@ -47,7 +47,7 @@ help:
 # Initialize study subdatasets (required after fresh clone)
 studies-init:
 	@echo "Initializing study-* subdatasets..."
-	git submodule update --init study-*
+	datalad get -s origin .openneuro-studies study-ds00*
 	@echo "✓ Study subdatasets initialized"
 
 # Refresh existing studies only (no discovery)
