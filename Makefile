@@ -48,11 +48,12 @@ help:
 studies-init:
 	@echo "Initializing study-* subdatasets..."
 	datalad get -s origin .openneuro-studies study-ds00*
-	@echo "Initializing sourcedata subdatasets within each study..."
+	@echo "Initializing sourcedata and derivatives subdatasets within each study..."
 	@for study in study-ds00*/; do \
 		if [ -d "$$study" ]; then \
 			echo "  $$study"; \
 			datalad get -n -d "$$study" "$${study}sourcedata" || true; \
+			datalad get -n -d "$$study" "$${study}derivatives" || true; \
 		fi; \
 	done
 	@echo "✓ Study subdatasets initialized"
