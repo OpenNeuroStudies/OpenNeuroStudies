@@ -644,9 +644,10 @@ def extract_processing_completeness(
 **Processing Completeness** (new):
 - tasks_processed
 - tasks_missing
-- anat_processed (boolean)
-- func_processed (boolean)
+- anat_processed (boolean - ANY desc- in anat/)
+- func_processed (boolean - ANY desc- in func/)
 - processing_complete (boolean)
+- descriptions (JSON dict with desc- entity counts)
 
 **fMRIPrep-Specific** (new):
 - template_spaces

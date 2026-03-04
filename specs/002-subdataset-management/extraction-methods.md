@@ -8,6 +8,7 @@ This document analyzes practical extraction methods for derivatives metadata tha
 - tasks_processed / tasks_missing
 - anat_processed / func_processed / processing_complete
 - template_spaces / transform_spaces
+- descriptions (JSON dict with desc- entity counts)
 
 **Future TODO** (deferred):
 - pipeline_config → config registry system
@@ -168,23 +169,32 @@ def extract_tasks_missing(
 
 **What**: Boolean indicating if anatomical data was processed
 
-**Method**: Check for preprocessed anatomical outputs in anat/ directory
+**Method**: Check for ANY desc- entity in anat/ directory NIfTI files
+
+**Rationale**: Any desc- entity indicates processing occurred (preproc, brain, aseg, aparcaseg, etc.)
 
 **Implementation**:
 ```python
 def extract_anat_processed(derivative_path: Path) -> bool:
     """Check if anatomical processing outputs exist.
 
-    Looks for typical fMRIPrep anatomical outputs:
-    - *_desc-preproc_T1w.nii.gz
-    - *_space-*_T1w.nii.gz
-    - *_dseg.nii.gz (segmentation)
-    - *_desc-brain_mask.nii.gz
+    Considers anatomical processed if ANY _desc- entity present in anat/ NIfTI files.
+    This includes:
+    - desc-preproc (preprocessed)
+    - desc-brain (brain-extracted)
+    - desc-aseg (FreeSurfer segmentation)
+    - desc-aparcaseg (parcellation)
+    - Any other desc- variant
+
+    Also considers processed if:
+    - Space-normalized outputs (_space-*)
+    - Segmentation masks (_dseg, _probseg)
 
     Returns:
-        True if anatomical outputs found, False otherwise
+        True if anatomical outputs with processing indicators found, False otherwise
     """
     import subprocess
+    import re
 
     try:
         result = subprocess.run(
@@ -197,17 +207,22 @@ def extract_anat_processed(derivative_path: Path) -> bool:
 
         files = result.stdout.strip().split('\n')
 
-        # Check for typical preprocessed anatomical outputs
-        anat_indicators = [
-            '_desc-preproc_T1w.nii.gz',
-            '_desc-preproc_T2w.nii.gz',
-            '_space-',  # Any space-normalized anatomy
-            '_dseg.nii.gz',  # Segmentation
-            '_desc-brain_mask.nii.gz',
-        ]
-
+        # Check for processing indicators
         for filepath in files:
-            if any(indicator in filepath for indicator in anat_indicators):
+            # NIfTI files only (exclude JSON sidecars)
+            if not filepath.endswith('.nii.gz'):
+                continue
+
+            # Any desc- entity indicates processing
+            if '_desc-' in filepath:
+                return True
+
+            # Space normalization indicates processing
+            if '_space-' in filepath and '_from-' not in filepath:  # Exclude transforms
+                return True
+
+            # Segmentation outputs indicate processing
+            if any(seg in filepath for seg in ['_dseg.nii.gz', '_probseg.nii.gz']):
                 return True
 
         return False
@@ -219,8 +234,9 @@ def extract_anat_processed(derivative_path: Path) -> bool:
 **Example Output**: `true` or `false`
 
 **Edge Cases**:
-- anat/ exists but only has native space (no preprocessing) → Could check for desc-preproc specifically
-- Only transformations in anat/ (no actual images) → false
+- anat/ has only raw data (no desc-, no space-) → false
+- anat/ has only transformations → false (excluded by _from- check)
+- Any desc- variant (not just preproc) → true
 - Derivative is func-only (no anat processing needed) → false (expected)
 
 ---
@@ -515,17 +531,127 @@ def extract_transform_spaces(
 
 ---
 
+### 8. descriptions
+
+**What**: JSON dict (as string) with counts of different desc- entity types in derivative outputs
+
+**Purpose**: Track what types of processed outputs exist without listing every file
+
+**Method**: Parse all _desc-{label}_ entities from derivative filenames and count occurrences
+
+**Implementation**:
+```python
+def extract_descriptions(derivative_path: Path) -> str:
+    """Extract description entity counts from derivative outputs.
+
+    Counts occurrences of each _desc-{label}_ entity across all files.
+    Returns JSON string for storage in TSV.
+
+    Examples:
+        {"preproc": 120, "brain": 40, "aseg": 40, "aparcaseg": 40}
+        {"confounds": 60, "carpetplot": 20}
+
+    Returns:
+        JSON string of desc counts, or '{}' if none found
+    """
+    import subprocess
+    import re
+    import json
+    from collections import Counter
+
+    try:
+        # List all files in derivative
+        result = subprocess.run(
+            ['git', '-C', str(derivative_path), 'ls-files'],
+            capture_output=True, text=True, check=True
+        )
+
+        if not result.stdout.strip():
+            return '{}'
+
+        files = result.stdout.strip().split('\n')
+
+        # Extract desc entities: _desc-{label}_
+        desc_pattern = re.compile(r'_desc-([a-zA-Z0-9]+)_')
+        desc_labels = []
+
+        for filepath in files:
+            # Only consider BIDS data files (not hidden, not in derivatives root)
+            if filepath.startswith('.') or '/' not in filepath:
+                continue
+
+            matches = desc_pattern.findall(filepath)
+            desc_labels.extend(matches)
+
+        if not desc_labels:
+            return '{}'
+
+        # Count occurrences
+        counts = Counter(desc_labels)
+
+        # Convert to sorted dict for consistent output
+        result_dict = dict(sorted(counts.items()))
+
+        return json.dumps(result_dict, separators=(',', ':'))
+
+    except subprocess.CalledProcessError:
+        return '{}'
+```
+
+**Example Outputs**:
+
+**fMRIPrep derivative**:
+```json
+{"aparcaseg":40,"aseg":40,"brain":40,"confounds":60,"preproc":180}
+```
+- `preproc`: 180 files (BOLD + T1w + T2w preprocessed)
+- `brain`: 40 files (brain-extracted anatomicals)
+- `aseg/aparcaseg`: 40 files (FreeSurfer segmentations)
+- `confounds`: 60 files (confounds timeseries)
+
+**MRIQC derivative**:
+```json
+{"carpetplot":20}
+```
+- `carpetplot`: 20 carpet plot images
+
+**Minimal derivative**:
+```json
+{"preproc":10}
+```
+
+**No desc- entities**:
+```json
+{}
+```
+
+**Edge Cases**:
+- Same desc- in multiple file types (NIfTI, JSON, TSV) → All counted
+- Multiple desc- in same filename (rare) → Each counted separately
+- desc- in transform filenames → Counted (intentional, shows transform types)
+- Derivative has no desc- entities → Empty dict `{}`
+
+**Usage**:
+This column allows quick assessment of derivative content:
+- High `preproc` count → Full preprocessing pipeline
+- `confounds` present → Nuisance regressors available
+- `brain` count → Brain extraction performed
+- `aseg/aparcaseg` → FreeSurfer segmentation available
+
+---
+
 ## Extraction Order
 
 Due to dependencies, extraction should follow this order:
 
 1. **tasks_processed** (independent)
 2. **template_spaces** (independent)
-3. **tasks_missing** (depends on tasks_processed + raw access)
-4. **transform_spaces** (depends on template_spaces)
-5. **anat_processed** (independent)
-6. **func_processed** (independent)
-7. **processing_complete** (depends on tasks_missing, anat_processed, func_processed, raw access)
+3. **descriptions** (independent)
+4. **anat_processed** (independent)
+5. **func_processed** (independent)
+6. **tasks_missing** (depends on tasks_processed + raw access)
+7. **transform_spaces** (depends on template_spaces)
+8. **processing_complete** (depends on tasks_missing, anat_processed, func_processed, raw access)
 
 ## Implementation Pattern
 
@@ -546,6 +672,7 @@ def extract_derivative_completeness_metadata(
     # Extract independent metrics
     tasks_processed = extract_tasks_processed(derivative_path)
     template_spaces = extract_template_spaces(derivative_path)
+    descriptions = extract_descriptions(derivative_path)
     anat_processed = extract_anat_processed(derivative_path)
     func_processed = extract_func_processed(derivative_path)
 
@@ -564,6 +691,7 @@ def extract_derivative_completeness_metadata(
         'processing_complete': processing_complete,
         'template_spaces': template_spaces,
         'transform_spaces': transform_spaces,
+        'descriptions': descriptions,
     }
 ```
 
