@@ -52,8 +52,7 @@ studies-init:
 	@for study in study-ds00*/; do \
 		if [ -d "$$study" ]; then \
 			echo "  $$study"; \
-			datalad get -n -d "$$study" "$${study}sourcedata" || true; \
-			datalad get -n -d "$$study" "$${study}derivatives" || true; \
+			datalad get -n -r -R1 -d "$$study" "$${study}sourcedata" "$${study}derivatives" || true; \
 		fi; \
 	done
 	@echo "✓ Study subdatasets initialized"
