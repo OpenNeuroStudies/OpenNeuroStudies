@@ -237,21 +237,26 @@ def extract_version_tracking(
     """
     # Strategy 1: Try dataset_description.json SourceDatasets.Version
     processed_version = "n/a"
-    dd_path = derivative_path / "dataset_description.json"
 
-    if dd_path.exists():
-        try:
-            with open(dd_path) as f:
-                dd = json.load(f)
-                # Parse SourceDatasets for version info
-                sources = dd.get("SourceDatasets", [])
-                if sources and isinstance(sources, list):
-                    # Extract version from first source
-                    first_source = sources[0]
-                    if isinstance(first_source, dict):
-                        processed_version = first_source.get("Version", "n/a")
-        except (json.JSONDecodeError, IOError, KeyError) as e:
-            logger.debug(f"Could not parse dataset_description.json for {derivative_path}: {e}")
+    # Use git show to read file from git tree (works with sparse datasets)
+    try:
+        cmd_result = subprocess.run(
+            ["git", "-C", str(derivative_path), "show", "HEAD:dataset_description.json"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if cmd_result.returncode == 0 and cmd_result.stdout.strip():
+            dd = json.loads(cmd_result.stdout)
+            # Parse SourceDatasets for version info
+            sources = dd.get("SourceDatasets", [])
+            if sources and isinstance(sources, list):
+                # Extract version from first source
+                first_source = sources[0]
+                if isinstance(first_source, dict):
+                    processed_version = first_source.get("Version", "n/a")
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError) as e:
+        logger.debug(f"Could not parse dataset_description.json for {derivative_path}: {e}")
 
     # Strategy 2: If still n/a, check derivative's sourcedata/ for UUID match
     if processed_version == "n/a" and raw_path:
