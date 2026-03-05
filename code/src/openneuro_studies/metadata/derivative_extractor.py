@@ -56,21 +56,70 @@ def _get_dataset_uuid(path: Path) -> Optional[str]:
     except Exception:
         pass
 
+    # Final fallback: read from parent's .gitmodules (works for uninstalled subdatasets)
+    try:
+        parent_path = path.parent.parent  # e.g., study-ds000001 from study-ds000001/sourcedata/ds000001
+        gitmodules_path = parent_path / ".gitmodules"
+
+        if gitmodules_path.exists():
+            config = configparser.ConfigParser()
+            config.read(gitmodules_path)
+
+            # Find the submodule entry for this path
+            relative_path = str(path.relative_to(parent_path))
+
+            for section in config.sections():
+                if not section.startswith("submodule"):
+                    continue
+
+                submodule_path = config.get(section, "path", fallback="")
+                if submodule_path == relative_path:
+                    datalad_id = config.get(section, "datalad-id", fallback="")
+                    if datalad_id:
+                        logger.debug(f"Found UUID {datalad_id} for {path} from parent .gitmodules")
+                        return datalad_id
+    except Exception as e:
+        logger.debug(f"Could not read UUID from parent .gitmodules: {e}")
+
     return None
 
 
 def _get_git_version(path: Path) -> str:
     """Get git version string for a dataset.
 
-    Tries git describe first, falls back to short SHA.
+    Handles both installed and uninstalled subdatasets.
+    For uninstalled subdatasets, extracts commit SHA from parent's gitlink.
 
     Args:
-        path: Path to git repository
+        path: Path to git repository or uninstalled subdataset
 
     Returns:
         Version string or "n/a"
     """
-    # Try git describe first
+    # Check if this is actually a git repository
+    git_dir = path / ".git"
+    if not git_dir.exists():
+        # Not installed - try to get SHA from parent's gitlink
+        try:
+            parent_path = path.parent.parent
+            relative_path = str(path.relative_to(parent_path))
+
+            cmd_result = subprocess.run(
+                ["git", "-C", str(parent_path), "ls-tree", "HEAD", relative_path],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            if cmd_result.stdout.strip():
+                # Output format: "160000 commit <SHA>\t<path>"
+                parts = cmd_result.stdout.strip().split()
+                if len(parts) >= 3 and parts[0] == "160000":
+                    return parts[2]  # Return full SHA
+        except Exception as e:
+            logger.debug(f"Could not extract gitlink SHA for {path}: {e}")
+            return "n/a"
+
+    # Dataset is installed - try git describe first
     try:
         cmd_result = subprocess.run(
             ["git", "-C", str(path), "describe", "--always"],
@@ -107,79 +156,40 @@ def _extract_processed_version_from_derivative_sourcedata(
 ) -> str:
     """Extract the version of raw data that was processed.
 
-    Strategy:
-    1. Get UUID of the raw dataset
-    2. Find matching UUID in derivative's .gitmodules
-    3. Extract commit SHA from gitlink for that submodule
+    Strategy: Look for sourcedata/raw subdataset in derivative and extract its commit SHA.
+    This is typically where fMRIPrep and other tools store the raw data reference.
 
     Args:
         derivative_path: Path to derivative dataset
-        raw_path: Path to raw sourcedata dataset
+        raw_path: Path to raw sourcedata dataset (unused in this implementation)
 
     Returns:
         Git version string (commit SHA) or "n/a"
     """
-    # Get raw dataset UUID
-    raw_uuid = _get_dataset_uuid(raw_path)
-    if not raw_uuid:
-        logger.debug(f"Could not get UUID for raw dataset {raw_path}")
-        return "n/a"
+    # Check for common sourcedata paths (raw, BIDS, inputs, etc.)
+    common_sourcedata_paths = ["sourcedata/raw", "sourcedata/BIDS", "sourcedata/inputs"]
 
-    # Read derivative's .gitmodules (from git tree if needed)
-    try:
-        cmd_result = subprocess.run(
-            ["git", "-C", str(derivative_path), "show", "HEAD:.gitmodules"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        if cmd_result.returncode != 0 or not cmd_result.stdout.strip():
-            return "n/a"
-        gitmodules_content = cmd_result.stdout
-    except subprocess.CalledProcessError:
-        return "n/a"
-
-    # Parse .gitmodules to find sourcedata submodules
-    config = configparser.ConfigParser()
-    try:
-        config.read_string(gitmodules_content)
-    except configparser.Error as e:
-        logger.debug(f"Failed to parse .gitmodules for {derivative_path}: {e}")
-        return "n/a"
-
-    # Find submodule with matching datalad-id
-    for section in config.sections():
-        if not section.startswith("submodule"):
+    for source_path in common_sourcedata_paths:
+        try:
+            cmd_result = subprocess.run(
+                ["git", "-C", str(derivative_path), "ls-tree", "HEAD", source_path],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            if cmd_result.stdout.strip():
+                # Output format: "160000 commit <SHA>\t<path>"
+                parts = cmd_result.stdout.strip().split()
+                if len(parts) >= 3 and parts[0] == "160000":
+                    commit_sha = parts[2]
+                    logger.debug(
+                        f"Found processed version {commit_sha} for {derivative_path.name} "
+                        f"from {source_path}"
+                    )
+                    return commit_sha
+        except subprocess.CalledProcessError:
+            # This path doesn't exist, try the next one
             continue
-
-        # Check if this is a sourcedata submodule
-        path = config.get(section, "path", fallback="")
-        if not path.startswith("sourcedata/"):
-            continue
-
-        # Check datalad-id
-        submodule_uuid = config.get(section, "datalad-id", fallback="")
-        if submodule_uuid == raw_uuid:
-            # Found matching UUID - extract commit SHA from gitlink
-            try:
-                cmd_result = subprocess.run(
-                    ["git", "-C", str(derivative_path), "ls-tree", "HEAD", path],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                if cmd_result.stdout.strip():
-                    # Output format: "160000 commit <SHA>\t<path>"
-                    parts = cmd_result.stdout.strip().split()
-                    if len(parts) >= 3 and parts[0] == "160000":
-                        commit_sha = parts[2]
-                        logger.debug(
-                            f"Found processed version {commit_sha} for {derivative_path.name} "
-                            f"from {path} (UUID match)"
-                        )
-                        return commit_sha
-            except subprocess.CalledProcessError as e:
-                logger.debug(f"Failed to extract gitlink SHA for {path}: {e}")
 
     return "n/a"
 
