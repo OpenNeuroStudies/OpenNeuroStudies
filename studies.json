@@ -14,8 +14,11 @@
   "bids_version": {
     "Description": "BIDS specification version used by the study"
   },
-  "hed_version": {
-    "Description": "HED schema version if applicable, or 'n/a'"
+  "raw_bids_version": {
+    "Description": "BIDS specification version from raw source dataset's BIDSVersion field, or 'n/a' if multiple conflicting sources"
+  },
+  "raw_hed_version": {
+    "Description": "HED schema version from raw source dataset's HEDVersion field, or 'n/a' if not applicable or multiple conflicting sources"
   },
   "license": {
     "Description": "License for the study dataset"
@@ -53,6 +56,12 @@
   "bold_num": {
     "Description": "Number of BOLD fMRI files"
   },
+  "bold_timepoints": {
+    "Description": "Total number of timepoints (TRs) summed across all BOLD runs"
+  },
+  "bold_tasks": {
+    "Description": "Comma-separated sorted set of task labels from BOLD files (e.g., 'finger,nback,rest')"
+  },
   "t1w_num": {
     "Description": "Number of T1-weighted structural files"
   },
@@ -69,7 +78,7 @@
     "Description": "Size of largest BOLD file in bytes"
   },
   "bold_voxels": {
-    "Description": "Total number of voxels across all BOLD files"
+    "Description": "Maximum number of voxels in any single BOLD file"
   },
   "datatypes": {
     "Description": "Comma-separated list of BIDS datatypes present (e.g., 'anat,func,dwi')"

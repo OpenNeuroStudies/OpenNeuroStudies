@@ -26,10 +26,40 @@
   "file_count": {
     "Description": "Number of files in the derivative dataset"
   },
-  "outdatedness": {
-    "Description": "Number of commits the processed raw version is behind current raw version"
-  },
   "processed_raw_version": {
-    "Description": "Version/commit of the raw dataset that was processed"
+    "Description": "Version/commit of the raw dataset that was processed (from dataset_description.json SourceDatasets)"
+  },
+  "current_raw_version": {
+    "Description": "Current version/commit of the raw dataset (from git describe)"
+  },
+  "uptodate": {
+    "Description": "Boolean indicating if processed_raw_version matches current_raw_version"
+  },
+  "outdatedness": {
+    "Description": "Number of commits the processed raw version is behind current raw version, or 'n/a' if uptodate"
+  },
+  "tasks_processed": {
+    "Description": "Comma-separated list of task labels found in derivative func/ outputs, or 'n/a'"
+  },
+  "tasks_missing": {
+    "Description": "Comma-separated list of tasks present in raw but missing from derivative, or 'n/a'"
+  },
+  "anat_processed": {
+    "Description": "Boolean indicating if anatomical data was processed (any _desc- entity found in anat/)"
+  },
+  "func_processed": {
+    "Description": "Boolean indicating if functional data was processed (BOLD outputs found in func/)"
+  },
+  "processing_complete": {
+    "Description": "Boolean indicating if all raw data was processed (no missing tasks, anat processed, func processed)"
+  },
+  "template_spaces": {
+    "Description": "Comma-separated list of template space labels (_space- entity) in data files (excluding transforms)"
+  },
+  "transform_spaces": {
+    "Description": "Comma-separated list of space labels found ONLY in transforms (not in data files)"
+  },
+  "descriptions": {
+    "Description": "JSON dictionary with counts of each _desc- entity (e.g., {\"preproc\":180,\"brain\":40,\"confounds\":60})"
   }
 }
