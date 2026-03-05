@@ -3,7 +3,7 @@
 # Prerequisites: openneuro-studies and snakemake must be in PATH
 # (activate venv before running make, or install globally)
 
-.PHONY: help discover organize extract metadata full-refresh refresh studies-init clean
+.PHONY: help discover organize extract metadata full-refresh refresh studies-init clean test-expectations
 
 # Default number of cores for parallel operations
 CORES ?= 8
@@ -28,7 +28,8 @@ help:
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make extract-one STUDY=<name>  - Extract single study"
-	@echo "  make clean           - Remove Snakemake cache and lock"
+	@echo "  make test-expectations          - Validate metadata for known datasets"
+	@echo "  make clean                      - Remove Snakemake cache and lock"
 	@echo ""
 	@echo "Options:"
 	@echo "  CORES=N              - Number of parallel cores (default: 8)"
@@ -102,3 +103,8 @@ endif
 clean:
 	snakemake -s code/workflow/Snakefile --unlock || true
 	@echo "✓ Snakemake lock removed"
+
+# Test that metadata meets expectations for known datasets
+test-expectations:
+	@echo "Running metadata extraction expectations tests..."
+	@bash code/tests/test-expectations.sh

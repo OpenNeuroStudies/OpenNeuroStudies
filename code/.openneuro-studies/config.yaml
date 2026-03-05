@@ -1,0 +1,14 @@
+github_org: OpenNeuroStudies
+sources:
+- name: OpenNeuroDatasets
+  organization_url: https://github.com/OpenNeuroDatasets
+  type: raw
+  inclusion_patterns:
+  - ^ds\d{6}$
+  access_token_env: GITHUB_TOKEN
+- name: OpenNeuroDerivatives
+  organization_url: https://github.com/OpenNeuroDerivatives
+  type: derivative
+  inclusion_patterns:
+  - ^ds\d{6}$
+  access_token_env: GITHUB_TOKEN

@@ -17,7 +17,11 @@ import csv
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+
+from datalad.distribution.dataset import Dataset
+
+from openneuro_studies.metadata.derivative_extractor import extract_derivative_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +36,18 @@ STUDIES_DERIVATIVES_COLUMNS = [
     "size_total",
     "size_annexed",
     "file_count",
-    "outdatedness",
     "processed_raw_version",
+    "current_raw_version",
+    "uptodate",
+    "outdatedness",
+    "tasks_processed",
+    "tasks_missing",
+    "anat_processed",
+    "func_processed",
+    "processing_complete",
+    "template_spaces",
+    "transform_spaces",
+    "descriptions",
 ]
 
 # JSON sidecar descriptions (FR-011)
@@ -51,13 +65,127 @@ STUDIES_DERIVATIVES_JSON = {
     "size_total": {"Description": "Total size of the derivative dataset in bytes"},
     "size_annexed": {"Description": "Size of annexed (large) files in bytes"},
     "file_count": {"Description": "Number of files in the derivative dataset"},
-    "outdatedness": {
-        "Description": "Number of commits the processed raw version is behind current raw version"
-    },
     "processed_raw_version": {
-        "Description": "Version/commit of the raw dataset that was processed"
+        "Description": "Version/commit of the raw dataset that was processed (from dataset_description.json SourceDatasets)"
+    },
+    "current_raw_version": {
+        "Description": "Current version/commit of the raw dataset (from git describe)"
+    },
+    "uptodate": {
+        "Description": "Boolean indicating if processed_raw_version matches current_raw_version"
+    },
+    "outdatedness": {
+        "Description": "Number of commits the processed raw version is behind current raw version, or 'n/a' if uptodate"
+    },
+    "tasks_processed": {
+        "Description": "Comma-separated list of task labels found in derivative func/ outputs, or 'n/a'"
+    },
+    "tasks_missing": {
+        "Description": "Comma-separated list of tasks present in raw but missing from derivative, or 'n/a'"
+    },
+    "anat_processed": {
+        "Description": "Boolean indicating if anatomical data was processed (any _desc- entity found in anat/)"
+    },
+    "func_processed": {
+        "Description": "Boolean indicating if functional data was processed (BOLD outputs found in func/)"
+    },
+    "processing_complete": {
+        "Description": "Boolean indicating if all raw data was processed (no missing tasks, anat processed, func processed)"
+    },
+    "template_spaces": {
+        "Description": "Comma-separated list of template space labels (_space- entity) in data files (excluding transforms)"
+    },
+    "transform_spaces": {
+        "Description": "Comma-separated list of space labels found ONLY in transforms (not in data files)"
+    },
+    "descriptions": {
+        "Description": "JSON dictionary with counts of each _desc- entity (e.g., {\"preproc\":180,\"brain\":40,\"confounds\":60})"
     },
 }
+
+
+def _iter_derivative_subdatasets(study_path: Path) -> Iterator[tuple[str, Path]]:
+    """Iterate over derivative subdatasets in a study.
+
+    Yields:
+        Tuple of (derivative_id, derivative_path) for each derivative
+    """
+    parent_ds = Dataset(str(study_path))
+    if not parent_ds.is_installed():
+        return
+
+    try:
+        subdatasets = list(parent_ds.subdatasets(result_renderer='disabled'))
+        for sd in subdatasets:
+            sd_path = Path(sd['path'])
+            # Filter for derivatives subdatasets
+            if 'derivatives' in sd_path.parts:
+                derivative_id = sd_path.name
+                yield derivative_id, sd_path
+    except Exception as e:
+        logger.warning(f"Failed to list derivative subdatasets of {study_path}: {e}")
+
+
+def _ensure_derivative_installed(derivative_path: Path, study_path: Path) -> bool:
+    """Install a derivative subdataset if not already installed.
+
+    Args:
+        derivative_path: Path to derivative subdataset (can be absolute or relative)
+        study_path: Parent study path (can be absolute or relative)
+
+    Returns:
+        True if newly installed, False if already installed
+    """
+    ds = Dataset(str(derivative_path))
+    if ds.is_installed():
+        return False
+
+    # Install using parent dataset's get method
+    # DataLad needs path relative to the parent dataset
+    parent_ds = Dataset(str(study_path))
+    try:
+        # Compute relative path from study to derivative
+        # derivative_path might be study-ds006131/derivatives/fMRIPrep-24.1.1
+        # We need just "derivatives/fMRIPrep-24.1.1"
+        if derivative_path.is_absolute():
+            abs_study = study_path.resolve()
+            abs_deriv = derivative_path.resolve()
+            rel_path = abs_deriv.relative_to(abs_study)
+        else:
+            # For relative paths, make them relative to study_path
+            rel_path = derivative_path.relative_to(study_path)
+
+        parent_ds.get(str(rel_path), get_data=False, result_renderer='disabled')
+        logger.info(f"Installed derivative subdataset: {derivative_path}")
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to install derivative {derivative_path}: {e}")
+        raise
+
+
+def _drop_derivative(derivative_path: Path, study_path: Path) -> None:
+    """Drop (uninstall) a derivative subdataset.
+
+    Args:
+        derivative_path: Path to derivative subdataset (can be absolute or relative)
+        study_path: Parent study path (can be absolute or relative)
+    """
+    parent_ds = Dataset(str(study_path))
+    try:
+        # Compute relative path from study to derivative
+        if derivative_path.is_absolute():
+            abs_study = study_path.resolve()
+            abs_deriv = derivative_path.resolve()
+            rel_path = abs_deriv.relative_to(abs_study)
+        else:
+            rel_path = derivative_path.relative_to(study_path)
+
+        parent_ds.drop(str(rel_path), what='datasets',
+                      reckless='kill', recursive=True, result_renderer='disabled')
+        logger.info(f"Dropped derivative subdataset: {derivative_path}")
+    except Exception as e:
+        logger.warning(f"Failed to drop derivative {derivative_path}: {e}")
+        raise
 
 
 def _parse_gitmodules(gitmodules_path: Path) -> dict[str, dict[str, str]]:
@@ -105,7 +233,7 @@ def _parse_derivative_name(deriv_dir: str) -> tuple[str, str]:
 
 
 def collect_derivatives_for_study(study_path: Path) -> list[dict[str, Any]]:
-    """Collect derivative metadata for a study.
+    """Collect derivative metadata for a study with temporary subdataset installation.
 
     Args:
         study_path: Path to study directory
@@ -116,6 +244,14 @@ def collect_derivatives_for_study(study_path: Path) -> list[dict[str, Any]]:
     study_id = study_path.name
     gitmodules_path = study_path / ".gitmodules"
     submodules = _parse_gitmodules(gitmodules_path)
+
+    # Get raw dataset path (sourcedata subdataset)
+    raw_path = None
+    for _name, config in submodules.items():
+        path = config.get("path", "")
+        if path.startswith("sourcedata/"):
+            raw_path = study_path / path
+            break
 
     derivatives = []
     for _name, config in submodules.items():
@@ -129,22 +265,63 @@ def collect_derivatives_for_study(study_path: Path) -> list[dict[str, Any]]:
 
         deriv_dir = path.split("/")[-1]
         tool_name, tool_version = _parse_derivative_name(deriv_dir)
+        derivative_path = study_path / path
 
-        derivatives.append(
-            {
-                "study_id": study_id,
-                "derivative_id": deriv_dir,
-                "tool_name": tool_name,
-                "tool_version": tool_version,
-                "datalad_uuid": datalad_id,
-                "url": url,
-                "size_total": "n/a",  # TODO: Get from git-annex info
+        # Basic metadata (always available from .gitmodules)
+        deriv_metadata = {
+            "study_id": study_id,
+            "derivative_id": deriv_dir,
+            "tool_name": tool_name,
+            "tool_version": tool_version,
+            "datalad_uuid": datalad_id,
+            "url": url,
+        }
+
+        # Extract additional metadata with temporary installation
+        try:
+            # Track if we install it
+            newly_installed = _ensure_derivative_installed(derivative_path, study_path)
+
+            # Also ensure raw dataset is installed if needed
+            raw_newly_installed = False
+            if raw_path:
+                raw_newly_installed = _ensure_derivative_installed(raw_path, study_path)
+
+            # Extract metadata
+            extracted = extract_derivative_metadata(derivative_path, raw_path)
+            deriv_metadata.update(extracted)
+
+            # Clean up: drop if we installed it
+            if newly_installed:
+                _drop_derivative(derivative_path, study_path)
+            if raw_newly_installed:
+                _drop_derivative(raw_path, study_path)
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to extract metadata for {deriv_dir}: {e}. "
+                f"Using n/a values."
+            )
+            # Fill with n/a values for all extracted columns
+            deriv_metadata.update({
+                "size_total": "n/a",
                 "size_annexed": "n/a",
                 "file_count": "n/a",
-                "outdatedness": "n/a",  # TODO: Implement (FR-028-030)
-                "processed_raw_version": "n/a",  # TODO: Implement
-            }
-        )
+                "processed_raw_version": "n/a",
+                "current_raw_version": "n/a",
+                "uptodate": "n/a",
+                "outdatedness": "n/a",
+                "tasks_processed": "n/a",
+                "tasks_missing": "n/a",
+                "anat_processed": False,
+                "func_processed": False,
+                "processing_complete": False,
+                "template_spaces": "n/a",
+                "transform_spaces": "n/a",
+                "descriptions": "n/a",
+            })
+
+        derivatives.append(deriv_metadata)
 
     return derivatives
 
@@ -216,9 +393,15 @@ def generate_studies_derivatives_tsv(
     # Sort by study_id, then derivative_id
     rows = [existing[k] for k in sorted(existing.keys())]
 
-    # Write TSV
+    # Write TSV with no quoting to preserve JSON formatting
     with open(output_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=STUDIES_DERIVATIVES_COLUMNS, delimiter="\t")
+        writer = csv.DictWriter(
+            f,
+            fieldnames=STUDIES_DERIVATIVES_COLUMNS,
+            delimiter="\t",
+            quoting=csv.QUOTE_NONE,
+            escapechar="\\"
+        )
         writer.writeheader()
         writer.writerows(rows)
 

@@ -1,13 +1,14 @@
 """Extract summary metadata from study datasets.
 
 Implements extraction of:
-- Phase 1: Raw dataset metadata (author_lead_raw, author_senior_raw, raw_version)
+- Phase 1: Raw dataset metadata (author_lead_raw, author_senior_raw, raw_version,
+            raw_bids_version, raw_hed_version)
 - Phase 2: Directory-based counts (subjects_num, sessions_*, datatypes)
 - Phase 3: File counts (bold_num, t1w_num, t2w_num)
 - Phase 4: File sizes from annex keys (bold_size, t1w_size, bold_size_max)
-- Phase 5: Voxel counts (bold_voxels) - requires nibabel
+- Phase 5: BOLD imaging metadata (bold_voxels, bold_timepoints, bold_tasks) - requires fsspec
 
-All extraction uses sparse access via git commands and datalad-fuse,
+All extraction uses sparse access via git commands and fsspec/datalad-fuse,
 avoiding full clones of source datasets.
 """
 
@@ -30,19 +31,23 @@ logger = logging.getLogger(__name__)
 def extract_raw_metadata(study_path: Path) -> dict[str, Any]:
     """Extract metadata from raw source datasets.
 
-    Gets author_lead_raw, author_senior_raw from source dataset's
-    dataset_description.json, and raw_version from git tags.
+    Gets author_lead_raw, author_senior_raw, raw_bids_version, and
+    raw_hed_version from source dataset's dataset_description.json,
+    and raw_version from git tags.
 
     Args:
         study_path: Path to study directory
 
     Returns:
-        Dictionary with author_lead_raw, author_senior_raw, raw_version
+        Dictionary with author_lead_raw, author_senior_raw, raw_version,
+        raw_bids_version, raw_hed_version
     """
     result = {
         "author_lead_raw": "n/a",
         "author_senior_raw": "n/a",
         "raw_version": "n/a",
+        "raw_bids_version": "n/a",
+        "raw_hed_version": "n/a",
     }
 
     # Find sourcedata subdatasets
@@ -57,10 +62,12 @@ def extract_raw_metadata(study_path: Path) -> dict[str, Any]:
     if not source_dirs:
         return result
 
-    # Collect authors from all sources
+    # Collect metadata from all sources
     all_lead_authors = []
     all_senior_authors = []
     all_versions = []
+    all_bids_versions = []
+    all_hed_versions = []
 
     for source_dir in source_dirs:
         # Try to read dataset_description.json
@@ -73,6 +80,17 @@ def extract_raw_metadata(study_path: Path) -> dict[str, Any]:
                 if authors:
                     all_lead_authors.append(authors[0])
                     all_senior_authors.append(authors[-1])
+
+                # Extract BIDSVersion
+                bids_version = desc.get("BIDSVersion")
+                if bids_version:
+                    all_bids_versions.append(bids_version)
+
+                # Extract HEDVersion
+                hed_version = desc.get("HEDVersion")
+                if hed_version:
+                    all_hed_versions.append(hed_version)
+
             except (json.JSONDecodeError, OSError) as e:
                 logger.debug(f"Failed to read {desc_path}: {e}")
 
@@ -90,12 +108,20 @@ def extract_raw_metadata(study_path: Path) -> dict[str, Any]:
             result["author_senior_raw"] = all_senior_authors[0]
         if all_versions:
             result["raw_version"] = all_versions[0]
+        if all_bids_versions:
+            result["raw_bids_version"] = all_bids_versions[0]
+        if all_hed_versions:
+            result["raw_hed_version"] = all_hed_versions[0]
     else:
         # Multiple sources - check for consistency
         if all_lead_authors and len(set(all_lead_authors)) == 1:
             result["author_lead_raw"] = all_lead_authors[0]
         if all_senior_authors and len(set(all_senior_authors)) == 1:
             result["author_senior_raw"] = all_senior_authors[0]
+        if all_bids_versions and len(set(all_bids_versions)) == 1:
+            result["raw_bids_version"] = all_bids_versions[0]
+        if all_hed_versions and len(set(all_hed_versions)) == 1:
+            result["raw_hed_version"] = all_hed_versions[0]
         # raw_version stays n/a for multi-source
 
     return result
@@ -346,7 +372,7 @@ def extract_file_sizes(study_path: Path) -> dict[str, Any]:
 
 
 # ============================================================================
-# Phase 5: Voxel Counts (requires sparse access)
+# Phase 5: BOLD Imaging Metadata (requires sparse access)
 # ============================================================================
 
 
@@ -419,8 +445,31 @@ def _extract_nifti_header_from_gzip_stream(f: Any) -> Optional[tuple[tuple[int, 
     return shape, tr
 
 
-def extract_voxel_counts(study_path: Path) -> dict[str, Any]:
-    """Extract total voxel counts via sparse access.
+def _extract_task_from_filename(filename: str) -> Optional[str]:
+    """Extract task label from BIDS filename.
+
+    Args:
+        filename: BIDS filename (e.g., 'sub-01_task-rest_bold.nii.gz')
+
+    Returns:
+        Task label or None if not found
+    """
+    import re
+
+    # Match task-<label> pattern in filename
+    match = re.search(r"_task-([a-zA-Z0-9]+)", filename)
+    if match:
+        return match.group(1)
+    return None
+
+
+def extract_bold_imaging_metadata(study_path: Path) -> dict[str, Any]:
+    """Extract BOLD imaging metadata via sparse access.
+
+    Extracts:
+    - bold_voxels: Maximum voxel count across all BOLD files (X * Y * Z)
+    - bold_timepoints: Sum of timepoints across all BOLD runs
+    - bold_tasks: Sorted comma-separated set of task labels
 
     For gzipped NIfTI files over HTTP, reads ~1MB of data per file
     to decompress and parse the header. This avoids downloading
@@ -430,15 +479,19 @@ def extract_voxel_counts(study_path: Path) -> dict[str, Any]:
         study_path: Path to study directory
 
     Returns:
-        Dictionary with bold_voxels
+        Dictionary with bold_voxels, bold_timepoints, bold_tasks
     """
     import numpy as np
 
-    result: dict[str, Any] = {"bold_voxels": "n/a"}
+    result: dict[str, Any] = {
+        "bold_voxels": "n/a",
+        "bold_timepoints": "n/a",
+        "bold_tasks": "n/a",
+    }
 
     # Check if sparse access is available
     if not is_sparse_access_available():
-        logger.info("Sparse access not available, skipping voxel extraction")
+        logger.info("Sparse access not available, skipping BOLD imaging metadata extraction")
         return result
 
     # Find sourcedata subdatasets
@@ -453,7 +506,9 @@ def extract_voxel_counts(study_path: Path) -> dict[str, Any]:
     if not source_dirs:
         return result
 
-    total_voxels = 0
+    max_voxels = 0
+    total_timepoints = 0
+    task_labels = set()
     files_processed = 0
 
     for source_dir in source_dirs:
@@ -462,6 +517,11 @@ def extract_voxel_counts(study_path: Path) -> dict[str, Any]:
                 bold_files = ds.list_files("*_bold.nii*")
 
                 for bold_file in bold_files:
+                    # Extract task label from filename
+                    task = _extract_task_from_filename(bold_file)
+                    if task:
+                        task_labels.add(task)
+
                     try:
                         with ds.open_file(bold_file) as f:
                             header_info = _extract_nifti_header_from_gzip_stream(f)
@@ -471,12 +531,15 @@ def extract_voxel_counts(study_path: Path) -> dict[str, Any]:
 
                             shape, _tr = header_info
 
-                            # Calculate voxels (X * Y * Z * time if 4D)
+                            # Calculate spatial voxels (X * Y * Z, not including time dimension)
                             voxels = int(np.prod(shape[:3]))
-                            if len(shape) > 3:
-                                voxels *= shape[3]
+                            max_voxels = max(max_voxels, voxels)
 
-                            total_voxels += voxels
+                            # Extract timepoints (4th dimension if present)
+                            if len(shape) > 3:
+                                timepoints = shape[3]
+                                total_timepoints += timepoints
+
                             files_processed += 1
 
                     except Exception as e:
@@ -484,11 +547,17 @@ def extract_voxel_counts(study_path: Path) -> dict[str, Any]:
                         continue
 
         except Exception as e:
-            logger.warning(f"Failed to extract voxel counts from {source_dir}: {e}")
+            logger.warning(f"Failed to extract BOLD imaging metadata from {source_dir}: {e}")
             continue
 
     if files_processed > 0:
-        result["bold_voxels"] = total_voxels
+        result["bold_voxels"] = max_voxels
+
+    if total_timepoints > 0:
+        result["bold_timepoints"] = total_timepoints
+
+    if task_labels:
+        result["bold_tasks"] = ",".join(sorted(task_labels))
 
     return result
 
@@ -510,7 +579,7 @@ def extract_all_summaries(
             - "basic": Only cached metadata (author, version)
             - "counts": + directory/file counts via git tree
             - "sizes": + file sizes from annex keys
-            - "imaging": + voxel counts via nibabel (requires sparse access)
+            - "imaging": + BOLD imaging metadata (voxels, timepoints, tasks) via sparse access
 
     Returns:
         Dictionary with all extracted metadata
@@ -532,7 +601,7 @@ def extract_all_summaries(
         result.update(extract_file_sizes(study_path))
 
     if stage == "imaging":
-        # Phase 5: Voxel counts
-        result.update(extract_voxel_counts(study_path))
+        # Phase 5: BOLD imaging metadata
+        result.update(extract_bold_imaging_metadata(study_path))
 
     return result

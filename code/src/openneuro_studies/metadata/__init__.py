@@ -24,11 +24,11 @@ from openneuro_studies.metadata.studies_tsv import (
 )
 from openneuro_studies.metadata.summary_extractor import (
     extract_all_summaries,
+    extract_bold_imaging_metadata,
     extract_directory_summary,
     extract_file_counts,
     extract_file_sizes,
     extract_raw_metadata,
-    extract_voxel_counts,
 )
 
 __all__ = [
@@ -44,5 +44,5 @@ __all__ = [
     "extract_directory_summary",
     "extract_file_counts",
     "extract_file_sizes",
-    "extract_voxel_counts",
+    "extract_bold_imaging_metadata",
 ]

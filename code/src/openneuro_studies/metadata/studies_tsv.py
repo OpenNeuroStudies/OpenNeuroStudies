@@ -23,7 +23,8 @@ STUDIES_COLUMNS = [
     "version",
     "raw_version",
     "bids_version",
-    "hed_version",
+    "raw_bids_version",
+    "raw_hed_version",
     "license",
     "authors",
     "author_lead_raw",
@@ -36,6 +37,8 @@ STUDIES_COLUMNS = [
     "sessions_min",
     "sessions_max",
     "bold_num",
+    "bold_timepoints",
+    "bold_tasks",
     "t1w_num",
     "t2w_num",
     "bold_size",
@@ -56,7 +59,12 @@ STUDIES_JSON = {
         "Description": "Version/tag of the raw source dataset, or 'n/a' if multiple sources or no release"
     },
     "bids_version": {"Description": "BIDS specification version used by the study"},
-    "hed_version": {"Description": "HED schema version if applicable, or 'n/a'"},
+    "raw_bids_version": {
+        "Description": "BIDS specification version from raw source dataset's BIDSVersion field, or 'n/a' if multiple conflicting sources"
+    },
+    "raw_hed_version": {
+        "Description": "HED schema version from raw source dataset's HEDVersion field, or 'n/a' if not applicable or multiple conflicting sources"
+    },
     "license": {"Description": "License for the study dataset"},
     "authors": {"Description": "Authors of the study dataset from git shortlog"},
     "author_lead_raw": {
@@ -75,12 +83,16 @@ STUDIES_JSON = {
     "sessions_min": {"Description": "Minimum number of sessions per subject"},
     "sessions_max": {"Description": "Maximum number of sessions per subject"},
     "bold_num": {"Description": "Number of BOLD fMRI files"},
+    "bold_timepoints": {"Description": "Total number of timepoints (TRs) summed across all BOLD runs"},
+    "bold_tasks": {
+        "Description": "Comma-separated sorted set of task labels from BOLD files (e.g., 'finger,nback,rest')"
+    },
     "t1w_num": {"Description": "Number of T1-weighted structural files"},
     "t2w_num": {"Description": "Number of T2-weighted structural files"},
     "bold_size": {"Description": "Total size of BOLD files in bytes"},
     "t1w_size": {"Description": "Total size of T1w files in bytes"},
     "bold_size_max": {"Description": "Size of largest BOLD file in bytes"},
-    "bold_voxels": {"Description": "Total number of voxels across all BOLD files"},
+    "bold_voxels": {"Description": "Maximum number of voxels in any single BOLD file"},
     "datatypes": {
         "Description": "Comma-separated list of BIDS datatypes present (e.g., 'anat,func,dwi')"
     },
@@ -212,7 +224,8 @@ def collect_study_metadata(
         "version": "n/a",  # TODO: Get from git tag
         "raw_version": summaries.get("raw_version", "n/a"),
         "bids_version": desc.get("BIDSVersion", "n/a"),
-        "hed_version": desc.get("HEDVersion", "n/a"),
+        "raw_bids_version": summaries.get("raw_bids_version", "n/a"),
+        "raw_hed_version": summaries.get("raw_hed_version", "n/a"),
         "license": desc.get("License", "n/a"),
         "authors": authors,
         "author_lead_raw": summaries.get("author_lead_raw", "n/a"),
@@ -225,6 +238,8 @@ def collect_study_metadata(
         "sessions_min": summaries.get("sessions_min", "n/a"),
         "sessions_max": summaries.get("sessions_max", "n/a"),
         "bold_num": summaries.get("bold_num", "n/a"),
+        "bold_timepoints": summaries.get("bold_timepoints", "n/a"),
+        "bold_tasks": summaries.get("bold_tasks", "n/a"),
         "t1w_num": summaries.get("t1w_num", "n/a"),
         "t2w_num": summaries.get("t2w_num", "n/a"),
         "bold_size": summaries.get("bold_size", "n/a"),
@@ -240,6 +255,8 @@ def collect_study_metadata(
 def _load_existing_studies(output_path: Path) -> dict[str, dict[str, Any]]:
     """Load existing studies.tsv entries indexed by study_id.
 
+    Handles column name migrations for backward compatibility.
+
     Args:
         output_path: Path to existing studies.tsv
 
@@ -253,7 +270,14 @@ def _load_existing_studies(output_path: Path) -> dict[str, dict[str, Any]]:
             for row in reader:
                 study_id = row.get("study_id", "")
                 if study_id:
-                    existing[study_id] = dict(row)
+                    row_data = dict(row)
+
+                    # Column name migrations for backward compatibility
+                    if "hed_version" in row_data:
+                        # Rename hed_version → raw_hed_version
+                        row_data["raw_hed_version"] = row_data.pop("hed_version")
+
+                    existing[study_id] = row_data
     return existing
 
 

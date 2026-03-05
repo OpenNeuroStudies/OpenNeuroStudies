@@ -64,3 +64,17 @@ htmlcov/
 .git/annex/tmp/
 .npm
 .ssh/
+
+# Editor and shell history files
+.lesshst
+.viminfo
+.bash_history
+
+# Test reports and temporary test files
+*_TEST_REPORT.md
+*_TEST_SUMMARY.md
+*_test.tsv
+studies_test.tsv
+
+# Working notes (keep in working directory, not in git)
+doc/note-todos/
