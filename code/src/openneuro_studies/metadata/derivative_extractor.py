@@ -199,6 +199,68 @@ def _extract_processed_version_from_derivative_sourcedata(
 # ============================================================================
 
 
+def _parse_humanized_size(size_str: str) -> int:
+    """Convert humanized size string to bytes.
+
+    Args:
+        size_str: Size string like "2.29 gigabytes" or "654711933"
+
+    Returns:
+        Size in bytes as integer
+    """
+    if isinstance(size_str, int):
+        return size_str
+
+    # If already numeric string, return as int
+    if size_str.replace(" ", "").isdigit():
+        return int(size_str.replace(" ", ""))
+
+    # Parse humanized format: "2.29 gigabytes", "654.71 megabytes", etc.
+    size_str = size_str.lower().strip()
+
+    # Handle "0 bytes" case
+    if size_str == "0 bytes" or size_str == "0":
+        return 0
+
+    # Extract number and unit
+    parts = size_str.split()
+    if len(parts) != 2:
+        # Try without space: "2.29gigabytes"
+        import re
+        match = re.match(r'([\d.]+)\s*([a-z]+)', size_str)
+        if not match:
+            raise ValueError(f"Cannot parse size: {size_str}")
+        num_str, unit = match.groups()
+    else:
+        num_str, unit = parts
+
+    try:
+        num = float(num_str)
+    except ValueError:
+        raise ValueError(f"Cannot parse number: {num_str}")
+
+    # Convert to bytes based on unit
+    unit_multipliers = {
+        'byte': 1,
+        'bytes': 1,
+        'kilobyte': 1024,
+        'kilobytes': 1024,
+        'megabyte': 1024**2,
+        'megabytes': 1024**2,
+        'gigabyte': 1024**3,
+        'gigabytes': 1024**3,
+        'terabyte': 1024**4,
+        'terabytes': 1024**4,
+        'petabyte': 1024**5,
+        'petabytes': 1024**5,
+    }
+
+    if unit not in unit_multipliers:
+        raise ValueError(f"Unknown unit: {unit}")
+
+    return int(num * unit_multipliers[unit])
+
+
 def extract_derivative_stats(derivative_path: Path) -> dict[str, Any]:
     """Extract size and file count stats from derivative using git-annex info.
 
@@ -215,9 +277,10 @@ def extract_derivative_stats(derivative_path: Path) -> dict[str, Any]:
     }
 
     try:
-        # Run git-annex info --json --bytes to get numeric byte counts
+        # Run git-annex info --json to get stats
+        # Note: --bytes flag doesn't always work, so we parse humanized sizes
         cmd_result = subprocess.run(
-            ["git", "-C", str(derivative_path), "annex", "info", "--json", "--bytes"],
+            ["git", "-C", str(derivative_path), "annex", "info", "--json"],
             capture_output=True,
             text=True,
             check=True,
@@ -227,19 +290,30 @@ def extract_derivative_stats(derivative_path: Path) -> dict[str, Any]:
             info = json.loads(cmd_result.stdout)
 
             # Extract stats from git-annex info output
-            # With --bytes, values are numeric instead of humanized strings
-            # Keys depend on git-annex version, check both old and new formats
+            # Values may be numeric or humanized strings depending on git-annex version
             if "size of annexed files in working tree" in info:
                 size_value = info["size of annexed files in working tree"]
-                result["size_annexed"] = str(size_value) if isinstance(size_value, int) else size_value
+                try:
+                    result["size_annexed"] = str(_parse_humanized_size(size_value))
+                except ValueError as e:
+                    logger.warning(f"Failed to parse size_annexed '{size_value}': {e}")
+                    result["size_annexed"] = "n/a"
 
             if "local annex size" in info:
                 size_value = info["local annex size"]
-                result["size_total"] = str(size_value) if isinstance(size_value, int) else size_value
+                try:
+                    result["size_total"] = str(_parse_humanized_size(size_value))
+                except ValueError as e:
+                    logger.warning(f"Failed to parse size_total '{size_value}': {e}")
+                    result["size_total"] = "n/a"
             elif "size of annexed files in working tree" in info:
                 # Use annexed size as total if no separate total
                 size_value = info["size of annexed files in working tree"]
-                result["size_total"] = str(size_value) if isinstance(size_value, int) else size_value
+                try:
+                    result["size_total"] = str(_parse_humanized_size(size_value))
+                except ValueError as e:
+                    logger.warning(f"Failed to parse size_total '{size_value}': {e}")
+                    result["size_total"] = "n/a"
 
             # Count files via git ls-files (more reliable than annex info)
             files_result = subprocess.run(

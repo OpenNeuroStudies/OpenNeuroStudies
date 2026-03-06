@@ -393,17 +393,18 @@ def generate_studies_derivatives_tsv(
     # Sort by study_id, then derivative_id
     rows = [existing[k] for k in sorted(existing.keys())]
 
-    # Write TSV with no quoting to preserve JSON formatting
+    # Write TSV manually to avoid CSV escaping of JSON strings
+    # Using csv.writer with QUOTE_NONE would escape quotes in JSON, creating "\{\"key\":\"value\"\}"
+    # Instead, write raw tab-separated values
     with open(output_path, "w", newline="") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=STUDIES_DERIVATIVES_COLUMNS,
-            delimiter="\t",
-            quoting=csv.QUOTE_NONE,
-            escapechar="\\"
-        )
-        writer.writeheader()
-        writer.writerows(rows)
+        # Write header
+        f.write("\t".join(STUDIES_DERIVATIVES_COLUMNS) + "\n")
+
+        # Write rows
+        for row in rows:
+            # Convert each field to string, replacing None with empty string
+            fields = [str(row.get(col, "")) if row.get(col) is not None else "" for col in STUDIES_DERIVATIVES_COLUMNS]
+            f.write("\t".join(fields) + "\n")
 
     preserved_count = len([k for k in existing if k[0] not in updated_study_ids])
     logger.info(
