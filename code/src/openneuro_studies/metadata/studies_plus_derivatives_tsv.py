@@ -21,7 +21,10 @@ from typing import Any, Iterator
 
 from datalad.distribution.dataset import Dataset
 
-from openneuro_studies.metadata.derivative_extractor import extract_derivative_metadata
+from openneuro_studies.metadata.derivative_extractor import (
+    _extract_datalad_uuid,
+    extract_derivative_metadata,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -257,7 +260,7 @@ def collect_derivatives_for_study(study_path: Path) -> list[dict[str, Any]]:
     for _name, config in submodules.items():
         path = config.get("path", "")
         url = config.get("url", "")
-        datalad_id = config.get("datalad-id", "n/a")
+        datalad_id_from_gitmodules = config.get("datalad-id", "n/a")
 
         # Only include derivatives
         if not path.startswith("derivatives/"):
@@ -267,13 +270,19 @@ def collect_derivatives_for_study(study_path: Path) -> list[dict[str, Any]]:
         tool_name, tool_version = _parse_derivative_name(deriv_dir)
         derivative_path = study_path / path
 
+        # Extract DataLad UUID from .datalad/config (more reliable than .gitmodules)
+        # Fall back to .gitmodules value if .datalad/config doesn't exist
+        datalad_uuid = _extract_datalad_uuid(derivative_path)
+        if datalad_uuid == "n/a":
+            datalad_uuid = datalad_id_from_gitmodules
+
         # Basic metadata (always available from .gitmodules)
         deriv_metadata = {
             "study_id": study_id,
             "derivative_id": deriv_dir,
             "tool_name": tool_name,
             "tool_version": tool_version,
-            "datalad_uuid": datalad_id,
+            "datalad_uuid": datalad_uuid,
             "url": url,
         }
 

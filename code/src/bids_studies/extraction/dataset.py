@@ -43,11 +43,13 @@ def aggregate_to_dataset(
     # Count unique subjects
     unique_subjects = {s["subject_id"] for s in subjects_stats}
 
-    # Count sessions per subject
+    # Count sessions per subject (only valid ses-* sessions)
     session_counts: dict[str, int] = {}
     for s in subjects_stats:
         subj = s["subject_id"]
-        if s["session_id"] != "n/a":
+        sess = s["session_id"]
+        # Only count valid sessions (not n/a and starts with ses-)
+        if sess != "n/a" and sess.startswith("ses-"):
             session_counts[subj] = session_counts.get(subj, 0) + 1
 
     # Sum numeric fields

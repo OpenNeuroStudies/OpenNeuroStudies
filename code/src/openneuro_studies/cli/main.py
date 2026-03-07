@@ -212,19 +212,6 @@ def metadata_generate(
 
     click.echo(f"Generating metadata for {len(study_paths)} studies...")
 
-    # Check sparse access availability for imaging stage
-    if stage == "imaging":
-        from bids_studies.sparse import is_sparse_access_available
-
-        if not is_sparse_access_available():
-            click.echo(
-                "Error: --stage imaging requires sparse access dependencies.\n"
-                "  Install with: pip install fsspec aiohttp\n"
-                "  Or: pip install datalad-fuse\n",
-                err=True,
-            )
-            raise click.Abort()
-
     # Track statistics for commit message
     stats: dict[str, int | str] = {"studies": len(study_paths)}
     modified_paths: list[Path] = []

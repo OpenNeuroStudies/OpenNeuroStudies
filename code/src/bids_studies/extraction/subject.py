@@ -8,7 +8,15 @@ import logging
 from pathlib import Path
 from typing import Any, Optional
 
-from bids_studies.sparse import SparseDataset, is_sparse_access_available
+from bids_studies.sparse import SparseDataset
+
+# Import NetworkError if available (bids_studies can be used standalone)
+try:
+    from openneuro_studies.lib.exceptions import NetworkError
+    NETWORK_ERROR_AVAILABLE = True
+except ImportError:
+    NetworkError = Exception  # type: ignore[misc, assignment]
+    NETWORK_ERROR_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +124,7 @@ def extract_subject_stats(
                 break
 
     # Extract imaging metrics if requested
-    if include_imaging and bold_files and is_sparse_access_available():
+    if include_imaging and bold_files:
         _extract_imaging_metrics(ds, bold_files, result)
 
     # Convert datatypes set to sorted comma-separated string
@@ -235,7 +243,11 @@ def _extract_imaging_metrics(
                     duration = float(tr) * n_volumes
                     durations.append(duration)
 
+        except NetworkError:
+            # Network error after retries - propagate to fail extraction
+            raise
         except Exception as e:
+            # Other errors (corrupt file, invalid format) - log and continue
             logger.debug(f"Failed to read BOLD header from {bold_file}: {e}")
             continue
 
@@ -278,9 +290,18 @@ def extract_subjects_stats(
                 # Check for sessions
                 sessions = ds.list_dirs(f"{subject_name}/ses-*")
 
-                if sessions:
+                # Filter out non-session directories (like datatypes)
+                # Valid sessions must start with "ses-" and not be a BIDS datatype
+                valid_sessions = []
+                for session in sessions:
+                    session_name = session.split("/")[-1]
+                    # Only include if it starts with "ses-" and is not a datatype
+                    if session_name.startswith("ses-") and session_name not in BIDS_DATATYPES:
+                        valid_sessions.append(session)
+
+                if valid_sessions:
                     # Multi-session: one row per subject+session
-                    for session in sessions:
+                    for session in valid_sessions:
                         session_name = session.split("/")[-1]
                         stats = extract_subject_stats(
                             ds, source_id, subject_name, session_name, include_imaging

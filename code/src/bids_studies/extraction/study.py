@@ -93,7 +93,7 @@ def aggregate_to_study(
 def extract_study_stats(
     study_path: Path,
     sourcedata_subdir: str = "sourcedata",
-    include_imaging: bool = False,
+    include_imaging: bool = True,  # Changed to True to enable BOLD statistics
     write_files: bool = True,
 ) -> dict[str, Any]:
     """Extract hierarchical stats for a study.

@@ -20,6 +20,19 @@ from typing import Any, Optional, Union
 
 logger = logging.getLogger(__name__)
 
+# Import retry decorator (circular import safe - only used at runtime)
+try:
+    from openneuro_studies.lib.retry import retry_on_network_error
+    RETRY_AVAILABLE = True
+except ImportError:
+    # bids_studies can be used standalone without openneuro_studies
+    RETRY_AVAILABLE = False
+    def retry_on_network_error(*args, **kwargs):  # type: ignore[misc]
+        """No-op decorator when retry module not available."""
+        def decorator(func):  # type: ignore[return]
+            return func
+        return decorator
+
 # Try to import datalad-fuse, but don't require it
 try:
     from datalad_fuse import FsspecAdapter
@@ -259,6 +272,7 @@ class SparseDataset:
 
         return None
 
+    @retry_on_network_error(max_attempts=5, max_wait_seconds=60)
     def open_file(self, path: str) -> Any:
         """Open a file for reading via sparse access.
 
@@ -274,6 +288,7 @@ class SparseDataset:
         Raises:
             RuntimeError: If sparse access is not available
             FileNotFoundError: If file URL cannot be resolved
+            NetworkError: If file cannot be opened after retries
         """
         if self._adapter is not None:
             try:
@@ -284,6 +299,7 @@ class SparseDataset:
         # Fall back to direct fsspec with git-annex whereis
         return self._open_via_whereis(path)
 
+    @retry_on_network_error(max_attempts=5, max_wait_seconds=60)
     def _open_via_whereis(self, path: str) -> Any:
         """Open file using git-annex whereis and fsspec.
 
@@ -292,6 +308,11 @@ class SparseDataset:
 
         Returns:
             File-like object from fsspec
+
+        Raises:
+            RuntimeError: If fsspec not installed
+            FileNotFoundError: If file URL cannot be resolved
+            NetworkError: If file cannot be opened after retries
         """
         try:
             import fsspec

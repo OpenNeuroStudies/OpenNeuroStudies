@@ -199,6 +199,114 @@ def _extract_processed_version_from_derivative_sourcedata(
 # ============================================================================
 
 
+def _calculate_git_tracked_size(derivative_path: Path) -> int:
+    """Calculate size of git-tracked (non-annexed) files.
+
+    Uses git ls-tree to get all files with their sizes, excluding symlinks
+    (which represent annexed files).
+
+    Args:
+        derivative_path: Path to derivative subdataset
+
+    Returns:
+        Total size in bytes of git-tracked files
+    """
+    try:
+        # Run git ls-tree to get all files with sizes
+        cmd_result = subprocess.run(
+            ["git", "-C", str(derivative_path), "ls-tree", "-r", "-l", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        total_size = 0
+        for line in cmd_result.stdout.strip().split("\n"):
+            if not line:
+                continue
+
+            # Format: <mode> <type> <hash> <size> <tab> <filename>
+            # Example: 100644 blob abc123 12345    path/to/file.json
+            # Modes: 100644=file, 100755=executable, 120000=symlink, 160000=submodule
+            parts = line.split(None, 4)
+            if len(parts) >= 4:
+                mode = parts[0]
+                size_str = parts[3]
+
+                # Skip symlinks (mode 120000) - these are annexed files
+                # Skip submodules (size shows as "-")
+                if mode == "120000" or size_str == "-":
+                    continue
+
+                try:
+                    total_size += int(size_str)
+                except ValueError:
+                    # Invalid size, skip
+                    pass
+
+        return total_size
+    except subprocess.CalledProcessError as e:
+        logger.warning(f"Failed to calculate git-tracked size for {derivative_path}: {e}")
+        return 0
+    except Exception as e:
+        logger.warning(f"Error calculating git-tracked size: {e}")
+        return 0
+
+
+def _extract_datalad_uuid(derivative_path: Path) -> str:
+    """Extract DataLad UUID from .datalad/config file.
+
+    Reads the UUID from the .datalad/config file in git config format:
+    [datalad "dataset"]
+        id = <uuid>
+
+    Args:
+        derivative_path: Path to derivative subdataset
+
+    Returns:
+        UUID string or "n/a" if not found
+    """
+    config_path = derivative_path / ".datalad" / "config"
+
+    if not config_path.exists():
+        logger.debug(f"No .datalad/config found at {config_path}")
+        return "n/a"
+
+    try:
+        # Parse git config format
+        config = configparser.ConfigParser()
+        config.read(config_path)
+
+        # Try different section name formats
+        # Git config sections with quotes: [datalad "dataset"]
+        # ConfigParser uses dot notation: datalad.dataset
+        for section in ['datalad "dataset"', "datalad.dataset", "datalad dataset"]:
+            if config.has_section(section):
+                uuid = config.get(section, "id", fallback="n/a")
+                if uuid != "n/a":
+                    logger.debug(f"Extracted UUID from {config_path}: {uuid}")
+                    return uuid
+
+        # Try reading raw file if ConfigParser fails
+        # Git config format may not parse correctly with ConfigParser
+        with open(config_path, "r") as f:
+            content = f.read()
+            # Look for: id = <uuid>
+            import re
+
+            match = re.search(r'^\s*id\s*=\s*(.+)$', content, re.MULTILINE)
+            if match:
+                uuid = match.group(1).strip()
+                logger.debug(f"Extracted UUID from {config_path} via regex: {uuid}")
+                return uuid
+
+        logger.debug(f"No UUID found in {config_path}")
+        return "n/a"
+    except Exception as e:
+        logger.warning(f"Failed to extract UUID from {config_path}: {e}")
+        return "n/a"
+
+
 def _parse_humanized_size(size_str: str) -> int:
     """Convert humanized size string to bytes.
 
@@ -289,31 +397,31 @@ def extract_derivative_stats(derivative_path: Path) -> dict[str, Any]:
         if cmd_result.stdout.strip():
             info = json.loads(cmd_result.stdout)
 
-            # Extract stats from git-annex info output
-            # Values may be numeric or humanized strings depending on git-annex version
+            # Extract annexed file size
+            annex_size = 0
             if "size of annexed files in working tree" in info:
                 size_value = info["size of annexed files in working tree"]
                 try:
-                    result["size_annexed"] = str(_parse_humanized_size(size_value))
+                    annex_size = _parse_humanized_size(size_value)
+                    result["size_annexed"] = str(annex_size)
                 except ValueError as e:
                     logger.warning(f"Failed to parse size_annexed '{size_value}': {e}")
                     result["size_annexed"] = "n/a"
 
-            if "local annex size" in info:
-                size_value = info["local annex size"]
-                try:
-                    result["size_total"] = str(_parse_humanized_size(size_value))
-                except ValueError as e:
-                    logger.warning(f"Failed to parse size_total '{size_value}': {e}")
-                    result["size_total"] = "n/a"
-            elif "size of annexed files in working tree" in info:
-                # Use annexed size as total if no separate total
-                size_value = info["size of annexed files in working tree"]
-                try:
-                    result["size_total"] = str(_parse_humanized_size(size_value))
-                except ValueError as e:
-                    logger.warning(f"Failed to parse size_total '{size_value}': {e}")
-                    result["size_total"] = "n/a"
+            # Calculate git-tracked file size (non-annexed files)
+            git_size = _calculate_git_tracked_size(derivative_path)
+
+            # Total = git-tracked + annexed
+            # Note: We compute this ourselves rather than using "local annex size"
+            # because that field often returns 0 when files are not present locally
+            if annex_size > 0 or git_size > 0:
+                result["size_total"] = str(git_size + annex_size)
+                logger.debug(
+                    f"Computed size_total for {derivative_path.name}: "
+                    f"git={git_size}, annex={annex_size}, total={git_size + annex_size}"
+                )
+            else:
+                result["size_total"] = "n/a"
 
             # Count files via git ls-files (more reliable than annex info)
             files_result = subprocess.run(

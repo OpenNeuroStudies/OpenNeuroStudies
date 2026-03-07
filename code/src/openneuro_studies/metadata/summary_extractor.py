@@ -18,7 +18,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
-from bids_studies.sparse import SparseDataset, is_sparse_access_available
+from bids_studies.sparse import SparseDataset
+from openneuro_studies.lib.exceptions import ExtractionError, NetworkError
 
 logger = logging.getLogger(__name__)
 
@@ -489,14 +490,10 @@ def extract_bold_imaging_metadata(study_path: Path) -> dict[str, Any]:
         "bold_tasks": "n/a",
     }
 
-    # Check if sparse access is available
-    if not is_sparse_access_available():
-        logger.info("Sparse access not available, skipping BOLD imaging metadata extraction")
-        return result
-
     # Find sourcedata subdatasets
     sourcedata_path = study_path / "sourcedata"
     if not sourcedata_path.exists():
+        logger.debug(f"Sourcedata path does not exist: {sourcedata_path}")
         return result
 
     source_dirs = [
@@ -504,6 +501,7 @@ def extract_bold_imaging_metadata(study_path: Path) -> dict[str, Any]:
     ]
 
     if not source_dirs:
+        logger.debug(f"No sourcedata subdatasets found in {sourcedata_path}")
         return result
 
     max_voxels = 0
@@ -542,10 +540,18 @@ def extract_bold_imaging_metadata(study_path: Path) -> dict[str, Any]:
 
                             files_processed += 1
 
+                    except NetworkError:
+                        # Network errors are retriable, but if retry fails, propagate
+                        # This will bubble up and fail the entire extraction
+                        raise
                     except Exception as e:
+                        # Other errors (corrupt file, invalid format) - log and continue
                         logger.debug(f"Failed to read NIfTI header from {bold_file}: {e}")
                         continue
 
+        except NetworkError:
+            # Network error after retries - propagate to fail extraction
+            raise
         except Exception as e:
             logger.warning(f"Failed to extract BOLD imaging metadata from {source_dir}: {e}")
             continue
