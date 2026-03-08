@@ -75,10 +75,20 @@ organize:
 
 # Extraction workflow
 extract:
-	snakemake -s code/workflow/Snakefile --cores $(CORES) --rerun-triggers params
+	@snakemake -s code/workflow/Snakefile --cores $(CORES) --rerun-triggers params || \
+		(echo ""; \
+		 echo "ERROR: Snakemake failed. If directory is locked, run: make unlock"; \
+		 exit 1)
 
 studies-tsv:
-	snakemake -s code/workflow/Snakefile --cores $(CORES) studies.tsv
+	@snakemake -s code/workflow/Snakefile --cores $(CORES) studies.tsv || \
+		(echo ""; \
+		 echo "ERROR: Snakemake failed. If directory is locked, check:"; \
+		 echo "  Lock files: .snakemake/locks/"; \
+		 find .snakemake/locks -type f 2>/dev/null | sed 's/^/    /'; \
+		 echo ""; \
+		 echo "To unlock, run: make unlock"; \
+		 exit 1)
 
 derivatives-tsv:
 	openneuro-studies metadata generate --derivatives-tsv study-*
@@ -99,9 +109,18 @@ endif
 	snakemake -s code/workflow/Snakefile --cores 1 \
 		.snakemake/extracted/$(STUDY).json
 
+# Unlock Snakemake directory
+unlock:
+	@echo "Unlocking Snakemake directory..."
+	@if [ -d .snakemake/locks ]; then \
+		echo "Found lock files:"; \
+		find .snakemake/locks -type f | sed 's/^/  /'; \
+	fi
+	@snakemake -s code/workflow/Snakefile --unlock
+	@echo "✓ Unlocked"
+
 # Clean Snakemake artifacts
-clean:
-	snakemake -s code/workflow/Snakefile --unlock || true
+clean: unlock
 	@echo "✓ Snakemake lock removed"
 
 # Test that metadata meets expectations for known datasets
