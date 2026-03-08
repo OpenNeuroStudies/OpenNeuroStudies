@@ -119,10 +119,10 @@ def _get_git_version(path: Path) -> str:
             logger.debug(f"Could not extract gitlink SHA for {path}: {e}")
             return "n/a"
 
-    # Dataset is installed - try git describe first
+    # Dataset is installed - try git describe with tags
     try:
         cmd_result = subprocess.run(
-            ["git", "-C", str(path), "describe", "--always"],
+            ["git", "-C", str(path), "describe", "--tags", "--always"],
             capture_output=True,
             text=True,
             check=True,
