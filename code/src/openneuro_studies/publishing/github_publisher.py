@@ -222,6 +222,37 @@ class GitHubPublisher:
         except subprocess.CalledProcessError as e:
             raise PublishError(f"Failed to get local HEAD SHA for {study_path}: {e}") from e
 
+    def is_fast_forward(self, study_path: Path, local_sha: str, remote_sha: str) -> bool:
+        """Check if local commit is a fast-forward from remote commit.
+
+        Args:
+            study_path: Path to local repository
+            local_sha: Local HEAD commit SHA
+            remote_sha: Remote HEAD commit SHA
+
+        Returns:
+            True if local is ahead of remote (fast-forward possible)
+            False if histories have diverged (requires force push)
+        """
+        try:
+            # Get merge base - the common ancestor of local and remote
+            result = subprocess.run(
+                ["git", "-C", str(study_path), "merge-base", local_sha, remote_sha],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            merge_base = result.stdout.strip()
+
+            # If merge base equals remote SHA, then local is ahead (fast-forward)
+            # If merge base differs, histories have diverged
+            return merge_base == remote_sha
+
+        except subprocess.CalledProcessError:
+            # If merge-base fails, assume not fast-forward (be conservative)
+            logger.warning(f"Could not determine merge base for {study_path}, assuming diverged")
+            return False
+
     def push_to_github(
         self,
         study_path: Path,
@@ -349,10 +380,16 @@ class GitHubPublisher:
                     logger.info(f"{repo_name} already up-to-date")
                     return (repo_url, local_sha, was_created)
                 elif remote_sha and remote_sha != local_sha:
-                    raise PublishError(
-                        f"{repo_name} exists on GitHub with different content. "
-                        f"Use --force to overwrite (local: {local_sha[:8]}, remote: {remote_sha[:8]})"
-                    )
+                    # Check if this is a fast-forward (local contains all remote commits)
+                    if self.is_fast_forward(study_path, local_sha, remote_sha):
+                        logger.info(f"{repo_name} can be fast-forwarded (local: {local_sha[:8]}, remote: {remote_sha[:8]})")
+                        # Allow push - it's a clean fast-forward update
+                    else:
+                        # Histories have diverged - require --force
+                        raise PublishError(
+                            f"{repo_name} has diverged from GitHub (not a fast-forward). "
+                            f"Use --force to overwrite (local: {local_sha[:8]}, remote: {remote_sha[:8]})"
+                        )
 
         # Push to GitHub
         commit_sha = self.push_to_github(study_path, repo_url, force=force)
