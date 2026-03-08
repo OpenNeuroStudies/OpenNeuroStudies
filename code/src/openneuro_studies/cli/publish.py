@@ -276,3 +276,7 @@ def publish(
         click.echo(f"  Failed: {failed_count} studies", err=True)
     click.echo(f"\nTracking file: {config_dir}/published-studies.json")
     click.echo(f"Organization: https://github.com/{organization}")
+
+    # Exit with error code if any publications failed
+    if failed_count > 0:
+        ctx.exit(1)
