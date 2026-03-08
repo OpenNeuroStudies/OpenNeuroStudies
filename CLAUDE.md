@@ -2,6 +2,29 @@
 
 Auto-generated from all feature plans. Last updated: 2025-10-09
 
+## Primary Interface: Makefile
+
+**IMPORTANT**: Use `make` as the primary interface for all dataset operations. Direct CLI commands and scripts should only be used for development/debugging.
+
+### Why Make?
+- **Efficiency**: Automatic dependency tracking prevents unnecessary recomputation
+- **Consistency**: Standardized interface across development and production
+- **Documentation**: Self-documenting via `make help`
+- **Integration**: Wraps Snakemake, CLI, and git operations with proper coordination
+
+### Make-First Philosophy
+1. **All critical functionality** must have a corresponding make target
+2. **Minimal changes**: Propose new make targets only when necessary, with review
+3. **No custom scripts**: Use make targets instead of standalone scripts
+4. **Efficient execution**: Targets should check dependencies and avoid redundant work
+
+**Quick Start**:
+```bash
+make help              # Show all available commands
+make refresh CORES=4   # Update existing studies (most common)
+make extract CORES=4   # Recompute metadata with dependency tracking
+```
+
 ## Active Technologies
 - File-based (TSV, JSON, git submodules); no database required (001-read-file-doc)
 
@@ -81,20 +104,50 @@ OpenNeuroStudies/                    # Repository root (BEP035 BIDS mega-analysi
 
 ## Common Commands
 
-### Development Setup
+### Production Operations (Use Make)
+
+**ALWAYS prefer make commands for dataset operations:**
+
+```bash
+# Show all available commands
+make help
+
+# After fresh clone - initialize subdatasets
+make studies-init
+
+# Update existing studies (most common operation)
+make refresh CORES=4
+
+# Recompute metadata with dependency tracking
+make extract CORES=4
+
+# Update studies.tsv and studies+derivatives.tsv
+make metadata CORES=4
+
+# Process single study
+make extract-one STUDY=study-ds002843
+
+# Discover new datasets and organize
+make full-refresh CORES=4
+
+# Clean Snakemake locks/cache
+make clean
+```
+
+### Development Setup (One-time)
 ```bash
 # Navigate to code directory
 cd code
 
 # Using uv (recommended)
-uv venv
-source .venv/bin/activate
-uv pip install -e .
+uv venv --clear
+uv pip install -e ".[sparse]"     # Include sparse access for imaging metrics
+uv pip install numpy nibabel pytest  # Additional dependencies
 
 # Using pip
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e ".[sparse]"
 
 # Using tox
 tox -e py310
@@ -103,7 +156,10 @@ tox -e py310
 cd ..
 ```
 
-### CLI Usage
+### Direct CLI Usage (Development/Debugging Only)
+
+**Note**: For production use, prefer `make` commands above.
+
 ```bash
 # From repository root (not code/)
 
@@ -392,7 +448,15 @@ This project follows the [OpenNeuroStudies Constitution](/.specify/memory/consti
 ✅ **Observability**: Complete status via studies.tsv and studies+derivatives.tsv
 
 ## Recent Changes
-- 001-read-file-doc: Added Python 3.10+
+
+- **2026-03-06**: Hierarchical extraction fixes (sourcedata TSV generation)
+  - Fixed spurious datatype folders (anat/func/fmap) appearing as session_id values
+  - Fixed session counting (sessions_num now shows correct counts instead of n/a)
+  - Enabled imaging metrics extraction by default (include_imaging=True)
+  - Added comprehensive unit tests (10/10 passing)
+  - Added sparse access dependencies (fsspec, aiohttp, numpy, nibabel)
+  - **To recompute**: `make extract CORES=4` (efficient, dependency-tracked)
+  - **Documentation**: See `HIERARCHICAL_EXTRACTION_FIXES.md`
 
 - **2025-10-09** (001-read-file-doc): Implementation planning phase complete
   - Added core Python stack (Click, Pydantic, PyYAML, PyGithub)
