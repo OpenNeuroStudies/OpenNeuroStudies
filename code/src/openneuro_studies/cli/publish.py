@@ -265,6 +265,23 @@ def publish(
     elif failed_count > 0:
         click.echo(f"\n✗ No changes saved (all {failed_count} publications failed)", err=True)
 
+    # Push parent OpenNeuroStudies repository to update submodule references
+    if published_count > 0:
+        click.echo("\nPushing parent repository (submodule updates, .gitmodules, metadata)...")
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["git", "push", "origin", "HEAD"],
+                cwd=Path("."),
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            click.echo("✓ Parent repository pushed to origin")
+        except subprocess.CalledProcessError as e:
+            click.echo(f"⚠ Warning: Failed to push parent repository: {e.stderr}", err=True)
+            click.echo("  You may need to manually run: git push origin HEAD")
+
     # Summary
     click.echo(f"\n{'='*60}")
     click.echo(f"Published: {published_count} studies")
