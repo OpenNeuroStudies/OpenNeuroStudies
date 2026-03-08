@@ -265,11 +265,25 @@ def publish(
     elif failed_count > 0:
         click.echo(f"\n✗ No changes saved (all {failed_count} publications failed)", err=True)
 
-    # Push parent OpenNeuroStudies repository to update submodule references
-    if published_count > 0:
-        click.echo("\nPushing parent repository (submodule updates, .gitmodules, metadata)...")
-        try:
-            import subprocess
+    # Push parent OpenNeuroStudies repository if there are changes
+    click.echo("\nChecking parent repository for unpushed changes...")
+    try:
+        import subprocess
+
+        # Check if there are unpushed commits
+        result = subprocess.run(
+            ["git", "rev-list", "--count", "@{upstream}..HEAD"],
+            cwd=Path("."),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        unpushed_count = int(result.stdout.strip())
+
+        if unpushed_count > 0:
+            click.echo(f"Found {unpushed_count} unpushed commit(s) in parent repository")
+            click.echo("Pushing parent repository (submodule updates, .gitmodules, metadata)...")
+
             result = subprocess.run(
                 ["git", "push", "origin", "HEAD"],
                 cwd=Path("."),
@@ -278,8 +292,28 @@ def publish(
                 text=True,
             )
             click.echo("✓ Parent repository pushed to origin")
-        except subprocess.CalledProcessError as e:
-            click.echo(f"⚠ Warning: Failed to push parent repository: {e.stderr}", err=True)
+        else:
+            click.echo("✓ Parent repository already up-to-date")
+
+    except subprocess.CalledProcessError as e:
+        # Handle case where upstream branch doesn't exist or other errors
+        stderr = e.stderr if hasattr(e, 'stderr') else str(e)
+        if "no upstream" in stderr.lower() or "upstream branch" in stderr.lower():
+            click.echo("⚠ No upstream branch configured, attempting push anyway...")
+            try:
+                subprocess.run(
+                    ["git", "push", "origin", "HEAD"],
+                    cwd=Path("."),
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                click.echo("✓ Parent repository pushed to origin")
+            except subprocess.CalledProcessError as push_error:
+                click.echo(f"⚠ Warning: Failed to push parent repository: {push_error.stderr}", err=True)
+                click.echo("  You may need to manually run: git push origin HEAD")
+        else:
+            click.echo(f"⚠ Warning: Could not check parent repository status: {stderr}", err=True)
             click.echo("  You may need to manually run: git push origin HEAD")
 
     # Summary
