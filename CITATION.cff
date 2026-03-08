@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this dataset or the OpenNeuroStudies infrastructure in your research, please cite it using the metadata from this file."
+title: "OpenNeuroStudies: collection of OpenNeuro datasets and their derivatives"
+version: 0.20251020.0
+date-released: 2025-10-20
+authors:
+  - family-names: Halchenko
+    given-names: Yaroslav O.
+    email: debian@onerussian.com
+    orcid: https://orcid.org/0000-0003-3456-2493
+repository-code: https://github.com/OpenNeuroStudies/OpenNeuroStudies
+url: https://github.com/OpenNeuroStudies/OpenNeuroStudies
+license: CC0-1.0
+type: dataset
+abstract: >
+  OpenNeuroStudies is a DataLad super-dataset that brings together all datasets
+  from OpenNeuroDatasets and OpenNeuroDerivatives into BIDS "study" datasets.
+  It provides infrastructure for organizing, validating, and generating metadata
+  for collections of neuroimaging datasets and their derivatives, following the
+  BIDS BEP035 mega-analysis specification.
+keywords:
+  - neuroimaging
+  - BIDS
+  - BEP035
+  - DataLad
+  - OpenNeuro
+  - mega-analysis
+  - derivatives
+  - metadata
+  - validation
+  - YODA
