@@ -270,19 +270,13 @@ def collect_derivatives_for_study(study_path: Path) -> list[dict[str, Any]]:
         tool_name, tool_version = _parse_derivative_name(deriv_dir)
         derivative_path = study_path / path
 
-        # Extract DataLad UUID from .datalad/config (more reliable than .gitmodules)
-        # Fall back to .gitmodules value if .datalad/config doesn't exist
-        datalad_uuid = _extract_datalad_uuid(derivative_path)
-        if datalad_uuid == "n/a":
-            datalad_uuid = datalad_id_from_gitmodules
-
         # Basic metadata (always available from .gitmodules)
         deriv_metadata = {
             "study_id": study_id,
             "derivative_id": deriv_dir,
             "tool_name": tool_name,
             "tool_version": tool_version,
-            "datalad_uuid": datalad_uuid,
+            "datalad_uuid": datalad_id_from_gitmodules,  # Will be updated after installation
             "url": url,
         }
 
@@ -290,6 +284,13 @@ def collect_derivatives_for_study(study_path: Path) -> list[dict[str, Any]]:
         try:
             # Track if we install it
             newly_installed = _ensure_derivative_installed(derivative_path, study_path)
+
+            # Extract DataLad UUID from .datalad/config (more reliable than .gitmodules)
+            # This must happen AFTER installation when .datalad/config is available
+            datalad_uuid = _extract_datalad_uuid(derivative_path)
+            if datalad_uuid != "n/a":
+                deriv_metadata["datalad_uuid"] = datalad_uuid
+            # else keep the .gitmodules value we already set
 
             # Also ensure raw dataset is installed if needed
             raw_newly_installed = False
