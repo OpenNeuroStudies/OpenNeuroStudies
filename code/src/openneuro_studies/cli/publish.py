@@ -258,8 +258,12 @@ def publish(
             failed_count += 1
             logger.error(f"Failed to publish {study_id}: {e}")
 
-    # Save publication status
-    tracker.save(commit=True)
+    # Save publication status (only if at least one study succeeded)
+    if published_count > 0:
+        tracker.save(commit=True)
+        click.echo(f"\n✓ Saved publication tracking to {config_dir}/published-studies.json")
+    elif failed_count > 0:
+        click.echo(f"\n✗ No changes saved (all {failed_count} publications failed)", err=True)
 
     # Summary
     click.echo(f"\n{'='*60}")
