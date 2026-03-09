@@ -111,10 +111,10 @@ One row per sourcedata dataset (aggregated from subjects):
 | `t1w_num` | Total T1w files | Sum |
 | `bold_size` | Total BOLD size | Sum |
 | `t1w_size` | Total T1w size | Sum |
-| `bold_duration_total` | Total BOLD duration | Sum |
-| `bold_duration_mean` | Mean BOLD duration (weighted) | Weighted mean |
-| `bold_voxels_total` | Total BOLD voxels | Sum |
-| `bold_voxels_mean` | Mean voxels (weighted by duration) | Weighted mean |
+| `bold_trs` | TR distribution {TR: count} | Dict merge (sum counts) |
+| `bold_duration_total` | Total BOLD duration in seconds | Sum |
+| `bold_voxels` | Maximum spatial voxels | Max |
+| `bold_timepoints` | Total timepoints | Sum |
 | `datatypes` | All datatypes present | Set union |
 
 ### derivatives+subjects.tsv
@@ -140,41 +140,53 @@ Aggregate from `sourcedata.tsv` and `derivatives+datasets.tsv`:
 | `sessions_num` | sourcedata.tsv | Sum across sources |
 | `bold_num` | sourcedata.tsv | Sum across sources |
 | `bold_size` | sourcedata.tsv | Sum across sources |
+| `bold_trs` | sourcedata.tsv | Dict merge (sum counts per TR) |
 | `bold_duration_total` | sourcedata.tsv | Sum across sources |
-| `bold_duration_mean` | sourcedata.tsv | Weighted mean by bold_num |
-| `bold_voxels_total` | sourcedata.tsv | Sum across sources |
-| `bold_voxels_mean` | sourcedata.tsv | Weighted mean by duration |
+| `bold_voxels` | sourcedata.tsv | Max across sources |
+| `bold_timepoints` | sourcedata.tsv | Sum across sources |
+| `bold_tasks` | sourcedata.tsv | Set union across sources |
 | ... | | |
 
 ## New Metrics
 
 ### BOLD Duration
 
-Extracted from NIfTI headers:
-- `TR` (repetition time) from header
+Extracted from NIfTI headers using nibabel:
+- `TR` (repetition time) from header zooms
 - `n_volumes` (4th dimension) from shape
 - `duration = TR * n_volumes`
 
 ```python
 import nibabel as nib
 
-def get_bold_duration(nifti_file) -> float:
-    """Get BOLD run duration in seconds."""
-    img = nib.load(nifti_file)
-    tr = img.header.get_zooms()[3]  # 4th dimension is TR
-    n_volumes = img.shape[3] if len(img.shape) > 3 else 1
+def get_bold_duration(header) -> float:
+    """Get BOLD run duration in seconds from NIfTI header."""
+    tr = header.get_zooms()[3]  # 4th dimension is TR
+    n_volumes = header.get_data_shape()[3] if len(header.get_data_shape()) > 3 else 1
     return tr * n_volumes
 ```
 
-### Weighted Voxel Count
+### TR Distribution
 
-For aggregation, weight voxel counts by duration:
+TR varies across acquisitions (different sequences, scanners, protocols).
+Track as a distribution instead of averaging:
 
 ```python
-bold_voxels_mean = sum(voxels_i * duration_i) / sum(duration_i)
+bold_trs = {1.0: 500, 1.5: 200, 2.0: 100}  # 500 files at TR=1.0s, 200 at TR=1.5s, etc.
 ```
 
-This gives more weight to longer runs, which is more meaningful for fMRI analysis.
+**Aggregation**: Merge dicts and sum counts
+```python
+def merge_tr_distributions(dists: list[dict]) -> dict:
+    """Merge TR distributions across sources."""
+    result = {}
+    for dist in dists:
+        for tr, count in dist.items():
+            result[tr] = result.get(tr, 0) + count
+    return result
+```
+
+**Rationale**: Preserves information about acquisition heterogeneity, avoiding misleading averages.
 
 ## Implementation Phases
 
@@ -273,7 +285,56 @@ imaging = [
    - Recommendation: Yes, regenerate only when source changes
 
 5. **Version tracking**: How to handle version changes in extraction logic?
-   - Recommendation: Include extraction version in JSON sidecar
+   - **Implemented**: Include extraction version in output JSON
+   - Version increments trigger re-extraction via Snakemake params tracking
+
+## Extraction Version Tracking
+
+To ensure metadata is re-extracted when extraction logic changes:
+
+### Implementation
+
+Each extractor module defines a semantic version:
+
+```python
+# In summary_extractor.py
+EXTRACTION_VERSION = "1.1.0"  # Increment when logic changes
+```
+
+Version is included in all extraction outputs:
+
+```python
+result = {
+    "extraction_version": EXTRACTION_VERSION,
+    "bold_voxels": 902629,
+    "bold_trs": {1.761: 1055},
+    # ... other metrics
+}
+```
+
+### Snakemake Integration
+
+Version is part of rule params, triggering re-extraction when changed:
+
+```python
+rule extract_study:
+    params:
+        deps = lambda wc: {
+            **get_study_deps(wc.study),  # Git SHAs
+            "extraction_version": EXTRACTION_VERSION
+        }
+```
+
+With `--rerun-triggers params`, changes to:
+- Source subdataset commits → re-extract
+- Study dataset commits → re-extract
+- Extraction version → re-extract
+
+### Versioning Policy
+
+- **Major version** (1.0.0 → 2.0.0): Breaking schema changes
+- **Minor version** (1.0.0 → 1.1.0): New metrics added, backward compatible
+- **Patch version** (1.0.0 → 1.0.1): Bug fixes, no schema changes
 
 ## Next Steps
 

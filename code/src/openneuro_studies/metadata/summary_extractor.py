@@ -23,6 +23,13 @@ from openneuro_studies.lib.exceptions import ExtractionError, NetworkError
 
 logger = logging.getLogger(__name__)
 
+# Extraction version - increment when extraction logic changes
+# Format: MAJOR.MINOR.PATCH (semantic versioning)
+# - MAJOR: Breaking schema changes
+# - MINOR: New metrics added (backward compatible)
+# - PATCH: Bug fixes, no schema changes
+EXTRACTION_VERSION = "1.1.0"  # Added: bold_trs, bold_duration_total, nibabel-based parsing
+
 
 # ============================================================================
 # Phase 1: Raw Dataset Metadata
@@ -378,11 +385,11 @@ def extract_file_sizes(study_path: Path) -> dict[str, Any]:
 
 
 def _extract_nifti_header_from_gzip_stream(f: Any) -> Optional[tuple[tuple[int, ...], float]]:
-    """Extract NIfTI header info from a gzipped HTTP stream.
+    """Extract NIfTI header info from a gzipped HTTP stream using nibabel.
 
     For gzipped NIfTI files over HTTP, we need to read enough data
     to decompress the header (first 352 bytes). This function reads
-    ~1MB which is typically sufficient to decompress the header.
+    10KB which is sufficient to decompress NIfTI headers.
 
     Args:
         f: File-like object (HTTP stream)
@@ -390,8 +397,9 @@ def _extract_nifti_header_from_gzip_stream(f: Any) -> Optional[tuple[tuple[int, 
     Returns:
         Tuple of (shape, tr) or None if extraction fails
     """
-    import struct
     import zlib
+    from io import BytesIO
+    import nibabel as nib
 
     # Read enough gzip data to decompress header
     # 10KB is sufficient for gzip-compressed NIfTI headers (tested on OpenNeuro datasets)
@@ -423,28 +431,20 @@ def _extract_nifti_header_from_gzip_stream(f: Any) -> Optional[tuple[tuple[int, 
         logger.debug(f"Not enough decompressed data: {len(decompressed)} bytes")
         return None
 
-    # Parse NIfTI header
-    # sizeof_hdr at offset 0 (int32)
-    sizeof_hdr = struct.unpack("<i", decompressed[:4])[0]
-    if sizeof_hdr != 348:
-        logger.debug(f"Invalid sizeof_hdr: {sizeof_hdr}")
+    # Parse NIfTI header using nibabel
+    try:
+        header = nib.Nifti1Header.from_fileobj(BytesIO(decompressed))
+        shape = header.get_data_shape()
+        zooms = header.get_zooms()
+
+        # TR is the 4th dimension of zooms (time axis)
+        tr = float(zooms[3]) if len(shape) > 3 else 0.0
+
+        return tuple(shape), tr
+
+    except Exception as e:
+        logger.debug(f"Failed to parse NIfTI header with nibabel: {e}")
         return None
-
-    # Dimensions at offset 40: dim[0..7] as int16
-    dims = struct.unpack("<8h", decompressed[40:56])
-    n_dims = dims[0]
-    if n_dims < 3 or n_dims > 7:
-        logger.debug(f"Invalid n_dims: {n_dims}")
-        return None
-
-    # Extract shape
-    shape = tuple(dims[1 : n_dims + 1])
-
-    # Pixel dimensions at offset 76: pixdim[0..7] as float32
-    pixdim = struct.unpack("<8f", decompressed[76:108])
-    tr = pixdim[4] if len(pixdim) > 4 else 0.0
-
-    return shape, tr
 
 
 def _extract_task_from_filename(filename: str) -> Optional[str]:
@@ -472,16 +472,18 @@ def extract_bold_imaging_metadata(study_path: Path) -> dict[str, Any]:
     - bold_voxels: Maximum voxel count across all BOLD files (X * Y * Z)
     - bold_timepoints: Sum of timepoints across all BOLD runs
     - bold_tasks: Sorted comma-separated set of task labels
+    - bold_trs: Dict of {TR: count} showing TR distribution
+    - bold_duration_total: Total acquisition time in seconds (sum of TR × volumes)
 
-    For gzipped NIfTI files over HTTP, reads ~1MB of data per file
-    to decompress and parse the header. This avoids downloading
-    the entire file while still extracting shape info.
+    For gzipped NIfTI files over HTTP, reads 10KB of data per file
+    to decompress and parse the header using nibabel. This avoids downloading
+    the entire file while still extracting shape and timing info.
 
     Args:
         study_path: Path to study directory
 
     Returns:
-        Dictionary with bold_voxels, bold_timepoints, bold_tasks
+        Dictionary with BOLD imaging metrics
     """
     import numpy as np
 
@@ -489,6 +491,8 @@ def extract_bold_imaging_metadata(study_path: Path) -> dict[str, Any]:
         "bold_voxels": "n/a",
         "bold_timepoints": "n/a",
         "bold_tasks": "n/a",
+        "bold_trs": "n/a",
+        "bold_duration_total": "n/a",
     }
 
     # Find sourcedata subdatasets
@@ -507,7 +511,9 @@ def extract_bold_imaging_metadata(study_path: Path) -> dict[str, Any]:
 
     max_voxels = 0
     total_timepoints = 0
+    total_duration = 0.0
     task_labels = set()
+    tr_distribution: dict[float, int] = {}  # {TR: count}
     files_processed = 0
 
     for source_dir in source_dirs:
@@ -528,7 +534,7 @@ def extract_bold_imaging_metadata(study_path: Path) -> dict[str, Any]:
                                 logger.debug(f"Could not extract header from {bold_file}")
                                 continue
 
-                            shape, _tr = header_info
+                            shape, tr = header_info
 
                             # Calculate spatial voxels (X * Y * Z, not including time dimension)
                             voxels = int(np.prod(shape[:3]))
@@ -538,6 +544,15 @@ def extract_bold_imaging_metadata(study_path: Path) -> dict[str, Any]:
                             if len(shape) > 3:
                                 timepoints = shape[3]
                                 total_timepoints += timepoints
+
+                                # Track TR distribution (round to 3 decimals to avoid float precision issues)
+                                if tr > 0:
+                                    tr_rounded = round(tr, 3)
+                                    tr_distribution[tr_rounded] = tr_distribution.get(tr_rounded, 0) + 1
+
+                                    # Calculate duration: TR * volumes
+                                    duration = tr * timepoints
+                                    total_duration += duration
 
                             files_processed += 1
 
@@ -565,6 +580,13 @@ def extract_bold_imaging_metadata(study_path: Path) -> dict[str, Any]:
 
     if task_labels:
         result["bold_tasks"] = ",".join(sorted(task_labels))
+
+    if tr_distribution:
+        # Convert to sorted dict for consistent output: {1.0: 2, 1.5: 3, 2.0: 1}
+        result["bold_trs"] = dict(sorted(tr_distribution.items()))
+
+    if total_duration > 0:
+        result["bold_duration_total"] = round(total_duration, 1)
 
     return result
 

@@ -12,7 +12,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from openneuro_studies.metadata.summary_extractor import extract_all_summaries
+from openneuro_studies.metadata.summary_extractor import (
+    extract_all_summaries,
+    EXTRACTION_VERSION,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,8 @@ STUDIES_COLUMNS = [
     "bold_num",
     "bold_timepoints",
     "bold_tasks",
+    "bold_trs",
+    "bold_duration_total",
     "t1w_num",
     "t2w_num",
     "bold_size",
@@ -48,6 +53,7 @@ STUDIES_COLUMNS = [
     "datatypes",
     "derivative_ids",
     "bids_valid",
+    "extraction_version",
 ]
 
 # JSON sidecar descriptions (FR-011)
@@ -87,6 +93,12 @@ STUDIES_JSON = {
     "bold_tasks": {
         "Description": "Comma-separated sorted set of task labels from BOLD files (e.g., 'finger,nback,rest')"
     },
+    "bold_trs": {
+        "Description": "Distribution of TRs (repetition times) as JSON dict mapping TR in seconds to file count (e.g., '{\"1.0\": 500, \"2.0\": 100}' means 500 files at 1.0s TR, 100 files at 2.0s TR)"
+    },
+    "bold_duration_total": {
+        "Description": "Total BOLD acquisition time in seconds (sum of TR × volumes across all runs)"
+    },
     "t1w_num": {"Description": "Number of T1-weighted structural files"},
     "t2w_num": {"Description": "Number of T2-weighted structural files"},
     "bold_size": {"Description": "Total size of BOLD files in bytes"},
@@ -99,6 +111,9 @@ STUDIES_JSON = {
     "derivative_ids": {"Description": "Comma-separated list of derivative identifiers"},
     "bids_valid": {
         "Description": "BIDS validation status: 'valid', 'warnings', 'errors', or 'n/a'"
+    },
+    "extraction_version": {
+        "Description": "Version of the metadata extraction logic (semantic versioning MAJOR.MINOR.PATCH)"
     },
 }
 
@@ -240,6 +255,8 @@ def collect_study_metadata(
         "bold_num": summaries.get("bold_num", "n/a"),
         "bold_timepoints": summaries.get("bold_timepoints", "n/a"),
         "bold_tasks": summaries.get("bold_tasks", "n/a"),
+        "bold_trs": json.dumps(summaries.get("bold_trs", "n/a")) if isinstance(summaries.get("bold_trs"), dict) else "n/a",
+        "bold_duration_total": summaries.get("bold_duration_total", "n/a"),
         "t1w_num": summaries.get("t1w_num", "n/a"),
         "t2w_num": summaries.get("t2w_num", "n/a"),
         "bold_size": summaries.get("bold_size", "n/a"),
@@ -249,6 +266,7 @@ def collect_study_metadata(
         "datatypes": summaries.get("datatypes", "n/a"),
         "derivative_ids": ",".join(derivative_ids) if derivative_ids else "n/a",
         "bids_valid": "n/a",  # Set by validation command
+        "extraction_version": EXTRACTION_VERSION,
     }
 
 

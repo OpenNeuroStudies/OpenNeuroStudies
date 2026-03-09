@@ -138,10 +138,18 @@ rule extract_study:
     output:
         json_file = f".snakemake/extracted/{{study}}.json"
     params:
-        # Git SHAs as params - changes trigger rerun with --rerun-triggers params
-        deps = lambda wc: get_study_deps(wc.study)
+        # Git SHAs and extraction version as params
+        # Changes trigger rerun with --rerun-triggers params
+        deps = lambda wc: {
+            **get_study_deps(wc.study),
+            "extraction_version": None  # Placeholder, will be set in run block
+        }
     run:
         from bids_studies.subdatasets import extract_study_with_subdatasets
+        from openneuro_studies.metadata.summary_extractor import EXTRACTION_VERSION
+
+        # Update params with actual extraction version
+        params.deps["extraction_version"] = EXTRACTION_VERSION
 
         study_path = Path(wildcards.study)
 
