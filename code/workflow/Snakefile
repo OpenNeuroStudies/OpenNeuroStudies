@@ -118,6 +118,19 @@ def get_study_deps(study: str) -> dict:
         "sourcedata_shas": get_sourcedata_shas(study),
     }
 
+def get_study_deps_with_version(study: str) -> dict:
+    """Get dependency SHAs for a study with extraction version.
+
+    Includes EXTRACTION_VERSION in params to trigger re-extraction
+    when extraction logic changes.
+    """
+    from openneuro_studies.metadata.summary_extractor import EXTRACTION_VERSION
+
+    return {
+        **get_study_deps(study),
+        "extraction_version": EXTRACTION_VERSION,
+    }
+
 # ============================================================================
 # Rules
 # ============================================================================
@@ -140,16 +153,9 @@ rule extract_study:
     params:
         # Git SHAs and extraction version as params
         # Changes trigger rerun with --rerun-triggers params
-        deps = lambda wc: {
-            **get_study_deps(wc.study),
-            "extraction_version": None  # Placeholder, will be set in run block
-        }
+        deps = lambda wc: get_study_deps_with_version(wc.study)
     run:
         from bids_studies.subdatasets import extract_study_with_subdatasets
-        from openneuro_studies.metadata.summary_extractor import EXTRACTION_VERSION
-
-        # Update params with actual extraction version
-        params.deps["extraction_version"] = EXTRACTION_VERSION
 
         study_path = Path(wildcards.study)
 
