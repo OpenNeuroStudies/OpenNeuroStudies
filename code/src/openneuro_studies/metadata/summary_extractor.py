@@ -393,8 +393,9 @@ def _extract_nifti_header_from_gzip_stream(f: Any) -> Optional[tuple[tuple[int, 
     import struct
     import zlib
 
-    # Read enough gzip data to decompress header (~1MB should suffice)
-    chunk_size = 1024 * 1024  # 1MB
+    # Read enough gzip data to decompress header
+    # 10KB is sufficient for gzip-compressed NIfTI headers (tested on OpenNeuro datasets)
+    chunk_size = 10 * 1024  # 10KB (100x reduction from previous 1MB)
     try:
         gzip_data = f.read(chunk_size)
     except Exception as e:

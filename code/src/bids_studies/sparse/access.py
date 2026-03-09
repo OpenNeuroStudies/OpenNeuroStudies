@@ -61,13 +61,16 @@ class SparseDataset:
                 data = f.read(352)  # Read NIfTI header
     """
 
-    def __init__(self, path: Union[str, Path]):
+    def __init__(self, path: Union[str, Path], block_size: Optional[int] = None):
         """Initialize sparse dataset access.
 
         Args:
             path: Path to the git-annex repository
+            block_size: Block size in bytes for fsspec HTTP reads (default: 100KB)
+                       Smaller blocks reduce initial latency for header reads
         """
         self.path = Path(path)
+        self.block_size = block_size if block_size is not None else 100 * 1024  # 100KB default
         self._adapter: Optional[FsspecAdapter] = None
         self._tree_cache: Optional[list[tuple[str, str, str]]] = None
 
@@ -326,9 +329,10 @@ class SparseDataset:
         if url is None:
             raise FileNotFoundError(f"No remote URL found for {path}")
 
-        # Open via fsspec
+        # Open via fsspec with configured block_size
+        # Smaller block_size reduces initial latency for header-only reads
         fs = fsspec.filesystem("http")
-        return fs.open(url)
+        return fs.open(url, block_size=self.block_size)
 
     def _get_remote_url(self, path: str) -> Optional[str]:
         """Get HTTP URL for annexed file via git-annex whereis.
