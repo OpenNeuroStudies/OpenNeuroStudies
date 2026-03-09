@@ -93,7 +93,9 @@ studies-tsv:
 derivatives-tsv:
 	openneuro-studies metadata generate --derivatives-tsv study-*
 
-metadata: studies-tsv derivatives-tsv
+metadata-tsv: studies-tsv derivatives-tsv
+
+metadata: extract metadata-tsv
 
 # Complete workflow (discover new + organize + extract)
 full-refresh: studies-init discover organize extract metadata
