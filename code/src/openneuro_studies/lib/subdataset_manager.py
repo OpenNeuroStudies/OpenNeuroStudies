@@ -103,21 +103,82 @@ def get_uninitialized_sourcedata(study_path: Path) -> list[Path]:
     return sorted(uninitialized)
 
 
+def _find_immediate_parent_repo(subdataset_path: Path, repo_root: Path) -> Path | None:
+    """Find the immediate parent repository that registers this subdataset.
+
+    Walks up directory tree from subdataset, checking each level's .gitmodules
+    for an entry matching this subdataset.
+
+    Args:
+        subdataset_path: Absolute path to subdataset
+        repo_root: Root of top-level repository
+
+    Returns:
+        Path to immediate parent repo, or None if not found
+    """
+    subdataset_resolved = subdataset_path.resolve()
+    repo_root_resolved = repo_root.resolve()
+    current = subdataset_resolved.parent
+
+    while current >= repo_root_resolved:
+        gitmodules = current / ".gitmodules"
+        if not gitmodules.exists():
+            current = current.parent
+            continue
+
+        # Make subdataset path relative to current directory
+        try:
+            relative_path = subdataset_resolved.relative_to(current)
+        except ValueError:
+            # Can't make relative (shouldn't happen in upward walk)
+            current = current.parent
+            continue
+
+        # Read .gitmodules and look for path = {relative_path}
+        try:
+            with open(gitmodules) as f:
+                content = f.read()
+                # Match both "path = relative/path" and "path=relative/path"
+                if f"\tpath = {relative_path}" in content or f"path = {relative_path}" in content:
+                    logger.debug(f"Found parent repo for {subdataset_path}: {current}")
+                    return current
+        except (OSError, IOError) as e:
+            logger.debug(f"Error reading {gitmodules}: {e}")
+
+        current = current.parent
+
+    logger.debug(f"No parent repo found for {subdataset_path}")
+    return None
+
+
 def _initialize_single_subdataset(subdataset_path: Path, parent_path: Path) -> tuple[Path, bool]:
-    """Initialize a single subdataset.
+    """Initialize a single subdataset from its immediate parent repository.
 
     Args:
         subdataset_path: Path to subdataset to initialize
-        parent_path: Path to parent repository
+        parent_path: Path to top-level parent repository
 
     Returns:
         Tuple of (subdataset_path, success)
     """
     try:
-        # Use git submodule update --init to initialize
+        # Find the immediate parent repository that registers this subdataset
+        immediate_parent = _find_immediate_parent_repo(subdataset_path, parent_path)
+
+        if immediate_parent is None:
+            logger.warning(
+                f"Could not find parent repo for {subdataset_path} "
+                f"(not registered in any .gitmodules)"
+            )
+            return (subdataset_path, False)
+
+        # Make subdataset path relative to its immediate parent
+        subdataset_relative = subdataset_path.resolve().relative_to(immediate_parent.resolve())
+
+        # Use git submodule update --init from the immediate parent context
         # This is faster than datalad install as it only sets up git tree
         result = subprocess.run(
-            ["git", "-C", str(parent_path), "submodule", "update", "--init", str(subdataset_path)],
+            ["git", "-C", str(immediate_parent), "submodule", "update", "--init", str(subdataset_relative)],
             capture_output=True,
             timeout=300,  # 5 minutes max per subdataset
             check=False,
@@ -208,18 +269,31 @@ def snapshot_initialization_state(study_paths: list[Path]) -> set[Path]:
 
 
 def _deinitialize_single_subdataset(subdataset_path: Path, parent_path: Path) -> tuple[Path, bool]:
-    """Deinitialize a single subdataset.
+    """Deinitialize a single subdataset from its immediate parent repository.
 
     Args:
         subdataset_path: Path to subdataset to deinitialize
-        parent_path: Path to parent repository
+        parent_path: Path to top-level parent repository
 
     Returns:
         Tuple of (subdataset_path, success)
     """
     try:
+        # Find the immediate parent repository that registers this subdataset
+        immediate_parent = _find_immediate_parent_repo(subdataset_path, parent_path)
+
+        if immediate_parent is None:
+            logger.warning(
+                f"Could not find parent repo for {subdataset_path} "
+                f"(not registered in any .gitmodules)"
+            )
+            return (subdataset_path, False)
+
+        # Make subdataset path relative to its immediate parent
+        subdataset_relative = subdataset_path.resolve().relative_to(immediate_parent.resolve())
+
         result = subprocess.run(
-            ["git", "-C", str(parent_path), "submodule", "deinit", "-f", str(subdataset_path)],
+            ["git", "-C", str(immediate_parent), "submodule", "deinit", "-f", str(subdataset_relative)],
             capture_output=True,
             timeout=30,
             check=False,

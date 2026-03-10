@@ -46,8 +46,9 @@ def check_subdataset_initialized(subdataset_path: Path) -> dict:
             check=True,
             text=True,
         )
-        git_root = Path(proc.stdout.strip())
-        result["is_own_repo"] = (git_root == subdataset_path)
+        git_root = Path(proc.stdout.strip()).resolve()
+        subdataset_resolved = subdataset_path.resolve()
+        result["is_own_repo"] = (git_root == subdataset_resolved)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         pass
 
