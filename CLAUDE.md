@@ -102,6 +102,91 @@ OpenNeuroStudies/                    # Repository root (BEP035 BIDS mega-analysi
 └── README.md                        # Project overview
 ```
 
+## Design Documents and Plans
+
+### Location and Naming Convention
+
+**CRITICAL**: All design documents, plans, diagnostics, and analysis files MUST be stored in `doc/designs/` with date-prefixed filenames.
+
+**NEVER place design documents in the repository root!** The root is a BIDS dataset and should only contain BIDS-compliant files (dataset_description.json, CHANGES, studies.tsv, etc.) and study-* directories.
+
+**Naming Convention**:
+```
+doc/designs/YYYYMMDD-<codename-or-description>.md
+```
+
+**Examples**:
+```bash
+doc/designs/20251226-hierarchical-stats-extraction.md    # Feature design
+doc/designs/20260310-diagnosis-extraction-failure.md     # Diagnostic analysis
+doc/designs/20260310-plan-fix-extraction.md              # Implementation plan
+doc/designs/20260215-performance-optimization.md         # Optimization study
+doc/designs/20260118-architecture-decisions.md           # Architecture ADR
+```
+
+**Template for Design Documents**:
+```markdown
+# <Title>
+
+**Date**: YYYY-MM-DD
+**Status**: Planning | In Progress | Completed | Superseded
+**Authors**: <Name(s)>
+
+## Summary
+Brief overview of the design/plan/analysis (2-3 sentences)
+
+## Context / Problem Statement
+What problem are we solving? Why is this needed?
+
+## Proposed Solution / Design
+Detailed description of the approach
+
+## Implementation Steps (if applicable)
+1. Step 1
+2. Step 2
+...
+
+## Alternatives Considered (if applicable)
+What other approaches were evaluated and why were they rejected?
+
+## Success Criteria
+How do we know when this is complete and working?
+
+## Timeline / Effort Estimate
+Expected time to implement
+
+## References
+- Related issues, PRs, documents
+```
+
+**When to Create Design Documents**:
+- New feature designs (before implementation)
+- Root cause analyses and diagnostics
+- Implementation plans for complex changes
+- Performance optimization studies
+- Architecture decision records (ADRs)
+- Gap analyses and specification reviews
+
+**Version Control**:
+- Commit design docs when finalized
+- Update "Status" field as work progresses
+- Reference design docs in commit messages implementing the design
+- Keep superseded designs for historical context
+
+**Integration with Commits**:
+```bash
+git commit -m "feat: implement hierarchical stats extraction
+
+Implements design from doc/designs/20251226-hierarchical-stats-extraction.md
+
+- Added per-subject stats extraction
+- Added per-dataset aggregation
+- Updated studies.tsv generation
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+"
+```
+
 ## Common Commands
 
 ### Production Operations (Use Make)
