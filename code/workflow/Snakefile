@@ -300,13 +300,16 @@ rule merge_into_canonical:
             existing[sid] = data
 
         # Write canonical file in defined column order
+        # Use manual TSV writing to avoid CSV escaping of JSON fields (like bold_trs)
         rows = [existing[sid] for sid in sorted(existing)]
         with open(canonical_path, "w", newline="") as f:
-            writer = csv.DictWriter(
-                f, fieldnames=STUDIES_COLUMNS, delimiter="\t", extrasaction="ignore"
-            )
-            writer.writeheader()
-            writer.writerows(rows)
+            # Write header
+            f.write("\t".join(STUDIES_COLUMNS) + "\n")
+            # Write rows
+            for row in rows:
+                # Convert each field to string, replacing None with empty string
+                fields = [str(row.get(col, "")) if row.get(col) is not None else "" for col in STUDIES_COLUMNS]
+                f.write("\t".join(fields) + "\n")
 
         prov_manager.record(output.canonical, "merge_into_canonical", params.all_deps)
         print(f"Updated {output.canonical}: {len(rows)} studies")

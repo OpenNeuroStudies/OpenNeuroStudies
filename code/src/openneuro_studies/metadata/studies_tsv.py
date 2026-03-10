@@ -255,7 +255,7 @@ def collect_study_metadata(
         "bold_num": summaries.get("bold_num", "n/a"),
         "bold_timepoints": summaries.get("bold_timepoints", "n/a"),
         "bold_tasks": summaries.get("bold_tasks", "n/a"),
-        "bold_trs": json.dumps(summaries.get("bold_trs", "n/a")) if isinstance(summaries.get("bold_trs"), dict) else "n/a",
+        "bold_trs": summaries.get("bold_trs", "n/a"),
         "bold_duration_total": summaries.get("bold_duration_total", "n/a"),
         "t1w_num": summaries.get("t1w_num", "n/a"),
         "t2w_num": summaries.get("t2w_num", "n/a"),
@@ -346,10 +346,18 @@ def generate_studies_tsv(
     rows = [existing[sid] for sid in sorted(existing.keys())]
     logger.info(f"Writing {len(rows)} total studies ({len(updated_ids)} updated, {len(rows) - len(updated_ids)} preserved)")
 
+    # Write TSV manually to avoid CSV escaping of JSON strings (like studies+derivatives.tsv)
+    # Using csv.DictWriter would escape quotes in JSON fields, creating "{""key"":""value""}"
+    # Instead, write raw tab-separated values
     with open(output_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=STUDIES_COLUMNS, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(rows)
+        # Write header
+        f.write("\t".join(STUDIES_COLUMNS) + "\n")
+
+        # Write rows
+        for row in rows:
+            # Convert each field to string, replacing None with empty string
+            fields = [str(row.get(col, "")) if row.get(col) is not None else "" for col in STUDIES_COLUMNS]
+            f.write("\t".join(fields) + "\n")
 
     logger.info(
         f"Generated {output_path} with {len(rows)} studies "

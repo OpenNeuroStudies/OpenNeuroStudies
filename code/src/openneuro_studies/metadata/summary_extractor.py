@@ -582,8 +582,9 @@ def extract_bold_imaging_metadata(study_path: Path) -> dict[str, Any]:
         result["bold_tasks"] = ",".join(sorted(task_labels))
 
     if tr_distribution:
-        # Convert to sorted dict for consistent output: {1.0: 2, 1.5: 3, 2.0: 1}
-        result["bold_trs"] = dict(sorted(tr_distribution.items()))
+        # Convert to sorted dict and serialize to JSON string (like descriptions field)
+        tr_dict = dict(sorted(tr_distribution.items()))
+        result["bold_trs"] = json.dumps(tr_dict, separators=(",", ":"))
 
     if total_duration > 0:
         result["bold_duration_total"] = round(total_duration, 1)
