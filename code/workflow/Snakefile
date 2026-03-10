@@ -147,6 +147,12 @@ rule extract_study:
     This rule produces a JSON file with all extracted metadata
     for one study. The params include git SHAs which trigger
     recomputation when dependencies change.
+
+    Subdataset Management:
+    - Snapshots current initialization state
+    - Temporarily initializes sourcedata subdatasets if needed
+    - Extracts metadata
+    - Restores original state (deinitializes what we initialized)
     """
     output:
         json_file = f".snakemake/extracted/{{study}}.json"
@@ -155,28 +161,42 @@ rule extract_study:
         # Changes trigger rerun with --rerun-triggers params
         deps = lambda wc: get_study_deps_with_version(wc.study)
     run:
-        from bids_studies.subdatasets import extract_study_with_subdatasets
+        from openneuro_studies.metadata.studies_tsv import collect_study_metadata
+        from openneuro_studies.lib.subdataset_manager import (
+            snapshot_initialization_state,
+            get_uninitialized_sourcedata,
+            initialize_subdatasets,
+            restore_initialization_state,
+        )
 
         study_path = Path(wildcards.study)
 
-        # Extract metadata with automatic subdataset management
-        result = extract_study_with_subdatasets(study_path, stage="imaging")
+        # 1. Snapshot current state (which sourcedata are already initialized)
+        original_state = snapshot_initialization_state([study_path])
 
-        # Ensure output directory exists
-        Path(output.json_file).parent.mkdir(parents=True, exist_ok=True)
+        # 2. Find sourcedata subdatasets that need initialization
+        to_init = get_uninitialized_sourcedata(study_path)
 
-        # Write result
-        with open(output.json_file, "w") as f:
-            json.dump(result, f, indent=2)
+        # 3. Initialize if needed
+        if to_init:
+            logger.info(f"Initializing {len(to_init)} sourcedata subdatasets for {wildcards.study}")
+            init_results = initialize_subdatasets(to_init, parent_path=Path("."))
+            failed = [p for p, success in init_results.items() if not success]
+            if failed:
+                logger.warning(f"Failed to initialize {len(failed)} subdatasets: {failed}")
 
-        # Record provenance
-        prov_manager.record(
-            output_path=output.json_file,
-            rule_name="extract_study",
-            dependencies=params.deps,
-        )
-
-        print(f"Extracted metadata for {wildcards.study}")
+        # 4. Extract metadata (with subdatasets now available)
+        try:
+            result = collect_study_metadata(study_path, stage="imaging")
+            Path(output.json_file).parent.mkdir(parents=True, exist_ok=True)
+            with open(output.json_file, "w") as f:
+                json.dump(result, f, indent=2)
+            prov_manager.record(output.json_file, "extract_study", params.deps)
+            logger.info(f"Extracted metadata for {wildcards.study}")
+        finally:
+            # 5. Restore original state (uninstall if we installed it)
+            current_state = snapshot_initialization_state([study_path])
+            restore_initialization_state(current_state, original_state, parent_path=Path("."))
 
 
 rule aggregate_studies:
