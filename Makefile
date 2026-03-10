@@ -3,7 +3,7 @@
 # Prerequisites: openneuro-studies and snakemake must be in PATH
 # (activate venv before running make, or install globally)
 
-.PHONY: help discover organize extract metadata full-refresh refresh studies-init clean test-expectations
+.PHONY: help discover organize extract metadata full-refresh refresh studies-init clean full-clean analyze-state test-expectations
 
 # Default number of cores for parallel operations
 CORES ?= 8
@@ -124,6 +124,22 @@ unlock:
 # Clean Snakemake artifacts
 clean: unlock
 	@echo "✓ Snakemake lock removed"
+
+# Full clean - remove all intermediate files
+full-clean: unlock
+	@echo "Removing all Snakemake intermediate files..."
+	@if [ -d .snakemake/extracted ]; then \
+		rm -rf .snakemake/extracted/*.json && echo "  ✓ Removed extracted/*.json"; \
+	fi
+	@if [ -d .snakemake/prov ]; then \
+		rm -rf .snakemake/prov/ && echo "  ✓ Removed prov/"; \
+	fi
+	@echo "✓ Full clean complete"
+
+# Analyze extraction state
+analyze-state:
+	@echo "Analyzing extraction state..."
+	@python3 code/tests-adhoc/analyze_extraction_state.py
 
 # Test that metadata meets expectations for known datasets
 test-expectations:
