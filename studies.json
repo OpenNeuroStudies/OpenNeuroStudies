@@ -62,6 +62,12 @@
   "bold_tasks": {
     "Description": "Comma-separated sorted set of task labels from BOLD files (e.g., 'finger,nback,rest')"
   },
+  "bold_trs": {
+    "Description": "Distribution of TRs (repetition times) as JSON dict mapping TR in seconds to file count (e.g., '{\"1.0\": 500, \"2.0\": 100}' means 500 files at 1.0s TR, 100 files at 2.0s TR)"
+  },
+  "bold_duration_total": {
+    "Description": "Total BOLD acquisition time in seconds (sum of TR \u00d7 volumes across all runs)"
+  },
   "t1w_num": {
     "Description": "Number of T1-weighted structural files"
   },
@@ -88,5 +94,8 @@
   },
   "bids_valid": {
     "Description": "BIDS validation status: 'valid', 'warnings', 'errors', or 'n/a'"
+  },
+  "extraction_version": {
+    "Description": "Version of the metadata extraction logic (semantic versioning MAJOR.MINOR.PATCH)"
   }
 }
