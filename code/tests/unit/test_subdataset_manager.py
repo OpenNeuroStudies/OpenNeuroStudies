@@ -29,28 +29,73 @@ class TestIsSubdatasetInitialized:
         assert not is_subdataset_initialized(subdir)
 
     @patch("subprocess.run")
-    def test_git_status_succeeds_returns_true(self, mock_run, tmp_path):
-        """Subdataset with working git status should return True."""
+    def test_own_repo_with_files_returns_true(self, mock_run, tmp_path):
+        """Subdataset that is its own repo with files should return True."""
         subdir = tmp_path / "subdir"
         subdir.mkdir()
-        (subdir / ".git").touch()
+        (subdir / ".git").mkdir()
+        (subdir / "file.txt").write_text("content")
 
-        mock_run.return_value = MagicMock(returncode=0)
+        # Mock rev-parse returning this path
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=f"{subdir}\n"
+        )
         assert is_subdataset_initialized(subdir)
-        mock_run.assert_called_once()
 
     @patch("subprocess.run")
-    def test_git_status_fails_returns_false(self, mock_run, tmp_path):
-        """Subdataset with failing git status should return False."""
-        subdir = tmp_path / "subdir"
-        subdir.mkdir()
-        (subdir / ".git").touch()
+    def test_parent_repo_returns_false(self, mock_run, tmp_path):
+        """Directory inside parent repo should return False (regression test).
 
-        mock_run.return_value = MagicMock(returncode=1)
+        This is the critical bug fix - previously git status would succeed
+        by finding the parent repository, causing false positives.
+        """
+        parent = tmp_path / "parent"
+        parent.mkdir()
+        (parent / ".git").mkdir()
+
+        subdir = parent / "subdir"
+        subdir.mkdir()
+        (subdir / ".git").touch()  # Gitlink file
+
+        # Mock rev-parse returning PARENT path (not subdir)
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=f"{parent}\n"  # Returns parent, not subdir
+        )
+
+        # Should return False because git root != subdataset path
         assert not is_subdataset_initialized(subdir)
 
     @patch("subprocess.run")
-    def test_git_status_timeout_returns_false(self, mock_run, tmp_path):
+    def test_own_repo_but_empty_returns_false(self, mock_run, tmp_path):
+        """Subdataset that is its own repo but has no files should return False."""
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        (subdir / ".git").mkdir()
+        # No other files created
+
+        # Mock rev-parse returning this path
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=f"{subdir}\n"
+        )
+
+        # Should return False because no files in working tree
+        assert not is_subdataset_initialized(subdir)
+
+    @patch("subprocess.run")
+    def test_git_command_fails_returns_false(self, mock_run, tmp_path):
+        """Subdataset with failing git command should return False."""
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        (subdir / ".git").touch()
+
+        mock_run.side_effect = subprocess.CalledProcessError(1, "git")
+        assert not is_subdataset_initialized(subdir)
+
+    @patch("subprocess.run")
+    def test_git_timeout_returns_false(self, mock_run, tmp_path):
         """Subdataset with timeout should return False."""
         subdir = tmp_path / "subdir"
         subdir.mkdir()

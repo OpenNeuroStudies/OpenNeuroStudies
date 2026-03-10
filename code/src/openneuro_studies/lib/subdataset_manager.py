@@ -23,17 +23,21 @@ logger = logging.getLogger(__name__)
 
 
 def is_subdataset_initialized(subdataset_path: Path) -> bool:
-    """Check if subdataset has git tree available.
+    """Check if subdataset has git tree available with files.
 
-    A subdataset is considered initialized if:
-    - .git file/directory exists
-    - git status succeeds (git tree accessible)
+    A subdataset is initialized if:
+    - .git exists (file or directory)
+    - git rev-parse --show-toplevel returns THIS path (not parent)
+    - Working tree has files (not empty)
+
+    This fixes the false positive bug where git commands would find
+    the parent repository instead of detecting an uninitialized subdataset.
 
     Args:
         subdataset_path: Path to subdataset directory
 
     Returns:
-        True if subdataset is initialized, False otherwise
+        True if subdataset is initialized with files, False otherwise
     """
     if not subdataset_path.exists():
         return False
@@ -42,16 +46,38 @@ def is_subdataset_initialized(subdataset_path: Path) -> bool:
     if not git_path.exists():
         return False
 
-    # Verify git status works (git tree accessible)
+    # Check if this is its own repository (not parent)
     try:
         result = subprocess.run(
-            ["git", "-C", str(subdataset_path), "status"],
+            ["git", "-C", str(subdataset_path), "rev-parse", "--show-toplevel"],
             capture_output=True,
             timeout=5,
-            check=False,
+            check=True,
+            text=True,
         )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+
+        # The git root MUST be this subdataset path, not a parent
+        git_root = Path(result.stdout.strip()).resolve()
+        subdataset_resolved = subdataset_path.resolve()
+
+        if git_root != subdataset_resolved:
+            logger.debug(f"Not own repo: {subdataset_path} (root={git_root})")
+            return False
+
+        # Verify working tree has files (not empty except .git)
+        non_hidden_items = [
+            item for item in subdataset_path.iterdir()
+            if not item.name.startswith(".")
+        ]
+
+        if not non_hidden_items:
+            logger.debug(f"No files: {subdataset_path}")
+            return False
+
+        logger.debug(f"Initialized: {subdataset_path}")
+        return True
+
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         return False
 
 
