@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from openneuro_studies.lib.subdataset_manager import (
+    _find_immediate_parent_repo,
     get_uninitialized_sourcedata,
     initialize_subdatasets,
     is_subdataset_initialized,
@@ -168,6 +169,13 @@ class TestInitializeSubdatasets:
         """Should successfully initialize subdataset."""
         mock_run.return_value = MagicMock(returncode=0)
 
+        # Create .gitmodules that registers the subdataset
+        (tmp_path / ".gitmodules").write_text(
+            "[submodule \"ds000001\"]\n"
+            "\tpath = sourcedata/ds000001\n"
+            "\turl = https://example.com/ds000001.git\n"
+        )
+
         subdataset = tmp_path / "sourcedata" / "ds000001"
         result = initialize_subdatasets([subdataset], parent_path=tmp_path)
 
@@ -179,6 +187,13 @@ class TestInitializeSubdatasets:
         """Should handle initialization failure gracefully."""
         mock_run.return_value = MagicMock(returncode=1, stderr="error")
 
+        # Create .gitmodules
+        (tmp_path / ".gitmodules").write_text(
+            "[submodule \"ds000001\"]\n"
+            "\tpath = sourcedata/ds000001\n"
+            "\turl = https://example.com/ds000001.git\n"
+        )
+
         subdataset = tmp_path / "sourcedata" / "ds000001"
         result = initialize_subdatasets([subdataset], parent_path=tmp_path)
 
@@ -189,6 +204,13 @@ class TestInitializeSubdatasets:
         """Should handle timeout gracefully."""
         mock_run.side_effect = subprocess.TimeoutExpired("git", 300)
 
+        # Create .gitmodules
+        (tmp_path / ".gitmodules").write_text(
+            "[submodule \"ds000001\"]\n"
+            "\tpath = sourcedata/ds000001\n"
+            "\turl = https://example.com/ds000001.git\n"
+        )
+
         subdataset = tmp_path / "sourcedata" / "ds000001"
         result = initialize_subdatasets([subdataset], parent_path=tmp_path)
 
@@ -198,6 +220,19 @@ class TestInitializeSubdatasets:
     def test_parallel_initialization(self, mock_run, tmp_path):
         """Should initialize multiple subdatasets in parallel."""
         mock_run.return_value = MagicMock(returncode=0)
+
+        # Create .gitmodules that registers all subdatasets
+        (tmp_path / ".gitmodules").write_text(
+            "[submodule \"ds000001\"]\n"
+            "\tpath = sourcedata/ds000001\n"
+            "\turl = https://example.com/ds000001.git\n"
+            "[submodule \"ds000002\"]\n"
+            "\tpath = sourcedata/ds000002\n"
+            "\turl = https://example.com/ds000002.git\n"
+            "[submodule \"ds000003\"]\n"
+            "\tpath = sourcedata/ds000003\n"
+            "\turl = https://example.com/ds000003.git\n"
+        )
 
         subdatasets = [
             tmp_path / "sourcedata" / "ds000001",
@@ -297,3 +332,109 @@ class TestRestoreInitializationState:
         restore_initialization_state(set(), set(), parent_path=tmp_path)
 
         mock_deinit.assert_not_called()
+
+
+class TestFindImmediateParentRepo:
+    """Tests for _find_immediate_parent_repo function."""
+
+    def test_finds_immediate_parent_for_nested_subdataset(self, tmp_path):
+        """Should find study repo for sourcedata subdataset."""
+        # Create structure:
+        # parent/
+        #   .gitmodules (contains study-ds000001)
+        #   study-ds000001/
+        #     .gitmodules (contains sourcedata/ds000001)
+        #     sourcedata/
+        #       ds000001/
+
+        parent = tmp_path
+        study = parent / "study-ds000001"
+        sourcedata = study / "sourcedata"
+        subdataset = sourcedata / "ds000001"
+
+        study.mkdir()
+        sourcedata.mkdir()
+        subdataset.mkdir()
+
+        # Create parent .gitmodules
+        (parent / ".gitmodules").write_text(
+            "[submodule \"study-ds000001\"]\n"
+            "\tpath = study-ds000001\n"
+            "\turl = https://example.com/study-ds000001.git\n"
+        )
+
+        # Create study .gitmodules
+        (study / ".gitmodules").write_text(
+            "[submodule \"ds000001\"]\n"
+            "\tpath = sourcedata/ds000001\n"
+            "\turl = https://example.com/ds000001.git\n"
+        )
+
+        # Find parent for subdataset
+        result = _find_immediate_parent_repo(subdataset, parent)
+
+        assert result == study
+
+    def test_finds_parent_for_top_level_submodule(self, tmp_path):
+        """Should find parent repo for top-level study subdataset."""
+        # Create structure:
+        # parent/
+        #   .gitmodules (contains study-ds000001)
+        #   study-ds000001/
+
+        parent = tmp_path
+        study = parent / "study-ds000001"
+        study.mkdir()
+
+        (parent / ".gitmodules").write_text(
+            "[submodule \"study-ds000001\"]\n"
+            "\tpath = study-ds000001\n"
+            "\turl = https://example.com/study-ds000001.git\n"
+        )
+
+        result = _find_immediate_parent_repo(study, parent)
+
+        assert result == parent
+
+    def test_returns_none_when_not_registered(self, tmp_path):
+        """Should return None if subdataset not in any .gitmodules."""
+        # Create structure without .gitmodules entries
+        parent = tmp_path
+        study = parent / "study-ds000001"
+        subdataset = study / "sourcedata" / "ds000001"
+
+        study.mkdir()
+        (study / "sourcedata").mkdir()
+        subdataset.mkdir()
+
+        result = _find_immediate_parent_repo(subdataset, parent)
+
+        assert result is None
+
+    def test_handles_derivative_subdatasets(self, tmp_path):
+        """Should find parent for derivative subdatasets."""
+        # Create structure:
+        # parent/
+        #   study-ds000001/
+        #     .gitmodules (contains derivatives/fMRIPrep-21.0.1)
+        #     derivatives/
+        #       fMRIPrep-21.0.1/
+
+        parent = tmp_path
+        study = parent / "study-ds000001"
+        derivatives = study / "derivatives"
+        subdataset = derivatives / "fMRIPrep-21.0.1"
+
+        study.mkdir()
+        derivatives.mkdir()
+        subdataset.mkdir()
+
+        (study / ".gitmodules").write_text(
+            "[submodule \"fMRIPrep-21.0.1\"]\n"
+            "\tpath = derivatives/fMRIPrep-21.0.1\n"
+            "\turl = https://example.com/ds000001-fmriprep.git\n"
+        )
+
+        result = _find_immediate_parent_repo(subdataset, parent)
+
+        assert result == study

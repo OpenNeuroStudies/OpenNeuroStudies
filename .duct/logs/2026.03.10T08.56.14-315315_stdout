@@ -1,0 +1,616 @@
+Assuming unrestricted shared filesystem usage.
+host: 3272e6411b93
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 6
+Rules claiming more threads will be scaled down.
+Job stats:
+job                     count
+--------------------  -------
+all                         1
+extract_study              40
+merge_into_canonical        1
+total                      42
+
+Select jobs to execute...
+Execute 6 jobs...
+
+[Tue Mar 10 08:56:15 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds004146.json
+    jobid: 23
+    reason: Forced execution
+    wildcards: study=study-ds004146
+    resources: tmpdir=/tmp
+[Tue Mar 10 08:56:15 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds004488.json
+    jobid: 25
+    reason: Forced execution
+    wildcards: study=study-ds004488
+    resources: tmpdir=/tmp
+[Tue Mar 10 08:56:15 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds005165.json
+    jobid: 30
+    reason: Forced execution
+    wildcards: study=study-ds005165
+    resources: tmpdir=/tmp
+[Tue Mar 10 08:56:15 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds005896.json
+    jobid: 35
+    reason: Forced execution
+    wildcards: study=study-ds005896
+    resources: tmpdir=/tmp
+[Tue Mar 10 08:56:15 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds006192.json
+    jobid: 40
+    reason: Forced execution
+    wildcards: study=study-ds006192
+    resources: tmpdir=/tmp
+[Tue Mar 10 08:56:15 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds004169.json
+    jobid: 24
+    reason: Forced execution
+    wildcards: study=study-ds004169
+    resources: tmpdir=/tmp
+Failed to initialize study-ds004488/sourcedata/ds004488: returncode=1, stderr=error: pathspec 'study-ds004488/sourcedata/ds004488' did not match any file(s) known to git
+
+Failed to initialize study-ds005896/sourcedata/ds005896: returncode=1, stderr=error: pathspec 'study-ds005896/sourcedata/ds005896' did not match any file(s) known to git
+
+Failed to initialize study-ds005165/sourcedata/ds005165: returncode=1, stderr=error: pathspec 'study-ds005165/sourcedata/ds005165' did not match any file(s) known to git
+
+Failed to initialize study-ds004169/sourcedata/ds004169: returncode=1, stderr=error: pathspec 'study-ds004169/sourcedata/ds004169' did not match any file(s) known to git
+
+Failed to initialize study-ds004146/sourcedata/ds004146: returncode=1, stderr=error: pathspec 'study-ds004146/sourcedata/ds004146' did not match any file(s) known to git
+
+Failed to initialize study-ds006192/sourcedata/ds006131: returncode=1, stderr=error: pathspec 'study-ds006192/sourcedata/ds006131' did not match any file(s) known to git
+
+Failed to initialize study-ds006192/sourcedata/ds006185: returncode=1, stderr=error: pathspec 'study-ds006192/sourcedata/ds006185' did not match any file(s) known to git
+
+Failed to initialize study-ds006192/sourcedata/ds006189: returncode=1, stderr=error: pathspec 'study-ds006192/sourcedata/ds006189' did not match any file(s) known to git
+
+Failed to initialize study-ds006192/sourcedata/ds006191: returncode=1, stderr=error: pathspec 'study-ds006192/sourcedata/ds006191' did not match any file(s) known to git
+
+Select jobs to execute...
+[Tue Mar 10 08:56:17 2026]
+Finished jobid: 25 (Rule: extract_study)
+1 of 42 steps (2%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:17 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds002685.json
+    jobid: 10
+    reason: Forced execution
+    wildcards: study=study-ds002685
+    resources: tmpdir=/tmp
+[Tue Mar 10 08:56:17 2026]
+Finished jobid: 35 (Rule: extract_study)
+2 of 42 steps (5%) done
+Select jobs to execute...
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:17 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds003798.json
+    jobid: 20
+    reason: Forced execution
+    wildcards: study=study-ds003798
+    resources: tmpdir=/tmp
+[Tue Mar 10 08:56:17 2026]
+Finished jobid: 23 (Rule: extract_study)
+3 of 42 steps (7%) done
+Select jobs to execute...
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:17 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds003604.json
+    jobid: 18
+    reason: Forced execution
+    wildcards: study=study-ds003604
+    resources: tmpdir=/tmp
+[Tue Mar 10 08:56:17 2026]
+Finished jobid: 30 (Rule: extract_study)
+4 of 42 steps (10%) done
+Select jobs to execute...
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:17 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds001894.json
+    jobid: 8
+    reason: Forced execution
+    wildcards: study=study-ds001894
+    resources: tmpdir=/tmp
+Select jobs to execute...
+[Tue Mar 10 08:56:17 2026]
+Finished jobid: 40 (Rule: extract_study)
+5 of 42 steps (12%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:17 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds004746.json
+    jobid: 28
+    reason: Forced execution
+    wildcards: study=study-ds004746
+    resources: tmpdir=/tmp
+[Tue Mar 10 08:56:17 2026]
+Finished jobid: 24 (Rule: extract_study)
+6 of 42 steps (14%) done
+Select jobs to execute...
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:17 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds002790.json
+    jobid: 13
+    reason: Forced execution
+    wildcards: study=study-ds002790
+    resources: tmpdir=/tmp
+Failed to initialize study-ds002685/sourcedata/ds002685: returncode=1, stderr=error: pathspec 'study-ds002685/sourcedata/ds002685' did not match any file(s) known to git
+
+Failed to initialize study-ds001894/sourcedata/ds001894: returncode=1, stderr=error: pathspec 'study-ds001894/sourcedata/ds001894' did not match any file(s) known to git
+
+Failed to initialize study-ds003604/sourcedata/ds003604: returncode=1, stderr=error: pathspec 'study-ds003604/sourcedata/ds003604' did not match any file(s) known to git
+
+Failed to initialize study-ds003798/sourcedata/ds003798: returncode=1, stderr=error: pathspec 'study-ds003798/sourcedata/ds003798' did not match any file(s) known to git
+
+Select jobs to execute...
+Failed to initialize study-ds002790/sourcedata/ds002790: returncode=1, stderr=error: pathspec 'study-ds002790/sourcedata/ds002790' did not match any file(s) known to git
+
+[Tue Mar 10 08:56:19 2026]
+Finished jobid: 10 (Rule: extract_study)
+7 of 42 steps (17%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:19 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds005747.json
+    jobid: 33
+    reason: Forced execution
+    wildcards: study=study-ds005747
+    resources: tmpdir=/tmp
+Select jobs to execute...
+[Tue Mar 10 08:56:19 2026]
+Finished jobid: 18 (Rule: extract_study)
+8 of 42 steps (19%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:19 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds000030.json
+    jobid: 3
+    reason: Forced execution
+    wildcards: study=study-ds000030
+    resources: tmpdir=/tmp
+[Tue Mar 10 08:56:19 2026]
+Finished jobid: 8 (Rule: extract_study)
+9 of 42 steps (21%) done
+Select jobs to execute...
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:19 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds002785.json
+    jobid: 12
+    reason: Forced execution
+    wildcards: study=study-ds002785
+    resources: tmpdir=/tmp
+Select jobs to execute...
+[Tue Mar 10 08:56:19 2026]
+Finished jobid: 20 (Rule: extract_study)
+10 of 42 steps (24%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:19 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds000001.json
+    jobid: 2
+    reason: Forced execution
+    wildcards: study=study-ds000001
+    resources: tmpdir=/tmp
+Select jobs to execute...
+[Tue Mar 10 08:56:19 2026]
+Finished jobid: 13 (Rule: extract_study)
+11 of 42 steps (26%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:19 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds005256.json
+    jobid: 32
+    reason: Forced execution
+    wildcards: study=study-ds005256
+    resources: tmpdir=/tmp
+Select jobs to execute...
+Failed to initialize study-ds000030/sourcedata/ds000030: returncode=1, stderr=error: pathspec 'study-ds000030/sourcedata/ds000030' did not match any file(s) known to git
+
+Failed to initialize study-ds005747/sourcedata/ds005747: returncode=1, stderr=error: pathspec 'study-ds005747/sourcedata/ds005747' did not match any file(s) known to git
+
+Failed to initialize study-ds000001/sourcedata/ds000001: returncode=1, stderr=error: pathspec 'study-ds000001/sourcedata/ds000001' did not match any file(s) known to git
+
+Failed to initialize study-ds002785/sourcedata/ds002785: returncode=1, stderr=error: pathspec 'study-ds002785/sourcedata/ds002785' did not match any file(s) known to git
+
+[Tue Mar 10 08:56:21 2026]
+Finished jobid: 3 (Rule: extract_study)
+12 of 42 steps (29%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:21 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds004078.json
+    jobid: 22
+    reason: Forced execution
+    wildcards: study=study-ds004078
+    resources: tmpdir=/tmp
+[Tue Mar 10 08:56:21 2026]
+Finished jobid: 33 (Rule: extract_study)
+13 of 42 steps (31%) done
+Select jobs to execute...
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:21 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds006189.json
+    jobid: 37
+    reason: Forced execution
+    wildcards: study=study-ds006189
+    resources: tmpdir=/tmp
+Select jobs to execute...
+[Tue Mar 10 08:56:21 2026]
+Finished jobid: 2 (Rule: extract_study)
+14 of 42 steps (33%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:21 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds001506.json
+    jobid: 7
+    reason: Forced execution
+    wildcards: study=study-ds001506
+    resources: tmpdir=/tmp
+Select jobs to execute...
+[Tue Mar 10 08:56:21 2026]
+Finished jobid: 12 (Rule: extract_study)
+15 of 42 steps (36%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:21 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds004636.json
+    jobid: 27
+    reason: Forced execution
+    wildcards: study=study-ds004636
+    resources: tmpdir=/tmp
+Select jobs to execute...
+Failed to initialize study-ds006189/sourcedata/ds006131: returncode=1, stderr=error: pathspec 'study-ds006189/sourcedata/ds006131' did not match any file(s) known to git
+
+Failed to initialize study-ds006189/sourcedata/ds006185: returncode=1, stderr=error: pathspec 'study-ds006189/sourcedata/ds006185' did not match any file(s) known to git
+
+Failed to initialize study-ds001506/sourcedata/ds001506: returncode=1, stderr=error: pathspec 'study-ds001506/sourcedata/ds001506' did not match any file(s) known to git
+
+[Tue Mar 10 08:56:23 2026]
+Finished jobid: 37 (Rule: extract_study)
+16 of 42 steps (38%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:23 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds003592.json
+    jobid: 17
+    reason: Forced execution
+    wildcards: study=study-ds003592
+    resources: tmpdir=/tmp
+Select jobs to execute...
+[Tue Mar 10 08:56:23 2026]
+Finished jobid: 7 (Rule: extract_study)
+17 of 42 steps (40%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:23 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds004496.json
+    jobid: 26
+    reason: Forced execution
+    wildcards: study=study-ds004496
+    resources: tmpdir=/tmp
+Select jobs to execute...
+Failed to initialize study-ds003592/sourcedata/ds003592: returncode=1, stderr=error: pathspec 'study-ds003592/sourcedata/ds003592' did not match any file(s) known to git
+
+[Tue Mar 10 08:56:25 2026]
+Finished jobid: 17 (Rule: extract_study)
+18 of 42 steps (43%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:56:25 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds006131.json
+    jobid: 36
+    reason: Forced execution
+    wildcards: study=study-ds006131
+    resources: tmpdir=/tmp
+Select jobs to execute...
+[Tue Mar 10 08:58:18 2026]
+Finished jobid: 36 (Rule: extract_study)
+19 of 42 steps (45%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:58:18 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds002345.json
+    jobid: 9
+    reason: Forced execution
+    wildcards: study=study-ds002345
+    resources: tmpdir=/tmp
+Select jobs to execute...
+Failed to initialize study-ds002345/sourcedata/ds002345: returncode=1, stderr=error: pathspec 'study-ds002345/sourcedata/ds002345' did not match any file(s) known to git
+
+[Tue Mar 10 08:58:19 2026]
+Finished jobid: 9 (Rule: extract_study)
+20 of 42 steps (48%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:58:19 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds002766.json
+    jobid: 11
+    reason: Forced execution
+    wildcards: study=study-ds002766
+    resources: tmpdir=/tmp
+Select jobs to execute...
+[Tue Mar 10 08:59:19 2026]
+Finished jobid: 11 (Rule: extract_study)
+21 of 42 steps (50%) done
+Execute 1 jobs...
+
+[Tue Mar 10 08:59:19 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds005237.json
+    jobid: 31
+    reason: Forced execution
+    wildcards: study=study-ds005237
+    resources: tmpdir=/tmp
+Select jobs to execute...
+[Tue Mar 10 09:01:26 2026]
+Finished jobid: 27 (Rule: extract_study)
+22 of 42 steps (52%) done
+Execute 1 jobs...
+
+[Tue Mar 10 09:01:26 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds006623.json
+    jobid: 41
+    reason: Forced execution
+    wildcards: study=study-ds006623
+    resources: tmpdir=/tmp
+Select jobs to execute...
+Failed to initialize study-ds006623/sourcedata/ds006623: returncode=1, stderr=error: pathspec 'study-ds006623/sourcedata/ds006623' did not match any file(s) known to git
+
+[Tue Mar 10 09:01:28 2026]
+Finished jobid: 41 (Rule: extract_study)
+23 of 42 steps (55%) done
+Execute 1 jobs...
+
+[Tue Mar 10 09:01:28 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds004044.json
+    jobid: 21
+    reason: Forced execution
+    wildcards: study=study-ds004044
+    resources: tmpdir=/tmp
+Select jobs to execute...
+[Tue Mar 10 09:02:15 2026]
+Finished jobid: 22 (Rule: extract_study)
+24 of 42 steps (57%) done
+Execute 1 jobs...
+
+[Tue Mar 10 09:02:15 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds001499.json
+    jobid: 6
+    reason: Forced execution
+    wildcards: study=study-ds001499
+    resources: tmpdir=/tmp
+Select jobs to execute...
+Failed to initialize study-ds001499/sourcedata/ds001499: returncode=1, stderr=error: pathspec 'study-ds001499/sourcedata/ds001499' did not match any file(s) known to git
+
+[Tue Mar 10 09:02:17 2026]
+Finished jobid: 6 (Rule: extract_study)
+25 of 42 steps (60%) done
+Execute 1 jobs...
+
+[Tue Mar 10 09:02:17 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds003097.json
+    jobid: 16
+    reason: Forced execution
+    wildcards: study=study-ds003097
+    resources: tmpdir=/tmp
+Select jobs to execute...
+Failed to initialize study-ds003097/sourcedata/ds003097: returncode=1, stderr=error: pathspec 'study-ds003097/sourcedata/ds003097' did not match any file(s) known to git
+
+[Tue Mar 10 09:02:19 2026]
+Finished jobid: 16 (Rule: extract_study)
+26 of 42 steps (62%) done
+Execute 1 jobs...
+
+[Tue Mar 10 09:02:19 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds003020.json
+    jobid: 15
+    reason: Forced execution
+    wildcards: study=study-ds003020
+    resources: tmpdir=/tmp
+Select jobs to execute...
+Failed to initialize study-ds003020/sourcedata/ds003020: returncode=1, stderr=error: pathspec 'study-ds003020/sourcedata/ds003020' did not match any file(s) known to git
+
+[Tue Mar 10 09:02:20 2026]
+Finished jobid: 15 (Rule: extract_study)
+27 of 42 steps (64%) done
+Execute 1 jobs...
+
+[Tue Mar 10 09:02:20 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds000221.json
+    jobid: 5
+    reason: Forced execution
+    wildcards: study=study-ds000221
+    resources: tmpdir=/tmp
+Select jobs to execute...
+Failed to initialize study-ds000221/sourcedata/ds000221: returncode=1, stderr=error: pathspec 'study-ds000221/sourcedata/ds000221' did not match any file(s) known to git
+
+[Tue Mar 10 09:02:22 2026]
+Finished jobid: 28 (Rule: extract_study)
+28 of 42 steps (67%) done
+Execute 1 jobs...
+
+[Tue Mar 10 09:02:22 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds006191.json
+    jobid: 39
+    reason: Forced execution
+    wildcards: study=study-ds006191
+    resources: tmpdir=/tmp
+Select jobs to execute...
+[Tue Mar 10 09:02:22 2026]
+Finished jobid: 5 (Rule: extract_study)
+29 of 42 steps (69%) done
+Execute 1 jobs...
+
+[Tue Mar 10 09:02:22 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds005752.json
+    jobid: 34
+    reason: Forced execution
+    wildcards: study=study-ds005752
+    resources: tmpdir=/tmp
+Select jobs to execute...
+Failed to initialize study-ds005752/sourcedata/ds005752: returncode=1, stderr=error: pathspec 'study-ds005752/sourcedata/ds005752' did not match any file(s) known to git
+
+[Tue Mar 10 09:02:24 2026]
+Finished jobid: 34 (Rule: extract_study)
+30 of 42 steps (71%) done
+Execute 1 jobs...
+
+[Tue Mar 10 09:02:24 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds002843.json
+    jobid: 14
+    reason: Forced execution
+    wildcards: study=study-ds002843
+    resources: tmpdir=/tmp
+Select jobs to execute...
+[Tue Mar 10 09:02:51 2026]
+Finished jobid: 26 (Rule: extract_study)
+31 of 42 steps (74%) done
+Execute 1 jobs...
+
+[Tue Mar 10 09:02:51 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds004884.json
+    jobid: 29
+    reason: Forced execution
+    wildcards: study=study-ds004884
+    resources: tmpdir=/tmp
+Select jobs to execute...
+Failed to initialize study-ds004884/sourcedata/ds004884: returncode=1, stderr=error: pathspec 'study-ds004884/sourcedata/ds004884' did not match any file(s) known to git
+
+[Tue Mar 10 09:02:52 2026]
+Finished jobid: 29 (Rule: extract_study)
+32 of 42 steps (76%) done
+Execute 1 jobs...
+
+[Tue Mar 10 09:02:52 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds006190.json
+    jobid: 38
+    reason: Forced execution
+    wildcards: study=study-ds006190
+    resources: tmpdir=/tmp
+Select jobs to execute...
+Failed to initialize study-ds006190/sourcedata/ds006131: returncode=1, stderr=error: pathspec 'study-ds006190/sourcedata/ds006131' did not match any file(s) known to git
+
+Failed to initialize study-ds006190/sourcedata/ds006185: returncode=1, stderr=error: pathspec 'study-ds006190/sourcedata/ds006185' did not match any file(s) known to git
+
+Failed to initialize study-ds006190/sourcedata/ds006189: returncode=1, stderr=error: pathspec 'study-ds006190/sourcedata/ds006189' did not match any file(s) known to git
+
+[Tue Mar 10 09:02:54 2026]
+Finished jobid: 38 (Rule: extract_study)
+33 of 42 steps (79%) done
+Execute 1 jobs...
+
+[Tue Mar 10 09:02:54 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds003643.json
+    jobid: 19
+    reason: Forced execution
+    wildcards: study=study-ds003643
+    resources: tmpdir=/tmp
+Select jobs to execute...
+Failed to initialize study-ds003643/sourcedata/ds003643: returncode=1, stderr=error: pathspec 'study-ds003643/sourcedata/ds003643' did not match any file(s) known to git
+
+[Tue Mar 10 09:02:56 2026]
+Finished jobid: 19 (Rule: extract_study)
+34 of 42 steps (81%) done
+Execute 1 jobs...
+
+[Tue Mar 10 09:02:56 2026]
+localrule extract_study:
+    output: .snakemake/extracted/study-ds000113.json
+    jobid: 4
+    reason: Forced execution
+    wildcards: study=study-ds000113
+    resources: tmpdir=/tmp
+Failed to initialize study-ds000113/sourcedata/ds000113: returncode=1, stderr=error: pathspec 'study-ds000113/sourcedata/ds000113' did not match any file(s) known to git
+
+[Tue Mar 10 09:02:58 2026]
+Finished jobid: 4 (Rule: extract_study)
+35 of 42 steps (83%) done
+[Tue Mar 10 09:05:51 2026]
+Finished jobid: 31 (Rule: extract_study)
+36 of 42 steps (86%) done
+[Tue Mar 10 09:06:08 2026]
+Finished jobid: 21 (Rule: extract_study)
+37 of 42 steps (88%) done
+[Tue Mar 10 09:06:45 2026]
+Finished jobid: 39 (Rule: extract_study)
+38 of 42 steps (90%) done
+[Tue Mar 10 09:13:57 2026]
+Finished jobid: 14 (Rule: extract_study)
+39 of 42 steps (93%) done
+[Tue Mar 10 09:14:46 2026]
+Finished jobid: 32 (Rule: extract_study)
+40 of 42 steps (95%) done
+Select jobs to execute...
+Execute 1 jobs...
+
+[Tue Mar 10 09:14:46 2026]
+localrule merge_into_canonical:
+    input: .snakemake/extracted/study-ds000001.json, .snakemake/extracted/study-ds000030.json, .snakemake/extracted/study-ds000113.json, .snakemake/extracted/study-ds000221.json, .snakemake/extracted/study-ds001499.json, .snakemake/extracted/study-ds001506.json, .snakemake/extracted/study-ds001894.json, .snakemake/extracted/study-ds002345.json, .snakemake/extracted/study-ds002685.json, .snakemake/extracted/study-ds002766.json, .snakemake/extracted/study-ds002785.json, .snakemake/extracted/study-ds002790.json, .snakemake/extracted/study-ds002843.json, .snakemake/extracted/study-ds003020.json, .snakemake/extracted/study-ds003097.json, .snakemake/extracted/study-ds003592.json, .snakemake/extracted/study-ds003604.json, .snakemake/extracted/study-ds003643.json, .snakemake/extracted/study-ds003798.json, .snakemake/extracted/study-ds004044.json, .snakemake/extracted/study-ds004078.json, .snakemake/extracted/study-ds004146.json, .snakemake/extracted/study-ds004169.json, .snakemake/extracted/study-ds004488.json, .snakemake/extracted/study-ds004496.json, .snakemake/extracted/study-ds004636.json, .snakemake/extracted/study-ds004746.json, .snakemake/extracted/study-ds004884.json, .snakemake/extracted/study-ds005165.json, .snakemake/extracted/study-ds005237.json, .snakemake/extracted/study-ds005256.json, .snakemake/extracted/study-ds005747.json, .snakemake/extracted/study-ds005752.json, .snakemake/extracted/study-ds005896.json, .snakemake/extracted/study-ds006131.json, .snakemake/extracted/study-ds006189.json, .snakemake/extracted/study-ds006190.json, .snakemake/extracted/study-ds006191.json, .snakemake/extracted/study-ds006192.json, .snakemake/extracted/study-ds006623.json
+    output: studies.tsv
+    jobid: 1
+    reason: Forced execution
+    resources: tmpdir=/tmp
+Updated studies.tsv: 40 studies
+[Tue Mar 10 09:14:48 2026]
+Finished jobid: 1 (Rule: merge_into_canonical)
+41 of 42 steps (98%) done
+Select jobs to execute...
+Execute 1 jobs...
+
+[Tue Mar 10 09:14:48 2026]
+localrule all:
+    input: studies.tsv
+    jobid: 0
+    reason: Forced execution
+    resources: tmpdir=/tmp
+[Tue Mar 10 09:14:48 2026]
+Finished jobid: 0 (Rule: all)
+42 of 42 steps (100%) done
+Complete log(s): /home/yoh/proj/openneuro/OpenNeuroStudies/.snakemake/log/2026-03-10T085615.094291.snakemake.log
