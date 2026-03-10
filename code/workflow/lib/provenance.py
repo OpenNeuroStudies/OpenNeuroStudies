@@ -82,8 +82,17 @@ class ProvenanceManager:
     def _load_manifest(self) -> dict[str, Any]:
         """Load or create the manifest file."""
         if self.manifest_path.exists():
-            with open(self.manifest_path) as f:
-                return json.load(f)
+            try:
+                with open(self.manifest_path) as f:
+                    content = f.read()
+                    if not content.strip():
+                        # Empty file - treat as new manifest
+                        return {"outputs": {}, "created": self._now(), "updated": self._now()}
+                    return json.loads(content)
+            except (json.JSONDecodeError, OSError) as e:
+                # Corrupted manifest - recreate it
+                logger.warning(f"Corrupted manifest at {self.manifest_path}, recreating: {e}")
+                return {"outputs": {}, "created": self._now(), "updated": self._now()}
         return {"outputs": {}, "created": self._now(), "updated": self._now()}
 
     def _save_manifest(self, manifest: dict[str, Any]) -> None:
