@@ -41,6 +41,32 @@ DATASETS_COLUMNS = [
     "datatypes",
 ]
 
+# Column definitions for derivative subjects TSV files
+DERIVATIVE_SUBJECTS_COLUMNS = [
+    "source_id",
+    "derivative_id",
+    "subject_id",
+    "session_id",
+    "output_num",
+    "output_size",
+    "nifti_num",
+    "nifti_size",
+    "html_num",
+]
+
+# Column definitions for derivative datasets TSV files
+DERIVATIVE_DATASETS_COLUMNS = [
+    "source_id",
+    "derivative_id",
+    "subjects_num",
+    "sessions_num",
+    "output_num",
+    "output_size",
+    "nifti_num",
+    "nifti_size",
+    "html_num",
+]
+
 
 def _na(value: Any) -> str:
     """Convert value to string, using 'n/a' for None."""
@@ -159,6 +185,94 @@ def read_datasets_tsv(input_path: Path) -> list[dict[str, Any]]:
             ]:
                 if row.get(key) and row[key] != "n/a":
                     row[key] = float(row[key])
+            results.append(row)
+
+    return results
+
+
+def write_derivative_subjects_tsv(
+    output_path: Path,
+    subjects_stats: list[dict[str, Any]],
+) -> None:
+    """Write derivative subjects statistics to TSV file.
+
+    Args:
+        output_path: Path to output TSV file
+        subjects_stats: List of per-subject derivative statistics
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=DERIVATIVE_SUBJECTS_COLUMNS, delimiter="\t")
+        writer.writeheader()
+
+        for stats in subjects_stats:
+            row = {col: _na(stats.get(col)) for col in DERIVATIVE_SUBJECTS_COLUMNS}
+            writer.writerow(row)
+
+
+def write_derivative_datasets_tsv(
+    output_path: Path,
+    datasets_stats: list[dict[str, Any]],
+) -> None:
+    """Write derivative datasets statistics to TSV file.
+
+    Args:
+        output_path: Path to output TSV file
+        datasets_stats: List of per-dataset derivative statistics
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=DERIVATIVE_DATASETS_COLUMNS, delimiter="\t")
+        writer.writeheader()
+
+        for stats in datasets_stats:
+            row = {col: _na(stats.get(col)) for col in DERIVATIVE_DATASETS_COLUMNS}
+            writer.writerow(row)
+
+
+def read_derivative_subjects_tsv(input_path: Path) -> list[dict[str, Any]]:
+    """Read derivative subjects statistics from TSV file.
+
+    Args:
+        input_path: Path to input TSV file
+
+    Returns:
+        List of per-subject derivative statistics dictionaries
+    """
+    results = []
+
+    with open(input_path, newline="") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        for row in reader:
+            # Convert numeric fields
+            for key in ["output_num", "output_size", "nifti_num", "nifti_size", "html_num"]:
+                if row.get(key) and row[key] != "n/a":
+                    row[key] = int(row[key])
+            results.append(row)
+
+    return results
+
+
+def read_derivative_datasets_tsv(input_path: Path) -> list[dict[str, Any]]:
+    """Read derivative datasets statistics from TSV file.
+
+    Args:
+        input_path: Path to input TSV file
+
+    Returns:
+        List of per-dataset derivative statistics dictionaries
+    """
+    results = []
+
+    with open(input_path, newline="") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        for row in reader:
+            # Convert numeric fields
+            for key in ["subjects_num", "sessions_num", "output_num", "output_size", "nifti_num", "nifti_size", "html_num"]:
+                if row.get(key) and row[key] != "n/a":
+                    row[key] = int(row[key])
             results.append(row)
 
     return results

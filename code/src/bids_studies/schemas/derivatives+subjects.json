@@ -1,6 +1,9 @@
 {
+  "source_id": {
+    "Description": "Source dataset ID (e.g., ds000001)"
+  },
   "derivative_id": {
-    "Description": "Derivative directory name (e.g., fMRIPrep-21.0.1, MRIQC-0.16.1)"
+    "Description": "Derivative identifier (e.g., mriqc-25.0.0, fmriprep-24.1.1)"
   },
   "subject_id": {
     "Description": "Subject ID from BIDS naming (e.g., sub-01)"
@@ -9,23 +12,23 @@
     "Description": "Session ID if multi-session dataset, else 'n/a'"
   },
   "output_num": {
-    "Description": "Number of output files for this subject/session",
+    "Description": "Total number of output files for this subject/session in the derivative",
     "Units": "count"
   },
   "output_size": {
-    "Description": "Total size of output files for this subject/session",
+    "Description": "Total size of all output files for this subject/session",
+    "Units": "bytes"
+  },
+  "nifti_num": {
+    "Description": "Number of NIfTI files (.nii, .nii.gz) for this subject/session",
+    "Units": "count"
+  },
+  "nifti_size": {
+    "Description": "Total size of NIfTI files for this subject/session",
     "Units": "bytes"
   },
   "html_num": {
     "Description": "Number of HTML report files for this subject/session",
     "Units": "count"
-  },
-  "nifti_num": {
-    "Description": "Number of NIfTI output files for this subject/session",
-    "Units": "count"
-  },
-  "nifti_size": {
-    "Description": "Total size of NIfTI output files for this subject/session",
-    "Units": "bytes"
   }
 }

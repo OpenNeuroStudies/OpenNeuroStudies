@@ -9,8 +9,17 @@ from pathlib import Path
 from typing import Any
 
 from bids_studies.extraction.dataset import aggregate_to_dataset
+from bids_studies.extraction.derivative import (
+    aggregate_derivative_to_dataset,
+    extract_derivative_subjects_stats,
+)
 from bids_studies.extraction.subject import extract_subjects_stats
-from bids_studies.extraction.tsv import write_datasets_tsv, write_subjects_tsv
+from bids_studies.extraction.tsv import (
+    write_datasets_tsv,
+    write_derivative_datasets_tsv,
+    write_derivative_subjects_tsv,
+    write_subjects_tsv,
+)
 from bids_studies.schemas import get_schema_path
 
 logger = logging.getLogger(__name__)
@@ -185,6 +194,92 @@ def _write_sourcedata_files(
 
         # Copy JSON sidecar
         schema_path = get_schema_path("sourcedata")
+        if schema_path.exists():
+            json_path = datasets_tsv.with_suffix(".json")
+            shutil.copy(schema_path, json_path)
+
+
+def extract_derivative_stats(
+    derivative_path: Path,
+    source_id: str,
+    derivative_id: str,
+    write_files: bool = True,
+) -> dict[str, Any]:
+    """Extract hierarchical stats for a single derivative.
+
+    Extracts per-subject derivative stats and aggregates to dataset level.
+    Optionally writes intermediate TSV files.
+
+    Args:
+        derivative_path: Path to derivative directory
+        source_id: Source dataset ID (e.g., "ds000001")
+        derivative_id: Derivative ID (e.g., "mriqc-25.0.0")
+        write_files: Whether to write TSV files
+
+    Returns:
+        Dictionary with aggregated derivative dataset-level statistics
+    """
+    if not derivative_path.exists():
+        return {}
+
+    # Extract per-subject derivative stats
+    subjects_stats = extract_derivative_subjects_stats(
+        derivative_path, source_id, derivative_id
+    )
+
+    if not subjects_stats:
+        return {}
+
+    # Aggregate to dataset level
+    dataset_stats = aggregate_derivative_to_dataset(
+        subjects_stats, source_id, derivative_id
+    )
+
+    # Write TSV files
+    if write_files:
+        _write_derivative_files(derivative_path, subjects_stats, [dataset_stats])
+
+    return dataset_stats
+
+
+def _write_derivative_files(
+    derivative_path: Path,
+    subjects_stats: list[dict[str, Any]],
+    datasets_stats: list[dict[str, Any]],
+) -> None:
+    """Write derivative TSV and JSON files.
+
+    Args:
+        derivative_path: Path to derivative directory
+        subjects_stats: Per-subject derivative statistics
+        datasets_stats: Per-dataset derivative statistics
+    """
+    import shutil
+
+    # Check if multi-session
+    has_sessions = any(s["session_id"] != "n/a" for s in subjects_stats)
+
+    if has_sessions:
+        subjects_tsv = derivative_path / "derivatives+subjects+sessions.tsv"
+    else:
+        subjects_tsv = derivative_path / "derivatives+subjects.tsv"
+
+    write_derivative_subjects_tsv(subjects_tsv, subjects_stats)
+    logger.info(f"Wrote {len(subjects_stats)} rows to {subjects_tsv}")
+
+    # Copy JSON sidecar
+    schema_path = get_schema_path("derivatives+subjects")
+    if schema_path.exists():
+        json_path = subjects_tsv.with_suffix(".json")
+        shutil.copy(schema_path, json_path)
+
+    if datasets_stats:
+        datasets_tsv = derivative_path / "derivatives+datasets.tsv"
+        write_derivative_datasets_tsv(datasets_tsv, datasets_stats)
+        logger.info(f"Wrote {len(datasets_stats)} rows to {datasets_tsv}")
+
+        # Copy JSON sidecar
+        schema_path = get_schema_path("derivatives+datasets")
         if schema_path.exists():
             json_path = datasets_tsv.with_suffix(".json")
             shutil.copy(schema_path, json_path)
