@@ -75,19 +75,29 @@ The OpenNeuroStudies project has achieved **approximately 85% compliance** with 
 | FR-032a | Consistency: bold_size → bold_voxels | ✅ DONE | All-or-nothing metrics |
 | FR-033 | Separate imaging metrics stage | ✅ DONE | `--stage imaging` flag |
 
-### Hierarchical Statistics (FR-042 series) ❌ **NOT IMPLEMENTED**
+### Hierarchical Statistics (FR-042 series) ⚠️ **PARTIALLY IMPLEMENTED**
 
 | FR | Requirement | Status | Notes |
 |----|-------------|--------|-------|
-| FR-042 | Multi-level stats extraction | ❌ TODO | Design approved in doc/designs/ |
-| FR-042a | sourcedata+subjects.tsv per-subject stats | ❌ TODO | Within each study's sourcedata/ |
-| FR-042b | sourcedata.tsv per-dataset aggregation | ❌ TODO | Aggregate from subjects |
-| FR-042c | JSON sidecars for hierarchical files | ❌ TODO | Column descriptions |
-| FR-042d | Stats outside submodules | ❌ TODO | Version-controlled with study |
-| FR-042e | derivatives+subjects.tsv and derivatives+datasets.tsv | ❌ TODO | Derivative-specific stats |
-| FR-042f | Aggregate to studies.tsv | ❌ TODO | Sum counts, max dimensions, merge TRs |
+| FR-042 | Multi-level stats extraction | ⚠️ PARTIAL | Sourcedata complete, derivatives pending |
+| FR-042a | sourcedata+subjects.tsv per-subject stats | ✅ DONE | Implemented in bids_studies/extraction/subject.py |
+| FR-042b | sourcedata.tsv per-dataset aggregation | ✅ DONE | Implemented in bids_studies/extraction/dataset.py |
+| FR-042c | JSON sidecars for hierarchical files | ✅ DONE | Schemas in bids_studies/schemas/ |
+| FR-042d | Stats outside submodules | ✅ DONE | Written to study/sourcedata/ |
+| FR-042e | derivatives+subjects.tsv and derivatives+datasets.tsv | ❌ TODO | Derivative-specific stats not implemented |
+| FR-042f | Aggregate to studies.tsv from hierarchical files | ❌ TODO | Currently uses direct extraction |
 
-**Note**: Current implementation provides only study-level extraction in studies.tsv. Hierarchical stats design exists in `doc/designs/20251226-hierarchical-stats-extraction.md` but implementation is pending.
+**Implementation Status**:
+- ✅ **Sourcedata hierarchical extraction** (FR-042a/b/c/d): Fully implemented in `bids_studies/extraction/` module
+  - Per-subject extraction via `extract_subjects_stats()`
+  - Per-dataset aggregation via `aggregate_to_dataset()`
+  - Per-study aggregation via `aggregate_to_study()`
+  - Integrated into `metadata generate --stage imaging` command
+  - **12 of 40 studies** currently have hierarchical TSV files generated
+- ❌ **Derivatives hierarchical extraction** (FR-042e): Not implemented
+- ❌ **Studies.tsv aggregation** (FR-042f): Not implemented (still uses direct extraction via summary_extractor.py)
+
+**See**: `specs/003-hierarchical-stats/design.md` for complete implementation details and remaining work.
 
 ### BIDS Validation (FR-015, FR-040, FR-041)
 

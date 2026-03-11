@@ -6,50 +6,55 @@
 
 ## Critical Path Items
 
-### 1. Hierarchical Statistics Implementation (FR-042 series) 🔴 HIGH PRIORITY
+### 1. Hierarchical Statistics Completion (FR-042 series) 🟡 MEDIUM PRIORITY
 
-**Status**: ❌ Not implemented (design approved)
-**Estimated Effort**: 2-3 weeks
+**Status**: ⚠️ Sourcedata complete (FR-042a/b/c/d), derivatives pending (FR-042e/f)
+**Estimated Effort**: 1-2 weeks
 **Blocking**: Complete metadata extraction system
 
-**Tasks**:
-- [ ] Create `bids_studies/extraction/hierarchical.py` module
-- [ ] Implement per-subject stats extraction
-  - [ ] Generate `sourcedata+subjects.tsv` (or `sourcedata+subjects+sessions.tsv` for multi-session)
-  - [ ] Include: source_id, subject_id, session_id, bold_num, t1w_num, t2w_num, bold_size, t1w_size, datatypes
-  - [ ] Handle sparse access for file counts and sizes
-- [ ] Implement per-dataset aggregation
-  - [ ] Generate `sourcedata.tsv` within each study's sourcedata/
-  - [ ] Aggregate from subject stats: sum counts, max dimensions, merge TR distributions
-  - [ ] Columns: subjects_num, sessions_num, sessions_min, sessions_max, bold_num, t1w_num, t2w_num, bold_size, t1w_size, bold_size_max, bold_trs, bold_duration_total, bold_voxels, bold_timepoints, datatypes
-- [ ] Implement derivative stats
-  - [ ] Generate `derivatives+subjects.tsv` within each study's derivatives/
-  - [ ] Generate `derivatives+datasets.tsv` for derivative-specific metrics
-  - [ ] Include: output_num, output_size, nifti_num, nifti_size, html_num
-- [ ] Generate JSON sidecars for all hierarchical TSV files
-  - [ ] sourcedata+subjects.json
-  - [ ] sourcedata.json
-  - [ ] derivatives+subjects.json
-  - [ ] derivatives+datasets.json
-- [ ] Aggregate hierarchical stats to studies.tsv
-  - [ ] Update `collect_study_metadata()` to read from sourcedata.tsv and derivatives+datasets.tsv
-  - [ ] Implement aggregation logic (sum, max, merge)
-- [ ] Add `--stage` flag to control extraction depth
-  - [ ] basic: top-level only
-  - [ ] subjects: include per-subject stats
-  - [ ] full: all hierarchical levels
-- [ ] Write comprehensive tests
-  - [ ] Unit tests for extraction functions
-  - [ ] Integration tests with multi-source, multi-session datasets
-  - [ ] Verify aggregation accuracy
+**What's Already Implemented** ✅:
+- ✅ Sourcedata hierarchical extraction infrastructure (`bids_studies/extraction/`)
+  - `extract_subject_stats()` - per-subject extraction
+  - `extract_subjects_stats()` - all subjects in dataset
+  - `aggregate_to_dataset()` - per-dataset aggregation
+  - `aggregate_to_study()` - per-study aggregation
+  - `write_subjects_tsv()`, `write_datasets_tsv()` - TSV file generation
+- ✅ JSON sidecars (`bids_studies/schemas/sourcedata+subjects.json`, `sourcedata.json`)
+- ✅ CLI integration (`metadata generate --stage imaging`)
+- ✅ 12 of 40 studies have hierarchical TSV files
+
+**Remaining Tasks**:
+- [ ] Generate hierarchical files for all 40 studies (FR-042a/b)
+  - [ ] Run `openneuro-studies metadata generate --stage imaging`
+  - [ ] Verify all studies have sourcedata.tsv and sourcedata+subjects.tsv
+  - [ ] Commit generated files
+- [ ] Implement derivatives hierarchical stats (FR-042e)
+  - [ ] Create `bids_studies/extraction/derivative.py` module
+  - [ ] Implement `extract_derivative_subject_stats()`
+  - [ ] Implement `extract_derivative_subjects_stats()`
+  - [ ] Implement `aggregate_derivative_to_dataset()`
+  - [ ] Generate derivatives+subjects.tsv and derivatives+datasets.tsv
+  - [ ] Create JSON sidecars (derivatives+subjects.json, derivatives+datasets.json)
+- [ ] Update studies.tsv aggregation (FR-042f)
+  - [ ] Modify `collect_study_metadata()` to read from hierarchical TSV files
+  - [ ] Read sourcedata.tsv instead of direct extraction
+  - [ ] Read derivatives+datasets.tsv if exists
+  - [ ] Fall back to direct extraction if TSV files missing (backwards compatibility)
+- [ ] Fix CSV escaping in hierarchical TSV writing
+  - [ ] Update `write_subjects_tsv()` to use manual TSV writing (like studies.tsv)
+  - [ ] Update `write_datasets_tsv()` to avoid JSON escaping
+- [ ] Write tests
+  - [ ] Unit tests for derivative extraction functions
+  - [ ] Integration test: studies.tsv aggregation from hierarchical files
+  - [ ] Verify no regression in studies.tsv values
 - [ ] Update documentation
-  - [ ] Add hierarchical stats section to quickstart
-  - [ ] Document TSV file locations and naming
-  - [ ] Update CLI help text
+  - [ ] Document hierarchical stats in quickstart
+  - [ ] Update design document with current state
+  - [ ] Document file locations and formats
 
-**Design Reference**: `doc/designs/20251226-hierarchical-stats-extraction.md`
+**Design Reference**: `specs/003-hierarchical-stats/design.md`
 
-**Dependencies**: None (can start immediately)
+**Dependencies**: None (infrastructure already exists)
 
 ---
 
