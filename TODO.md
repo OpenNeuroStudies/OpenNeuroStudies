@@ -1,0 +1,351 @@
+# OpenNeuroStudies TODO List
+
+**Generated**: 2026-03-10
+**Based on**: Spec 001-read-file-doc compliance analysis
+**Source**: doc/spec-compliance-analysis.md
+
+## Critical Path Items
+
+### 1. Hierarchical Statistics Implementation (FR-042 series) 🔴 HIGH PRIORITY
+
+**Status**: ❌ Not implemented (design approved)
+**Estimated Effort**: 2-3 weeks
+**Blocking**: Complete metadata extraction system
+
+**Tasks**:
+- [ ] Create `bids_studies/extraction/hierarchical.py` module
+- [ ] Implement per-subject stats extraction
+  - [ ] Generate `sourcedata+subjects.tsv` (or `sourcedata+subjects+sessions.tsv` for multi-session)
+  - [ ] Include: source_id, subject_id, session_id, bold_num, t1w_num, t2w_num, bold_size, t1w_size, datatypes
+  - [ ] Handle sparse access for file counts and sizes
+- [ ] Implement per-dataset aggregation
+  - [ ] Generate `sourcedata.tsv` within each study's sourcedata/
+  - [ ] Aggregate from subject stats: sum counts, max dimensions, merge TR distributions
+  - [ ] Columns: subjects_num, sessions_num, sessions_min, sessions_max, bold_num, t1w_num, t2w_num, bold_size, t1w_size, bold_size_max, bold_trs, bold_duration_total, bold_voxels, bold_timepoints, datatypes
+- [ ] Implement derivative stats
+  - [ ] Generate `derivatives+subjects.tsv` within each study's derivatives/
+  - [ ] Generate `derivatives+datasets.tsv` for derivative-specific metrics
+  - [ ] Include: output_num, output_size, nifti_num, nifti_size, html_num
+- [ ] Generate JSON sidecars for all hierarchical TSV files
+  - [ ] sourcedata+subjects.json
+  - [ ] sourcedata.json
+  - [ ] derivatives+subjects.json
+  - [ ] derivatives+datasets.json
+- [ ] Aggregate hierarchical stats to studies.tsv
+  - [ ] Update `collect_study_metadata()` to read from sourcedata.tsv and derivatives+datasets.tsv
+  - [ ] Implement aggregation logic (sum, max, merge)
+- [ ] Add `--stage` flag to control extraction depth
+  - [ ] basic: top-level only
+  - [ ] subjects: include per-subject stats
+  - [ ] full: all hierarchical levels
+- [ ] Write comprehensive tests
+  - [ ] Unit tests for extraction functions
+  - [ ] Integration tests with multi-source, multi-session datasets
+  - [ ] Verify aggregation accuracy
+- [ ] Update documentation
+  - [ ] Add hierarchical stats section to quickstart
+  - [ ] Document TSV file locations and naming
+  - [ ] Update CLI help text
+
+**Design Reference**: `doc/designs/20251226-hierarchical-stats-extraction.md`
+
+**Dependencies**: None (can start immediately)
+
+---
+
+## Verification & Testing
+
+### 2. Publishing Workflow Verification (FR-024 series) 🟡 MEDIUM PRIORITY
+
+**Status**: ⚠️ Code exists, needs testing
+**Estimated Effort**: 3-5 days
+**Blocking**: Public dataset sharing
+
+**Tasks**:
+- [ ] Set up test GitHub organization
+  - [ ] Create test org (e.g., OpenNeuroStudiesTest)
+  - [ ] Configure GITHUB_TOKEN with appropriate permissions
+  - [ ] Create Maintainers team
+- [ ] Test `publish` command (FR-024, FR-024a)
+  - [ ] Verify repository creation on GitHub
+  - [ ] Test initial push to remote
+  - [ ] Verify .gitmodules URL updates
+  - [ ] Check published-studies.json tracking
+- [ ] Test team permissions (FR-024e)
+  - [ ] Configure `maintainers_team` in config.yaml
+  - [ ] Verify team is granted push access
+  - [ ] Test with actual team member
+- [ ] Test `unpublish` command (FR-024b)
+  - [ ] Verify confirmation prompt/flag
+  - [ ] Test repository deletion
+  - [ ] Check published-studies.json cleanup
+  - [ ] Test --dry-run mode
+- [ ] Test `publish --sync` (FR-024d)
+  - [ ] Manually create repo on GitHub
+  - [ ] Run sync, verify addition to tracking file
+  - [ ] Manually delete repo on GitHub
+  - [ ] Run sync, verify removal from tracking file
+  - [ ] Test commit SHA updates
+- [ ] Edge case testing
+  - [ ] Already published repository
+  - [ ] Network failures during push
+  - [ ] API rate limiting
+  - [ ] Invalid credentials
+- [ ] Document publishing workflow
+  - [ ] Add publishing section to quickstart
+  - [ ] Document team setup
+  - [ ] Add troubleshooting guide
+
+**Dependencies**: None
+
+---
+
+### 3. Derivative Outdatedness Calculation (FR-028-030) 🟡 MEDIUM PRIORITY
+
+**Status**: ⚠️ Code exists, needs verification
+**Estimated Effort**: 2-3 days
+**Blocking**: Derivative freshness tracking
+
+**Tasks**:
+- [ ] Test outdatedness calculation
+  - [ ] Find/create multi-version test datasets
+  - [ ] Verify commit count calculation
+  - [ ] Test with tagged vs untagged versions
+  - [ ] Test with missing source datasets
+- [ ] Verify caching implementation
+  - [ ] Confirm results are cached
+  - [ ] Test cache invalidation
+  - [ ] Measure performance improvement
+- [ ] Test studies+derivatives.tsv population
+  - [ ] Verify outdatedness column
+  - [ ] Check uptodate boolean flag
+  - [ ] Test with fresh vs stale derivatives
+- [ ] Document outdatedness workflow
+  - [ ] Explain calculation methodology
+  - [ ] Document when calculation runs
+  - [ ] Add troubleshooting section
+
+**Dependencies**: None
+
+---
+
+### 4. BIDS Validation at Scale (FR-015, SC-008) 🟢 LOW PRIORITY
+
+**Status**: ⚠️ Works for small sets, not tested at scale
+**Estimated Effort**: 1-2 days testing + potential optimization
+**Blocking**: Validation success criteria (SC-008)
+
+**Tasks**:
+- [ ] Verify validation output storage
+  - [ ] Check derivatives/bids-validator/ structure
+  - [ ] Verify version.txt, report.json, report.txt creation
+  - [ ] Test with valid and invalid datasets
+- [ ] Test --when=new-commits logic
+  - [ ] Verify skipping when no changes
+  - [ ] Test with new commits
+  - [ ] Check logging of skipped studies
+- [ ] Scale testing
+  - [ ] Run validation on all 40 organized studies
+  - [ ] Measure time and resource usage
+  - [ ] Monitor for memory leaks or bottlenecks
+  - [ ] Test parallel execution if needed
+- [ ] Performance optimization (if needed)
+  - [ ] Profile slow operations
+  - [ ] Implement caching if applicable
+  - [ ] Consider batching strategies
+- [ ] Document validation workflow
+  - [ ] Add validation section to quickstart
+  - [ ] Document when validation runs
+  - [ ] Explain output file formats
+
+**Dependencies**: Need 40+ organized studies (already available)
+
+---
+
+### 5. --include-derivatives Recursive Expansion (FR-017b) 🟢 LOW PRIORITY
+
+**Status**: ⚠️ Implemented, needs testing
+**Estimated Effort**: 1 day
+**Blocking**: Complete filtering functionality
+
+**Tasks**:
+- [ ] Test recursive derivative expansion
+  - [ ] Filter for single raw dataset
+  - [ ] Verify all derivatives included
+  - [ ] Test with derivatives-of-derivatives
+  - [ ] Verify intersection logic
+- [ ] Test without --include-derivatives
+  - [ ] Verify only raw datasets match filter
+  - [ ] Confirm derivatives excluded
+- [ ] Add integration test
+  - [ ] Create test with known derivative chains
+  - [ ] Verify complete expansion
+  - [ ] Test edge cases (circular references, missing sources)
+- [ ] Document filtering behavior
+  - [ ] Update CLI help text
+  - [ ] Add examples to quickstart
+  - [ ] Explain recursive logic
+
+**Dependencies**: None
+
+---
+
+## Code Quality & Maintenance
+
+### 6. Code Duplication Cleanup 🟡 MEDIUM PRIORITY
+
+**Status**: ⚠️ Documented in doc/todos/
+**Estimated Effort**: 1-2 weeks
+**Blocking**: Code maintainability
+
+**Tasks**:
+- [ ] Consolidate `_extract_nifti_header_from_gzip_stream()` (from TODO doc)
+  - [ ] Move to shared utility: `openneuro_studies/lib/nifti_utils.py`
+  - [ ] Update imports in:
+    - `bids_studies/extraction/subject.py`
+    - `openneuro_studies/metadata/summary_extractor.py`
+  - [ ] Standardize on single implementation (nibabel-based)
+  - [ ] Add comprehensive unit tests
+- [ ] Investigate nibabel direct gzip loading (from TODO doc)
+  - [ ] Test if nibabel can read gzipped HTTP streams directly
+  - [ ] If yes: simplify to delegate to nibabel
+  - [ ] If no: document why manual decompression is necessary
+- [ ] Fix "too short" file check (from TODO doc)
+  - [ ] Determine minimum valid gzipped NIfTI size
+  - [ ] Test with actual small NIfTI files from datasets
+  - [ ] Adjust or remove 100-byte threshold
+  - [ ] Add test case with small NIfTI file
+- [ ] Extract shared TSV writing pattern
+  - [ ] Create `lib/tsv_utils.py` with `write_tsv_with_json()`
+  - [ ] Replace duplicated logic in:
+    - `metadata/studies_tsv.py`
+    - `metadata/studies_plus_derivatives_tsv.py`
+    - `workflow/Snakefile` (merge_into_canonical rule)
+  - [ ] Ensure consistent JSON serialization
+
+**Dependencies**: None
+
+---
+
+### 7. Test Coverage Improvements 🟢 LOW PRIORITY
+
+**Status**: ✅ 26 test files, needs expansion
+**Estimated Effort**: Ongoing
+**Blocking**: Code reliability
+
+**Tasks**:
+- [ ] Add unit tests for new subdataset management code
+  - [ ] `test_subdataset_manager.py` (already has 25 tests ✅)
+  - [ ] Add edge cases for nested repos
+  - [ ] Test failure handling
+- [ ] Add integration tests for hierarchical stats (when implemented)
+  - [ ] Test full extraction pipeline
+  - [ ] Verify aggregation accuracy
+  - [ ] Test with multi-source studies
+- [ ] Expand coverage for publishing commands
+  - [ ] Mock GitHub API responses
+  - [ ] Test error conditions
+  - [ ] Verify tracking file updates
+- [ ] Add performance benchmarks
+  - [ ] Discovery speed
+  - [ ] Organization speed
+  - [ ] Metadata extraction speed
+  - [ ] Set baseline expectations
+
+**Dependencies**: None
+
+---
+
+### 8. Documentation Updates 🟢 LOW PRIORITY
+
+**Status**: ✅ CLAUDE.md exists, needs expansion
+**Estimated Effort**: Ongoing
+**Blocking**: User adoption
+
+**Tasks**:
+- [ ] Update quickstart with hierarchical stats section
+- [ ] Document publishing workflow
+- [ ] Add troubleshooting guide
+  - [ ] Common errors and solutions
+  - [ ] GitHub API issues
+  - [ ] Subdataset initialization problems
+  - [ ] Validation failures
+- [ ] Create architecture diagram
+  - [ ] Show module relationships
+  - [ ] Illustrate data flow
+  - [ ] Document key design decisions
+- [ ] Add examples directory
+  - [ ] Sample config.yaml
+  - [ ] Example workflows
+  - [ ] Common use cases
+- [ ] Update README with current status
+  - [ ] Feature completeness
+  - [ ] Quick start guide
+  - [ ] Link to full docs
+
+**Dependencies**: Complete hierarchical stats, publishing verification
+
+---
+
+## Future Enhancements (Not in Current Spec)
+
+### 9. Performance Optimization
+
+**Tasks**:
+- [ ] Profile metadata extraction at scale (1000+ datasets)
+- [ ] Optimize API call patterns
+- [ ] Implement better caching strategies
+- [ ] Consider parallel processing for independent operations
+- [ ] Optimize sparse data access patterns
+
+### 10. Advanced Features
+
+**Tasks**:
+- [ ] Dashboard generation from TSV files
+- [ ] Search/query interface for studies.tsv
+- [ ] Automated quality reports
+- [ ] Derivative recommendation system
+- [ ] Citation generation for studies
+
+---
+
+## Recently Completed ✅
+
+- [x] Subdataset initialization fix (commit d9e438a) - 2026-03-10
+  - Fixed repository context bug
+  - Achieved 97.5% metadata extraction success (39/40 studies)
+  - Added `_find_immediate_parent_repo()` function
+
+- [x] Bold TRs JSON serialization fix (commit a0376c4) - 2026-03-10
+  - Fixed double-escaped JSON in studies.tsv
+  - Serialize to JSON at collection time
+  - Write TSV manually to avoid CSV escaping
+  - Clean output: `{"2.0":48}` instead of `"{""2.0"":48}"`
+
+- [x] Provenance manifest error handling (commit e124944) - 2026-03-10
+  - Handle empty/corrupt manifest files
+  - Added robust error handling in provenance.py
+
+- [x] Code duplication TODO documentation - 2026-03-10
+  - Created doc/todos/code-duplication-nifti-header-extraction.md
+  - Documented issues and resolution path
+
+- [x] Spec compliance analysis (commit c0c13f8) - 2026-03-10
+  - Comprehensive FR-by-FR assessment
+  - Gap analysis with mitigation plan
+  - 85% overall compliance score
+
+---
+
+## Notes
+
+- **Priority Key**: 🔴 High | 🟡 Medium | 🟢 Low
+- **Status Key**: ✅ Done | ⚠️ In Progress/Needs Verification | ❌ Not Started
+- Items are ordered by priority within each section
+- Estimated efforts are approximate and may vary based on complexity discovered during implementation
+- This TODO list should be reviewed and updated regularly as work progresses
+
+---
+
+**Last Updated**: 2026-03-10
+**Next Review**: After hierarchical stats implementation
