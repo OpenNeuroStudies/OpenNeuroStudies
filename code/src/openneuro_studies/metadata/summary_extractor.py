@@ -12,6 +12,7 @@ All extraction uses sparse access via git commands and fsspec/datalad-fuse,
 avoiding full clones of source datasets.
 """
 
+import csv
 import json
 import logging
 import subprocess
@@ -597,6 +598,199 @@ def extract_bold_imaging_metadata(study_path: Path) -> dict[str, Any]:
 # ============================================================================
 
 
+def _extract_bold_tasks_and_timepoints(study_path: Path) -> dict[str, Any]:
+    """Extract BOLD tasks, timepoints, and TRs (not in hierarchical TSV).
+
+    This is a lighter version of extract_bold_imaging_metadata() that only
+    extracts task labels, timepoints, and TR distribution (which aren't in
+    the hierarchical TSV files).
+
+    Args:
+        study_path: Path to study directory
+
+    Returns:
+        Dictionary with task labels, timepoints, and TR distribution
+    """
+    result: dict[str, Any] = {
+        "bold_timepoints": "n/a",
+        "bold_tasks": "n/a",
+        "bold_trs": "n/a",
+    }
+
+    sourcedata_path = study_path / "sourcedata"
+    if not sourcedata_path.exists():
+        return result
+
+    source_dirs = [
+        d for d in sourcedata_path.iterdir() if d.is_dir() and not d.name.startswith(".")
+    ]
+
+    if not source_dirs:
+        return result
+
+    total_timepoints = 0
+    task_labels = set()
+    tr_distribution: dict[float, int] = {}
+
+    for source_dir in source_dirs:
+        try:
+            with SparseDataset(source_dir) as ds:
+                bold_files = ds.list_files("*_bold.nii*")
+
+                for bold_file in bold_files:
+                    # Extract task label
+                    task = _extract_task_from_filename(bold_file)
+                    if task:
+                        task_labels.add(task)
+
+                    # Extract timepoints and TR from header
+                    try:
+                        with ds.open_file(bold_file) as f:
+                            header_info = _extract_nifti_header_from_gzip_stream(f)
+                            if header_info is None:
+                                continue
+
+                            shape, tr = header_info
+
+                            # Timepoints (4th dimension)
+                            if len(shape) > 3:
+                                total_timepoints += shape[3]
+
+                            # TR distribution
+                            if tr and tr > 0:
+                                tr_rounded = round(tr, 3)
+                                tr_distribution[tr_rounded] = tr_distribution.get(tr_rounded, 0) + 1
+
+                    except NetworkError:
+                        raise
+                    except Exception as e:
+                        logger.debug(f"Failed to read BOLD header from {bold_file}: {e}")
+                        continue
+
+        except Exception as e:
+            logger.warning(f"Failed to access sourcedata {source_dir.name}: {e}")
+            continue
+
+    # Set results
+    if total_timepoints > 0:
+        result["bold_timepoints"] = total_timepoints
+
+    if task_labels:
+        result["bold_tasks"] = ",".join(sorted(task_labels))
+
+    if tr_distribution:
+        tr_dict = dict(sorted(tr_distribution.items()))
+        result["bold_trs"] = json.dumps(tr_dict, separators=(",", ":"))
+
+    return result
+
+
+def _aggregate_from_hierarchical_files(study_path: Path) -> dict[str, Any]:
+    """Aggregate study-level stats from hierarchical TSV files.
+
+    Reads from sourcedata.tsv and aggregates to study level.
+    This is much faster than direct extraction.
+
+    Args:
+        study_path: Path to study directory
+
+    Returns:
+        Dictionary with aggregated study-level statistics
+    """
+    sourcedata_tsv = study_path / "sourcedata" / "sourcedata.tsv"
+
+    # Read sourcedata.tsv
+    datasets_stats = []
+    with open(sourcedata_tsv, newline="") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        for row in reader:
+            # Convert numeric fields
+            for key in [
+                "subjects_num",
+                "sessions_num",
+                "sessions_min",
+                "sessions_max",
+                "bold_num",
+                "t1w_num",
+                "t2w_num",
+                "bold_size",
+                "t1w_size",
+                "bold_size_max",
+            ]:
+                if row.get(key) and row[key] != "n/a":
+                    row[key] = int(row[key])
+            for key in [
+                "bold_duration_total",
+                "bold_duration_mean",
+                "bold_voxels_total",
+                "bold_voxels_mean",
+            ]:
+                if row.get(key) and row[key] != "n/a":
+                    row[key] = float(row[key])
+            datasets_stats.append(row)
+
+    # Aggregate to study level (same logic as aggregate_to_study from bids_studies)
+    if not datasets_stats:
+        return {}
+
+    # Sum across all datasets
+    total_subjects = sum(
+        d["subjects_num"] for d in datasets_stats if isinstance(d["subjects_num"], int)
+    )
+    total_bold_num = sum(d["bold_num"] for d in datasets_stats if isinstance(d["bold_num"], int))
+    total_t1w_num = sum(d["t1w_num"] for d in datasets_stats if isinstance(d["t1w_num"], int))
+    total_t2w_num = sum(d["t2w_num"] for d in datasets_stats if isinstance(d["t2w_num"], int))
+    total_bold_size = sum(d["bold_size"] for d in datasets_stats if isinstance(d["bold_size"], int))
+    total_t1w_size = sum(d["t1w_size"] for d in datasets_stats if isinstance(d["t1w_size"], int))
+
+    # Session stats
+    session_nums = [d["sessions_num"] for d in datasets_stats if d["sessions_num"] != "n/a"]
+    session_mins = [d["sessions_min"] for d in datasets_stats if d["sessions_min"] != "n/a"]
+    session_maxs = [d["sessions_max"] for d in datasets_stats if d["sessions_max"] != "n/a"]
+
+    # Max bold size
+    bold_size_maxs = [d["bold_size_max"] for d in datasets_stats if d["bold_size_max"] != "n/a"]
+
+    # Duration and voxels (weighted by bold_num)
+    total_duration = 0.0
+    total_voxels = 0
+    duration_weights = 0
+    voxels_weights = 0
+
+    for d in datasets_stats:
+        if d["bold_duration_total"] != "n/a" and isinstance(d["bold_duration_total"], (int, float)):
+            total_duration += d["bold_duration_total"]
+            duration_weights += d["bold_num"]
+        if d["bold_voxels_total"] != "n/a" and isinstance(d["bold_voxels_total"], (int, float)):
+            total_voxels += int(d["bold_voxels_total"])
+            voxels_weights += d["bold_num"]
+
+    # Collect all datatypes
+    all_datatypes = set()
+    for d in datasets_stats:
+        if d["datatypes"] and d["datatypes"] != "n/a":
+            for dt in d["datatypes"].split(","):
+                all_datatypes.add(dt)
+
+    return {
+        "subjects_num": total_subjects if total_subjects > 0 else "n/a",
+        "sessions_num": sum(session_nums) if session_nums else "n/a",
+        "sessions_min": min(session_mins) if session_mins else "n/a",
+        "sessions_max": max(session_maxs) if session_maxs else "n/a",
+        "bold_num": total_bold_num,
+        "t1w_num": total_t1w_num,
+        "t2w_num": total_t2w_num,
+        "bold_size": total_bold_size if total_bold_size > 0 else "n/a",
+        "t1w_size": total_t1w_size if total_t1w_size > 0 else "n/a",
+        "bold_size_max": max(bold_size_maxs) if bold_size_maxs else "n/a",
+        "bold_duration_total": total_duration if duration_weights > 0 else "n/a",
+        "bold_voxels": total_voxels if voxels_weights > 0 else "n/a",
+        "datatypes": ",".join(sorted(all_datatypes)) if all_datatypes else "n/a",
+        # Note: bold_timepoints and bold_tasks still come from direct extraction
+        # since they're not in the hierarchical TSV files currently
+    }
+
+
 def extract_all_summaries(
     study_path: Path,
     stage: str = "basic",
@@ -620,18 +814,32 @@ def extract_all_summaries(
     result.update(extract_raw_metadata(study_path))
 
     if stage in ("counts", "sizes", "imaging"):
-        # Phase 2: Directory counts
-        result.update(extract_directory_summary(study_path))
+        # Try reading from hierarchical TSV files first (FR-042f)
+        # This is much faster than direct extraction
+        sourcedata_tsv = study_path / "sourcedata" / "sourcedata.tsv"
+        if sourcedata_tsv.exists():
+            logger.debug(f"Reading from hierarchical TSV: {sourcedata_tsv}")
+            result.update(_aggregate_from_hierarchical_files(study_path))
 
-        # Phase 3: File counts
-        result.update(extract_file_counts(study_path))
+            # Still need to extract task/timepoints metadata (not in hierarchical TSV)
+            if stage == "imaging":
+                # Extract only BOLD tasks and timepoints (smaller subset)
+                result.update(_extract_bold_tasks_and_timepoints(study_path))
+        else:
+            # Fall back to direct extraction (backwards compatibility)
+            logger.debug(f"Hierarchical TSV not found, using direct extraction for {study_path.name}")
+            # Phase 2: Directory counts
+            result.update(extract_directory_summary(study_path))
 
-    if stage in ("sizes", "imaging"):
-        # Phase 4: File sizes
-        result.update(extract_file_sizes(study_path))
+            # Phase 3: File counts
+            result.update(extract_file_counts(study_path))
 
-    if stage == "imaging":
-        # Phase 5: BOLD imaging metadata
-        result.update(extract_bold_imaging_metadata(study_path))
+            if stage in ("sizes", "imaging"):
+                # Phase 4: File sizes
+                result.update(extract_file_sizes(study_path))
+
+            if stage == "imaging":
+                # Phase 5: BOLD imaging metadata
+                result.update(extract_bold_imaging_metadata(study_path))
 
     return result
