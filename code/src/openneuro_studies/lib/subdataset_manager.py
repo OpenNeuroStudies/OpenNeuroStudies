@@ -14,6 +14,7 @@ user's working state.
 """
 
 import logging
+import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -302,6 +303,21 @@ def _deinitialize_single_subdataset(subdataset_path: Path, parent_path: Path) ->
 
         if result.returncode == 0:
             logger.info(f"Deinitialized subdataset: {subdataset_path}")
+
+            # Clean up .git directory/symlink left by deinit
+            # git submodule deinit removes working tree but may leave .git
+            git_path = subdataset_path / ".git"
+            if git_path.exists():
+                try:
+                    if git_path.is_symlink() or git_path.is_file():
+                        git_path.unlink()
+                        logger.debug(f"Removed .git symlink/file: {git_path}")
+                    elif git_path.is_dir():
+                        shutil.rmtree(git_path)
+                        logger.debug(f"Removed .git directory: {git_path}")
+                except (OSError, IOError) as e:
+                    logger.warning(f"Failed to remove {git_path}: {e}")
+
             return (subdataset_path, True)
         else:
             logger.warning(

@@ -93,6 +93,8 @@ OpenNeuroStudies/                    # Repository root (BEP035 BIDS mega-analysi
 │   └── cache/                       # API response cache
 ├── logs/
 │   └── errors.tsv                   # Error log
+├── docs/
+│   └── adhoc/                       # Ad-hoc documentation, test reports, bug fixes
 ├── specs/
 │   └── 001-read-file-doc/           # Feature specifications
 ├── .specify/                        # SpecKit framework files
@@ -324,12 +326,26 @@ cd ..
 # Create DataLad dataset without annex
 datalad create --no-annex -d . study-ds000001
 
+# Install subdatasets (REQUIRED for Python/Snakemake code)
+# Use datalad install instead of git submodule update --init
+datalad install study-ds000001/sourcedata/ds000001
+
+# Install without fetching annexed data (metadata-only, for remote repos)
+datalad install --no-data study-ds000001/sourcedata/ds000001
+
+# Uninstall subdatasets (REQUIRED for Python/Snakemake code)
+# Use datalad uninstall instead of git submodule deinit
+# --nocheck skips safety checks (equivalent to check=False in Python)
+datalad uninstall --nocheck study-ds000001/sourcedata/ds000001
+
 # Run command with provenance
 datalad run -m "Generate metadata" -- openneuro-studies metadata generate
 
 # Check dataset status
 datalad status
 ```
+
+**IMPORTANT**: Python code and Snakemake workflows MUST use DataLad commands (`datalad install`/`uninstall`) instead of direct git submodule commands. This ensures robust subdataset management consistent with the project's DataLad-based architecture (see Constitution Principle IV).
 
 ### GitHub Actions (act)
 ```bash
@@ -339,6 +355,38 @@ act -j lint                     # Run linting workflow
 act schedule                    # Test cron-triggered workflow
 act -s GITHUB_TOKEN=$GITHUB_TOKEN  # Provide secrets
 ```
+
+## Documentation Organization
+
+### Where to Place Documentation
+
+**Formal Specifications**: `specs/{feature-id}/`
+- Feature specifications (spec.md)
+- Implementation plans (plan.md)
+- Design documents (design.md)
+
+**Ad-hoc Documentation**: `docs/adhoc/`
+- Test reports and results
+- Bug fix documentation
+- Completion reports
+- Investigation notes
+- **DO NOT** place in `code/tests-adhoc/` or other code directories
+
+**Code Documentation**: Within code files
+- Module docstrings
+- Function/class docstrings
+- Inline comments (sparingly)
+
+**User Documentation**: Repository root
+- README.md - Project overview
+- CLAUDE.md - Developer guidelines (this file)
+- CHANGES - Version history
+
+### Temporary/Uncommitted Files
+
+If documentation is temporary and should not be committed:
+- Add pattern to `.gitignore`
+- Or place in `.openneuro-studies/` (already gitignored)
 
 ## Code Style
 
@@ -357,6 +405,16 @@ import datalad.api as dl
 # Create dataset
 ds = dl.create(path="study-ds000001", no_annex=True)
 
+# Install subdatasets (REQUIRED - use this instead of git submodule commands)
+dl.install(path="study-ds000001/sourcedata/ds000001")
+
+# Install without fetching annexed data (metadata-only, for remote repos)
+dl.install(path="study-ds000001/sourcedata/ds000001", get_data=False)
+
+# Uninstall subdatasets (REQUIRED - use this instead of git submodule deinit)
+# check=False is equivalent to --nocheck in CLI
+dl.uninstall(path="study-ds000001/sourcedata/ds000001", check=False)
+
 # Run with provenance
 dl.run(
     cmd=["python", "script.py"],
@@ -365,6 +423,11 @@ dl.run(
     outputs=["output.txt"]
 )
 ```
+
+**CRITICAL**: For subdataset management in Python code:
+- ✅ USE: `datalad.api.install()` and `datalad.api.uninstall()`
+- ❌ AVOID: `subprocess.run(["git", "submodule", ...])`
+- **Why**: DataLad provides more robust subdataset handling, better error recovery, and consistency with the project's architecture
 
 ### Pydantic Models
 ```python

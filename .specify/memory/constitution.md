@@ -1,25 +1,29 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version Change: 1.20251011.0 → 1.20251011.1
+Version Change: 1.20251218.0 → 1.20251218.1
 Principle Changes:
   - AMENDED PRINCIPLE IV: Git/DataLad-First Workflow
-    * Added: Operations MUST result in clean git status across entire hierarchy
-    * Added: Empty directories MUST be created for gitlinks to prevent "deleted" status
-    * Clarified: Clean status ensures operations are complete
+    * Added: Subdataset Operations section requiring DataLad commands
+    * Mandated: Use `datalad install` instead of `git submodule update --init`
+    * Mandated: Use `datalad uninstall` instead of `git submodule deinit`
+    * Rationale: DataLad provides more robust subdataset management
 Amended Sections:
-  - Core Principles: Updated Principle IV (Git/DataLad-First Workflow)
-  - Impacts organize command implementation (already implemented)
-  - Aligns with spec.md FR-004 and FR-004a
+  - Core Principles: Updated Principle IV (Subdataset Operations)
+  - Impacts subdataset_manager.py implementation (requires refactoring)
+  - Impacts Snakemake workflow extract_study rule
 Templates Status:
-  ✅ Implementation complete - organize command creates empty directories
-  ✅ Tests verify clean status and gitlink presence
-  ✅ Spec updated with FR-004a requirement
+  ⚠️  CODE UPDATE REQUIRED: Replace git submodule commands with DataLad equivalents
+  - code/src/openneuro_studies/lib/subdataset_manager.py
+  - code/workflow/Snakefile (extract_study rule)
 Follow-up TODOs:
-  - None - changes fully implemented and tested
-Previous Version (1.20251011.0):
-  - Added Principle VI: No Silent Failures
-  - Requires unorganized-datasets.json tracking (implementation pending)
+  - Refactor subdataset_manager.py to use datalad install/uninstall
+  - Update Snakefile to use DataLad commands
+  - Add tests for DataLad-based subdataset management
+  - Document --reckless options for metadata-only access
+Previous Version (1.20251218.0):
+  - Added Principle VII: No Duplicate Implementations (DRY)
+  - Previous: Principle VI (No Silent Failures)
 -->
 
 # OpenNeuroStudies Constitution
@@ -70,7 +74,12 @@ All state changes MUST be committed through git/DataLad with descriptive message
 - Dirty trees are acceptable only with explicit `--input` and `--output` flags and then using `run` with `--explicit` flag, but generally such operations should be avoided
 - Commit messages MUST reference issue numbers or briefly describe the batch operation
 - If feasible, commit messages MIGHT provide descriptive statistics on the changes (e.g. how many subdatasets were affected)
-- Git submodules MUST be updated with `git submodule update --init` when needed
+- **Subdataset Operations**: Python code and Snakemake workflows MUST use DataLad commands for subdataset management:
+  - Use `datalad install` (with `--reckless ephemeral` or similar for metadata-only access) instead of `git submodule update --init`
+  - Use `datalad uninstall` instead of `git submodule deinit`
+  - Use `datalad get`/`datalad drop` with appropriate options when data access is needed
+  - Direct `git submodule` commands should be avoided in favor of DataLad's higher-level abstractions
+  - **Rationale**: DataLad provides more robust subdataset management, handles edge cases better, and ensures consistency with the project's DataLad-based architecture
 - For gitlinks created without cloning (via `git update-index`), empty directories MUST be created at submodule paths to prevent "deleted" status markers
 
 **Rationale**: DataLad extends git and git-annex to ease handling collections of large datasets while maintaining complete provenance. This provides scientific audit trails and enables distributed collaboration. Clean git status ensures operations are complete and no uncommitted changes exist.
@@ -201,4 +210,4 @@ Avoid maintaining multiple implementations of the same functionality.
 
 **Rationale**: Duplicate implementations increase maintenance burden, risk divergence between versions, and bloat the codebase. A single well-tested implementation is preferable to multiple "just in case" alternatives.
 
-**Version**: 1.20251218.0 | **Ratified**: 2025-10-08 | **Last Amended**: 2025-12-18
+**Version**: 1.20251218.1 | **Ratified**: 2025-10-08 | **Last Amended**: 2026-03-12
