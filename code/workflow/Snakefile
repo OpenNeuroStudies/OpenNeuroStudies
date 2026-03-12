@@ -187,6 +187,38 @@ rule extract_study:
 
         # 4. Extract metadata (with subdatasets now available)
         try:
+            # 4a. Generate hierarchical sourcedata TSV files (FR-042a/b)
+            from bids_studies.extraction import extract_study_stats, extract_derivative_stats
+            logger.info(f"Generating hierarchical sourcedata stats for {wildcards.study}")
+            extract_study_stats(
+                study_path,
+                sourcedata_subdir="sourcedata",
+                include_imaging=True,
+                write_files=True,
+            )
+
+            # 4b. Generate hierarchical derivative TSV files (FR-042e)
+            derivatives_dir = study_path / "derivatives"
+            if derivatives_dir.exists():
+                source_id = study_path.name.replace("study-", "")
+                for derivative_path in derivatives_dir.iterdir():
+                    if derivative_path.is_dir() and not derivative_path.name.startswith("."):
+                        # Skip bids-validator derivative (not a dataset)
+                        if derivative_path.name == "bids-validator":
+                            continue
+                        derivative_id = derivative_path.name
+                        logger.info(f"Generating hierarchical derivative stats for {wildcards.study}/{derivative_id}")
+                        try:
+                            extract_derivative_stats(
+                                derivative_path,
+                                source_id=source_id,
+                                derivative_id=derivative_id,
+                                write_files=True,
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to extract derivative {derivative_id}: {e}")
+
+            # 4c. Extract study-level metadata
             result = collect_study_metadata(study_path, stage="imaging")
             Path(output.json_file).parent.mkdir(parents=True, exist_ok=True)
             with open(output.json_file, "w") as f:
