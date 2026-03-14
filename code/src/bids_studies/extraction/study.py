@@ -134,17 +134,43 @@ def extract_study_stats(
     # Extract per-subject stats for all sources
     all_subjects_stats = []
     datasets_stats = []
+    all_extraction_errors = []
 
     for source_dir in source_dirs:
         source_id = source_dir.name
 
-        # Extract subjects
-        subjects_stats = extract_subjects_stats(source_dir, source_id, include_imaging)
-        all_subjects_stats.extend(subjects_stats)
+        # Extract subjects (returns tuple: results, errors)
+        try:
+            subjects_stats, errors = extract_subjects_stats(source_dir, source_id, include_imaging)
+            all_subjects_stats.extend(subjects_stats)
+            all_extraction_errors.extend(errors)
 
-        # Aggregate to dataset level
-        dataset_stats = aggregate_to_dataset(subjects_stats, source_id)
-        datasets_stats.append(dataset_stats)
+            # Aggregate to dataset level
+            dataset_stats = aggregate_to_dataset(subjects_stats, source_id)
+            datasets_stats.append(dataset_stats)
+        except RuntimeError as e:
+            # Extraction failed for this dataset - log and continue
+            logger.error(f"Extraction failed for {source_id}: {e}")
+            all_extraction_errors.append(f"{source_id}: {e}")
+            # Continue with other datasets rather than failing completely
+
+    # Report extraction errors if any
+    if all_extraction_errors:
+        logger.error(
+            f"Study extraction completed with {len(all_extraction_errors)} errors. "
+            f"First 5 errors:\n" + "\n".join(all_extraction_errors[:5])
+        )
+        # Write errors to file
+        errors_file = sourcedata_path / "extraction_errors.log"
+        try:
+            with open(errors_file, "w") as f:
+                f.write(f"Extraction Errors ({len(all_extraction_errors)} total)\n")
+                f.write("=" * 60 + "\n\n")
+                for error in all_extraction_errors:
+                    f.write(f"{error}\n")
+            logger.error(f"Full error log written to: {errors_file}")
+        except Exception as e:
+            logger.warning(f"Failed to write error log: {e}")
 
     # Write TSV files
     if write_files and all_subjects_stats:
@@ -152,6 +178,13 @@ def extract_study_stats(
 
     # Aggregate to study level
     study_stats = aggregate_to_study(datasets_stats)
+
+    # Fail if no data was extracted (complete failure)
+    if not datasets_stats and all_extraction_errors:
+        raise RuntimeError(
+            f"Study extraction completely failed: {len(all_extraction_errors)} errors, "
+            f"no datasets extracted successfully"
+        )
 
     return study_stats
 

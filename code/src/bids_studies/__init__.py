@@ -13,7 +13,9 @@ Example usage:
     with SparseDataset("/path/to/dataset") as ds:
         subjects = ds.list_dirs("sub-*")
 
-    stats = extract_subjects_stats(source_path, source_id)
+    stats, errors = extract_subjects_stats(source_path, source_id)
+    if errors:
+        print(f"Extraction had {len(errors)} errors")
     dataset_stats = aggregate_to_dataset(stats, source_id)
 """
 

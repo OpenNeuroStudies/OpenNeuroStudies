@@ -44,7 +44,7 @@ def extract_subject_stats(
     subject: str,
     session: Optional[str] = None,
     include_imaging: bool = False,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], list[str]]:
     """Extract stats for a single subject (or subject+session).
 
     Args:
@@ -55,7 +55,7 @@ def extract_subject_stats(
         include_imaging: Whether to extract voxel/duration metrics
 
     Returns:
-        Dictionary with per-subject statistics
+        Tuple of (statistics dict, list of error messages)
     """
     # Build path prefix for this subject/session
     if session:
@@ -64,6 +64,9 @@ def extract_subject_stats(
     else:
         prefix = f"{subject}/"
         session_id = "n/a"
+
+    # Track errors during extraction
+    errors: list[str] = []
 
     result = {
         "source_id": source_id,
@@ -125,12 +128,12 @@ def extract_subject_stats(
 
     # Extract imaging metrics if requested
     if include_imaging and bold_files:
-        _extract_imaging_metrics(ds, bold_files, result)
+        _extract_imaging_metrics(ds, bold_files, result, errors)
 
     # Convert datatypes set to sorted comma-separated string
     result["datatypes"] = ",".join(sorted(datatypes)) if datatypes else "n/a"
 
-    return result
+    return result, errors
 
 
 def _extract_nifti_header_from_gzip_stream(f: Any) -> Optional[tuple[tuple[int, ...], float]]:
@@ -206,6 +209,7 @@ def _extract_imaging_metrics(
     ds: SparseDataset,
     bold_files: list[str],
     result: dict[str, Any],
+    errors: list[str],
 ) -> None:
     """Extract imaging metrics from BOLD files.
 
@@ -217,6 +221,7 @@ def _extract_imaging_metrics(
         ds: SparseDataset instance
         bold_files: List of BOLD file paths
         result: Result dict to update in place
+        errors: List to accumulate error messages
     """
     import numpy as np
 
@@ -247,14 +252,19 @@ def _extract_imaging_metrics(
             # Network error after retries - propagate to fail extraction
             raise
         except Exception as e:
-            # Other errors (corrupt file, invalid format) - log and continue
-            # CRITICAL: Log at WARNING level (not DEBUG) per Constitution Principle V
-            logger.warning(f"Failed to extract imaging metrics from {bold_file}: {e}")
+            # Other errors (corrupt file, invalid format) - accumulate and continue
+            # CRITICAL: Log at WARNING level AND accumulate error per Constitution Principle V
+            error_msg = f"Failed to extract imaging metrics from {bold_file}: {e}"
+            logger.warning(error_msg)
+            errors.append(error_msg)
             continue
 
     if voxel_counts:
         result["bold_voxels_total"] = sum(voxel_counts)
         result["bold_voxels_mean"] = sum(voxel_counts) / len(voxel_counts)
+    elif bold_files:
+        # Had BOLD files but failed to extract any metrics - record error
+        errors.append(f"Failed to extract imaging metrics from all {len(bold_files)} BOLD files")
 
     if durations:
         result["bold_duration_total"] = sum(durations)
@@ -265,7 +275,7 @@ def extract_subjects_stats(
     source_path: Path,
     source_id: str,
     include_imaging: bool = False,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[str]]:
     """Extract stats for all subjects in a source dataset.
 
     Args:
@@ -274,9 +284,13 @@ def extract_subjects_stats(
         include_imaging: Whether to extract voxel/duration metrics
 
     Returns:
-        List of per-subject statistics dictionaries
+        Tuple of (list of statistics dictionaries, list of error messages)
+
+    Raises:
+        RuntimeError: If extraction errors exceed threshold (50% failure rate)
     """
     results: list[dict[str, Any]] = []
+    all_errors: list[str] = []
 
     try:
         with SparseDataset(source_path) as ds:
@@ -304,18 +318,51 @@ def extract_subjects_stats(
                     # Multi-session: one row per subject+session
                     for session in valid_sessions:
                         session_name = session.split("/")[-1]
-                        stats = extract_subject_stats(
+                        stats, errors = extract_subject_stats(
                             ds, source_id, subject_name, session_name, include_imaging
                         )
                         results.append(stats)
+                        all_errors.extend(errors)
                 else:
                     # Single-session: one row per subject
-                    stats = extract_subject_stats(
+                    stats, errors = extract_subject_stats(
                         ds, source_id, subject_name, None, include_imaging
                     )
                     results.append(stats)
+                    all_errors.extend(errors)
 
     except Exception as e:
-        logger.warning(f"Failed to extract subjects from {source_path}: {e}")
+        error_msg = f"Failed to extract subjects from {source_path}: {e}"
+        logger.warning(error_msg)
+        all_errors.append(error_msg)
 
-    return results
+    # Check if extraction errors exceed threshold
+    if all_errors and results:
+        # Calculate error rate based on failed operations vs successful subjects
+        total_subjects = len(results)
+        error_rate = len(all_errors) / total_subjects if total_subjects > 0 else 0
+
+        # Report error summary
+        logger.warning(
+            f"Extraction completed with {len(all_errors)} errors "
+            f"across {total_subjects} subjects/sessions "
+            f"(error rate: {error_rate:.1%})"
+        )
+
+        # Fail if error rate exceeds 50% (indicates systemic problem)
+        if error_rate > 0.5:
+            error_summary = "\n".join(all_errors[:10])  # Show first 10 errors
+            raise RuntimeError(
+                f"Extraction failed: {len(all_errors)} errors across {total_subjects} subjects "
+                f"(error rate: {error_rate:.1%} exceeds 50% threshold).\n"
+                f"First errors:\n{error_summary}"
+            )
+    elif all_errors and not results:
+        # All extractions failed - critical error
+        error_summary = "\n".join(all_errors[:10])
+        raise RuntimeError(
+            f"Extraction completely failed: {len(all_errors)} errors, no successful extractions.\n"
+            f"Errors:\n{error_summary}"
+        )
+
+    return results, all_errors
