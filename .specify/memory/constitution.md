@@ -1,29 +1,36 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version Change: 1.20251218.0 → 1.20251218.1
+Version Change: 1.20251218.1 → 1.20251218.2
 Principle Changes:
-  - AMENDED PRINCIPLE IV: Git/DataLad-First Workflow
-    * Added: Subdataset Operations section requiring DataLad commands
-    * Mandated: Use `datalad install` instead of `git submodule update --init`
-    * Mandated: Use `datalad uninstall` instead of `git submodule deinit`
-    * Rationale: DataLad provides more robust subdataset management
+  - AMENDED PRINCIPLE V: Observability & Monitoring
+    * Added: Error Visibility subsection
+    * Mandated: Extraction failures MUST log at WARNING/ERROR (not DEBUG only)
+    * Mandated: Silent failures are FORBIDDEN
+    * Mandated: Workflows MUST provide error summaries
+    * Mandated: Error logs MUST be written to accessible locations
+    * Rationale: Hidden errors lead to incomplete metadata with "n/a" values
 Amended Sections:
-  - Core Principles: Updated Principle IV (Subdataset Operations)
-  - Impacts subdataset_manager.py implementation (requires refactoring)
-  - Impacts Snakemake workflow extract_study rule
+  - Core Principles: Updated Principle V (Error Visibility)
+  - Impacts metadata extraction error handling (all extraction code)
+  - Impacts Snakemake workflow logging and error reporting
 Templates Status:
-  ⚠️  CODE UPDATE REQUIRED: Replace git submodule commands with DataLad equivalents
-  - code/src/openneuro_studies/lib/subdataset_manager.py
-  - code/workflow/Snakefile (extract_study rule)
+  ⚠️  CODE UPDATE REQUIRED: Improve error visibility in extraction
+  - code/src/bids_studies/extraction/subject.py (_extract_imaging_metrics)
+  - code/workflow/Snakefile (extract_study error handling)
+  - Add error summary reporting to make metadata
+  🐛 BUG IDENTIFIED: SparseDataset not using git-annex web URLs
+  - Imaging metrics fail silently, produce "n/a" values
+  - See: docs/adhoc/TODO-sparse-access-imaging-metrics.md
 Follow-up TODOs:
-  - Refactor subdataset_manager.py to use datalad install/uninstall
-  - Update Snakefile to use DataLad commands
-  - Add tests for DataLad-based subdataset management
-  - Document --reckless options for metadata-only access
-Previous Version (1.20251218.0):
-  - Added Principle VII: No Duplicate Implementations (DRY)
-  - Previous: Principle VI (No Silent Failures)
+  - Fix SparseDataset to stream from git-annex web URLs (CRITICAL)
+  - Change logger.debug to logger.warning for extraction failures
+  - Add error summary to Snakemake workflow completion
+  - Write extraction errors to .snakemake/errors.tsv
+  - Test: Verify imaging metrics work without fetching annexed content
+Previous Version (1.20251218.1):
+  - Added Subdataset Operations to Principle IV
+  - Mandated DataLad commands over git submodule
 -->
 
 # OpenNeuroStudies Constitution
@@ -92,6 +99,17 @@ The state of all datasets MUST be queryable and monitorable.
 - Incomplete or non-BIDS datasets MUST be clearly marked (e.g., "n/a" entries)
 - Dashboard generation MUST be supported (per study, per dataset, per subject/session)
 - Validation results (bids-validation, mriqc, fmriprep) MUST be tracked when available
+
+#### Error Visibility
+
+Critical errors during metadata extraction MUST be visible and NOT hidden:
+
+- Extraction failures MUST log at WARNING or ERROR level (not DEBUG only)
+- Silent failures are FORBIDDEN - exceptions must propagate or be reported in summaries
+- Workflows MUST provide error summaries (e.g., "15/40 studies had extraction warnings")
+- Error logs MUST be written to accessible locations (logs/, .snakemake/errors.tsv, stderr)
+- Failed extractions producing "n/a" values MUST be distinguishable from legitimately missing data
+- **Rationale**: Hidden errors lead to incomplete metadata that appears valid but contains "n/a" placeholders. Operators must know when extraction fails so they can investigate root causes, fix infrastructure issues, and ensure metadata completeness.
 
 **Rationale**: With 1000+ studies, operators need quick visibility into dataset status, missing data, and processing completeness without inspecting individual directories.
 
@@ -210,4 +228,4 @@ Avoid maintaining multiple implementations of the same functionality.
 
 **Rationale**: Duplicate implementations increase maintenance burden, risk divergence between versions, and bloat the codebase. A single well-tested implementation is preferable to multiple "just in case" alternatives.
 
-**Version**: 1.20251218.1 | **Ratified**: 2025-10-08 | **Last Amended**: 2026-03-12
+**Version**: 1.20251218.2 | **Ratified**: 2025-10-08 | **Last Amended**: 2026-03-14
