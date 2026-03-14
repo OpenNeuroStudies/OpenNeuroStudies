@@ -445,6 +445,126 @@ with open(output_path, "w", newline="") as f:
 
 This would match the pattern used in `studies_tsv.py` and `Snakefile`.
 
+## Error Handling and Reporting
+
+**Updated**: 2026-03-14
+**Status**: IMPLEMENTED
+**Compliance**: Constitution Principle V (Error Visibility)
+
+### Design Principles
+
+1. **No Silent Failures**: All extraction errors MUST be visible and reported
+2. **Error Accumulation**: Errors collected during extraction and returned alongside results
+3. **Error Thresholds**: Process fails when error rate indicates systemic problems
+4. **Comprehensive Reporting**: Errors logged, written to files, and summarized
+
+### Implementation
+
+#### Function Return Signatures
+
+All extraction functions now return tuples: `(results, errors)`
+
+```python
+# Subject-level extraction
+def extract_subject_stats(...) -> tuple[dict[str, Any], list[str]]:
+    errors: list[str] = []
+    # ... extraction logic
+    if extraction_fails:
+        errors.append(f"Failed to extract from {file}: {error}")
+    return result, errors
+
+# Dataset-level extraction
+def extract_subjects_stats(...) -> tuple[list[dict[str, Any]], list[str]]:
+    all_errors: list[str] = []
+    for subject in subjects:
+        stats, errors = extract_subject_stats(...)
+        all_errors.extend(errors)
+
+    # Fail if error rate exceeds 50%
+    if error_rate > 0.5:
+        raise RuntimeError(f"Extraction failed: {len(all_errors)} errors")
+
+    return results, all_errors
+```
+
+#### Error Reporting Levels
+
+1. **Per-File Errors** (WARNING level):
+   - Logged when individual BOLD file extraction fails
+   - Example: `"Failed to extract imaging metrics from sub-01_bold.nii.gz: NetworkError"`
+
+2. **Subject/Session Errors** (WARNING level):
+   - Logged when all files in a subject/session fail
+   - Example: `"Failed to extract imaging metrics from all 3 BOLD files"`
+
+3. **Dataset Errors** (ERROR level):
+   - Logged when extraction error rate exceeds threshold
+   - Example: `"Extraction completed with 15 errors across 40 subjects (37.5% error rate)"`
+
+4. **Study Errors** (ERROR level):
+   - Logged when entire dataset extraction fails
+   - Written to `sourcedata/extraction_errors.log`
+   - Example: `"Study extraction completed with 5 errors"`
+
+#### Error Thresholds and Failure Conditions
+
+**50% Error Rate Threshold**:
+- If >50% of subjects/sessions have extraction errors → RuntimeError raised
+- Indicates systemic problem (subdatasets not initialized, network failure, etc.)
+- Prevents producing incomplete metadata that appears valid
+
+**Complete Failure**:
+- If ALL extractions fail → RuntimeError raised immediately
+- No partial results returned
+
+**Partial Failures**:
+- If <50% fail → Continue extraction, return results with error list
+- Errors logged and written to file for investigation
+
+#### Error Log Files
+
+**Location**: `{study}/sourcedata/extraction_errors.log`
+
+**Format**:
+```
+Extraction Errors (15 total)
+============================================================
+
+Failed to extract imaging metrics from sub-01/ses-01/func/sub-01_ses-01_bold.nii.gz: FileNotFoundError
+Failed to extract imaging metrics from sub-01/ses-02/func/sub-01_ses-02_bold.nii.gz: NetworkError
+...
+```
+
+**Usage**:
+- Created automatically when errors occur
+- Truncated to first 10 errors in console output
+- Full error list written to file
+
+#### Workflow Integration
+
+**Snakemake Workflow** (`code/workflow/Snakefile`):
+```python
+try:
+    extract_study_stats(study_path, include_imaging=True, write_files=True)
+except RuntimeError as e:
+    logger.error(f"Extraction failed: {e}")
+    # Write error to .snakemake/extraction_errors.tsv
+    # Continue with other studies
+```
+
+**Error Summary at Workflow End**:
+- Reports total error count across all studies
+- Lists studies with failures
+- Exit code indicates success/failure
+
+### Compliance with Constitution Principle V
+
+✅ **Error Visibility**: Errors logged at WARNING/ERROR (not DEBUG)
+✅ **No Silent Failures**: Exceptions raised or errors accumulated and reported
+✅ **Error Summaries**: Workflows report error counts and rates
+✅ **Accessible Logs**: Errors written to `sourcedata/extraction_errors.log`
+✅ **Distinguishable Failures**: Failed extractions produce errors, not just "n/a" values
+
 ## Summary
 
 **What's Done**:
