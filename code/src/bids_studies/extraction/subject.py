@@ -248,7 +248,8 @@ def _extract_imaging_metrics(
             raise
         except Exception as e:
             # Other errors (corrupt file, invalid format) - log and continue
-            logger.debug(f"Failed to read BOLD header from {bold_file}: {e}")
+            # CRITICAL: Log at WARNING level (not DEBUG) per Constitution Principle V
+            logger.warning(f"Failed to extract imaging metrics from {bold_file}: {e}")
             continue
 
     if voxel_counts:

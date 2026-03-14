@@ -36,7 +36,21 @@ ds002766   sub-cast1   ses-01      3         149937128    n/a                  n
    $ git annex whereis ...
    s3-PUBLIC: https://s3.amazonaws.com/openneuro.org/ds002766/.../bold.nii.gz?versionId=...
    ```
-4. ❌ **BUG**: `SparseDataset` NOT using web URLs for file access
+4. ✅ **VERIFIED**: `SparseDataset` DOES use web URLs correctly (tested 2026-03-14)
+   - Successfully streams from S3 URLs when subdataset is initialized
+   - Extracts imaging metrics correctly when working properly
+
+### Root Cause: Silent Failures with DEBUG Logging
+
+**Testing Results** (2026-03-14):
+- Manual extraction WITH initialized subdataset: ✅ SUCCESS
+  - bold_duration_total: 2257.2 (real value)
+  - bold_voxels_total: 442368 (real value)
+- Snakemake extraction (Mar 12): ❌ FAILED SILENTLY
+  - bold_duration_total: n/a
+  - bold_voxels_total: n/a
+
+**Hypothesis**: Extraction ran when subdatasets were NOT initialized, OR extraction failed for another reason (network error, parsing error), but errors were logged as DEBUG (invisible) instead of WARNING/ERROR.
 
 ### Code Flow
 ```python
@@ -58,57 +72,58 @@ def _extract_imaging_metrics(ds, bold_files, result):
             continue
 ```
 
-**Problem**: When `ds.open_file()` fails (can't access broken symlink), exception is caught and logged as DEBUG (not visible), extraction continues, result stays as "n/a".
+**Problem**: When extraction fails (subdatasets not initialized, network error, parsing error), exception is caught and logged as DEBUG (not visible), extraction continues silently, result stays as "n/a".
+
+**CRITICAL**: The SparseDataset implementation is NOT broken - it works correctly when subdatasets are initialized. The bug is the SILENT FAILURE due to DEBUG-level logging.
 
 ---
 
 ## Tasks
 
-### Task 1: Fix SparseDataset Web URL Access
+### Task 1: ✅ VERIFIED - SparseDataset Works Correctly
 
-**File**: `code/src/bids_studies/sparse/...` (find actual location)
+**Status**: NO FIX NEEDED
 
-**Investigation needed**:
-- [ ] Locate `SparseDataset` implementation
-- [ ] Check how `open_file()` is implemented
-- [ ] Verify if it uses git-annex whereis to get web URLs
-- [ ] Test if it can stream from HTTPS URLs
-- [ ] Fix or implement web URL streaming
+**Location**: `code/src/bids_studies/sparse/access.py`
 
-**Expected behavior**:
-```python
-with SparseDataset(path) as ds:
-    # When file is a broken symlink (annexed, not fetched):
-    # 1. Run git annex whereis <file>
-    # 2. Extract web URL (s3-PUBLIC or similar)
-    # 3. Stream file content from URL
-    # 4. Return file-like object for header parsing
-    with ds.open_file("sub-01/func/sub-01_bold.nii.gz") as f:
-        data = f.read(1024*1024)  # Read first 1MB for header
+**Verification** (2026-03-14):
+- ✅ `open_file()` correctly uses git-annex whereis
+- ✅ Successfully streams from HTTPS S3 URLs
+- ✅ Extracts NIfTI headers without downloading full files
+- ✅ Works perfectly when subdatasets are initialized
+
+**Evidence**:
+```bash
+# Tested manually - SUCCESS
+$ python3 -c "..."
+✓ Successfully read 1048576 bytes
+  First 10 bytes: 1f8b080093efe85c0003  # gzip magic number
+
+# Extracted imaging metrics - SUCCESS
+bold_duration_total: 2257.2000489234924
+bold_voxels_total: 442368
 ```
 
-### Task 2: Improve Error Visibility
+### Task 2: ✅ COMPLETED - Improve Error Visibility (2026-03-14)
 
-**File**: `code/src/bids_studies/extraction/subject.py:226-252`
+**File**: `code/src/bids_studies/extraction/subject.py:246-252`
 
-**Current behavior** (WRONG):
+**Previous behavior** (WRONG):
 ```python
 except Exception as e:
     logger.debug(f"Failed to read BOLD header: {e}")  # DEBUG level - hidden!
     continue  # Silently continue, leave metrics as n/a
 ```
 
-**Required behavior**:
+**Fixed behavior** (2026-03-14):
 ```python
 except Exception as e:
+    # CRITICAL: Log at WARNING level (not DEBUG) per Constitution Principle V
     logger.warning(f"Failed to extract imaging metrics from {bold_file}: {e}")
-    # Option 1: Continue but log at WARNING level (visible)
-    # Option 2: Raise exception after N failures
-    # Option 3: Add to error summary, report at end
-    continue
+    continue  # Continue but log at WARNING level (visible)
 ```
 
-**Rationale**: Critical extraction failures must be visible, not hidden at DEBUG level.
+**Rationale**: Critical extraction failures must be visible per Constitution Principle V (Error Visibility). Operators must know when extraction fails so they can investigate root causes.
 
 ### Task 3: Add Error Handling to Workflow
 
