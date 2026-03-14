@@ -297,7 +297,7 @@ def extract_subjects_stats(
             # Find all subjects
             subjects = ds.list_dirs("sub-*")
             if not subjects:
-                return results
+                return results, all_errors
 
             for subject in subjects:
                 subject_name = subject.split("/")[-1]
