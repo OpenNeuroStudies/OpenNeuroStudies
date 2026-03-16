@@ -91,7 +91,7 @@ studies-tsv:
 		 exit 1)
 
 derivatives-tsv:
-	openneuro-studies metadata generate --derivatives-tsv study-*
+	openneuro-studies metadata generate --derivatives-tsv --stage imaging study-*
 
 metadata-tsv: studies-tsv derivatives-tsv
 
