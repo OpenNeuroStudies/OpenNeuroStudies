@@ -6,6 +6,8 @@ using real datasets from OpenNeuro (both raw and derivatives).
 Test datasets (from CLAUDE.md):
 Raw datasets:
 - ds000001: Single raw dataset (basic case)
+- ds000030: Dataset with MRIQC derivative
+- ds002843: Dataset with MRIQC derivative
 - ds005256: Medium-sized dataset
 - ds006131: Raw dataset with derivatives
 - ds006185: Raw dataset with derivatives
@@ -14,6 +16,8 @@ Raw datasets:
 
 Derivative datasets:
 - ds000001-mriqc: Quality control metrics for ds000001
+- ds000030-mriqc: Quality control metrics for ds000030
+- ds002843-mriqc: Quality control metrics for ds002843
 - ds000212-fmriprep: Preprocessed data (note: raw ds000212 not in test set)
 
 Each raw dataset will automatically discover matching derivatives from OpenNeuroDerivatives.
@@ -99,10 +103,11 @@ def verify_gitlinks_for_submodules(repo_path: Path) -> None:
 
 
 # Test datasets to discover (from CLAUDE.md)
-# NOTE: Only ds000001, ds005256, ds006131 are raw datasets
-# Derivatives are discovered automatically via --include-derivatives flag
+# NOTE: These are raw datasets - derivatives are discovered automatically via --include-derivatives flag
 TEST_RAW_DATASETS = [
     "ds000001",
+    "ds000030",  # Has MRIQC derivative
+    "ds002843",  # Has MRIQC derivative
     "ds005256",
     "ds006131",
 ]
@@ -111,8 +116,11 @@ TEST_RAW_DATASETS = [
 # These are not explicitly filtered but should be found because they are
 # derivatives of the raw datasets above (recursively)
 EXPECTED_DERIVATIVE_DATASETS = [
-    # From OpenNeuroDerivatives (ds000001-mriqc style)
-    # "ds000001-mriqc",  # Would be discovered if exists
+    # From OpenNeuroDerivatives (ds{dataset_id}-{tool} style)
+    "ds000001-mriqc",  # Quality control for ds000001
+    "ds000001-fmriprep",  # Preprocessing for ds000001
+    "ds000030-mriqc",  # Quality control for ds000030
+    "ds002843-mriqc",  # Quality control for ds002843
     # From OpenNeuroDatasets (DatasetType=derivative)
     "ds006185",  # fMRIPrep derivative of ds006131
     "ds006189",  # fMRIPost-AROMA derivative of ds006185 + ds006131

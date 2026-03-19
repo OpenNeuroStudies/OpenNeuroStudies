@@ -498,6 +498,8 @@ Use these datasets for comprehensive testing:
 
 **Raw Datasets:**
 - **ds000001**: Single raw dataset (basic case)
+- **ds000030**: Dataset with MRIQC derivative
+- **ds002843**: Dataset with MRIQC derivative
 - **ds005256**: Medium-sized dataset
 - **ds006131**: Raw dataset with derivatives
 - **ds006185**: Raw dataset with derivatives
@@ -506,6 +508,9 @@ Use these datasets for comprehensive testing:
 
 **Derivative Datasets:**
 - **ds000001-mriqc**: Quality control metrics for ds000001
+- **ds000001-fmriprep**: Preprocessing for ds000001
+- **ds000030-mriqc**: Quality control metrics for ds000030
+- **ds002843-mriqc**: Quality control metrics for ds002843
 - **ds000212-fmriprep**: Preprocessed data (note: raw ds000212 NOT in test set - tests unorganized derivative handling)
 
 ### Test Organization
