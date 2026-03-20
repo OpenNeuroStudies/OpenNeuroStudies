@@ -207,3 +207,7 @@
 	url = https://github.com/OpenNeuroStudies/study-ds006623.git
 	datalad-id = aa6ca0bf-ebe8-4361-9017-a3923868e7c9
 	datalad-url = https://github.com/OpenNeuroStudies/study-ds006623.git
+[submodule "study-ds003900"]
+	path = study-ds003900
+	url = ./study-ds003900
+	datalad-id = cb1a6128-2e20-48fb-82a9-a00b917797b3
