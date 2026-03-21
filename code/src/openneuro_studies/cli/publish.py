@@ -230,14 +230,21 @@ def publish(
         try:
             click.echo(f"\nPublishing {study_id}...", nl=False)
 
-            # Check if already up-to-date
+            # Check if already up-to-date (compare local HEAD with tracked SHA)
             if not force and tracker.is_published(study_id):
                 tracked_study = tracker.status.get_study(study_id)
                 if tracked_study:
-                    remote_sha = publisher.get_remote_head_sha(study_id)
-                    if remote_sha == tracked_study.last_push_commit_sha:
-                        click.echo(" already up-to-date")
-                        continue
+                    local_sha = publisher.get_local_head_sha(study_path)
+                    # Skip only if local HEAD matches what we last pushed
+                    if local_sha == tracked_study.last_push_commit_sha:
+                        # Also verify remote has this commit (detect push failures)
+                        remote_sha = publisher.get_remote_head_sha(study_id)
+                        if remote_sha == local_sha:
+                            click.echo(" already up-to-date")
+                            continue
+                        else:
+                            # Local matches tracking but remote doesn't - push failed previously
+                            click.echo(f" remote out of sync (local={local_sha[:8]}, remote={remote_sha[:8] if remote_sha else 'empty'}), pushing...")
 
             github_url, commit_sha, was_created = publisher.publish_study(study_path, force=force)
 
