@@ -242,7 +242,13 @@ class DatasetFinder:
                                     f"Scanning {org_name}...",
                                 )
                         except Exception as e:
-                            logger.debug("Error processing dataset: %s", e)
+                            repo = future_to_repo[future]
+                            logger.warning(
+                                "Error processing dataset %s from %s: %s",
+                                repo.get("name", "unknown"),
+                                org_name,
+                                e
+                            )
 
                 if progress_callback:
                     progress_callback(

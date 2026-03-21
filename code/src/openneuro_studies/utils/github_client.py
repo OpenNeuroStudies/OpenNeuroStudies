@@ -133,7 +133,29 @@ class GitHubClient:
                         continue
 
                 response.raise_for_status()
-                return response.json()
+
+                # Handle empty/None response content (can happen with cache corruption)
+                if response.content is None:
+                    logger.warning(
+                        "Empty response from %s (possibly cached). Retrying without cache.",
+                        url
+                    )
+                    # Force cache bypass and retry
+                    response = self.session.get(url, params=params, timeout=30, headers={"Cache-Control": "no-cache"})
+                    response.raise_for_status()
+
+                try:
+                    return response.json()
+                except (ValueError, TypeError) as e:
+                    # Deserialization failed - log details for debugging
+                    logger.error(
+                        "Failed to deserialize response from %s: %s (content_type=%s, content_length=%s)",
+                        url,
+                        e,
+                        response.headers.get("content-type"),
+                        response.headers.get("content-length")
+                    )
+                    raise GitHubAPIError(f"Invalid JSON response from {url}: {e}") from e
 
             except requests.exceptions.RequestException as e:
                 if attempt == retry - 1:  # Last attempt
