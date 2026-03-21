@@ -287,7 +287,7 @@ def extract_subjects_stats(
         Tuple of (list of statistics dictionaries, list of error messages)
 
     Raises:
-        RuntimeError: If extraction errors exceed threshold (50% failure rate)
+        RuntimeError: If operational errors occur (zero tolerance for infrastructure failures)
     """
     results: list[dict[str, Any]] = []
     all_errors: list[str] = []
@@ -336,33 +336,42 @@ def extract_subjects_stats(
         logger.warning(error_msg)
         all_errors.append(error_msg)
 
-    # Check if extraction errors exceed threshold
-    if all_errors and results:
-        # Calculate error rate based on failed operations vs successful subjects
-        total_subjects = len(results)
-        error_rate = len(all_errors) / total_subjects if total_subjects > 0 else 0
+    # Classify and handle extraction errors
+    if all_errors:
+        # Import error classification (optional dependency for standalone bids_studies)
+        try:
+            from openneuro_studies.lib.error_classification import aggregate_errors
+            operational_errors, expected_errors = aggregate_errors(all_errors)
+        except ImportError:
+            # Fallback: treat all errors as operational (strict)
+            operational_errors = all_errors
+            expected_errors = []
 
-        # Report error summary
-        logger.warning(
-            f"Extraction completed with {len(all_errors)} errors "
-            f"across {total_subjects} subjects/sessions "
-            f"(error rate: {error_rate:.1%})"
-        )
-
-        # Fail if error rate exceeds 50% (indicates systemic problem)
-        if error_rate > 0.5:
-            error_summary = "\n".join(all_errors[:10])  # Show first 10 errors
-            raise RuntimeError(
-                f"Extraction failed: {len(all_errors)} errors across {total_subjects} subjects "
-                f"(error rate: {error_rate:.1%} exceeds 50% threshold).\n"
-                f"First errors:\n{error_summary}"
+        # Log expected failures at INFO level (tolerated)
+        if expected_errors:
+            logger.info(
+                f"Extraction completed with {len(expected_errors)} expected failures "
+                f"(e.g., missing remote URLs for individual files)"
             )
-    elif all_errors and not results:
-        # All extractions failed - critical error
-        error_summary = "\n".join(all_errors[:10])
-        raise RuntimeError(
-            f"Extraction completely failed: {len(all_errors)} errors, no successful extractions.\n"
-            f"Errors:\n{error_summary}"
-        )
+
+        # Handle operational errors (MUST fail)
+        if operational_errors:
+            total_subjects = len(results)
+            error_summary = "\n".join(operational_errors[:10])  # Show first 10
+
+            if not results:
+                # All extractions failed - critical operational error
+                raise RuntimeError(
+                    f"Extraction completely failed: {len(operational_errors)} operational errors, "
+                    f"no successful extractions.\n"
+                    f"Operational errors:\n{error_summary}"
+                )
+            else:
+                # Some operational errors - fail immediately (no tolerance)
+                raise RuntimeError(
+                    f"Extraction failed: {len(operational_errors)} operational errors "
+                    f"across {total_subjects} subjects/sessions. Zero tolerance for operational errors.\n"
+                    f"First errors:\n{error_summary}"
+                )
 
     return results, all_errors
