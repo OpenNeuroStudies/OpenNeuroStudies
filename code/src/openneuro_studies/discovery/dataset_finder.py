@@ -4,6 +4,7 @@ import json
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -12,6 +13,13 @@ from openneuro_studies.models import DerivativeDataset, SourceDataset
 from openneuro_studies.utils import GitHubAPIError, GitHubClient
 
 logger = logging.getLogger(__name__)
+
+
+class RelationType(str, Enum):
+    """Types of dataset relationships for filter expansion."""
+    DERIVATIVES = "derivatives"  # Raw → Derivatives
+    SOURCES = "sources"           # Derivatives → Sources
+    ALL = "all"                   # Both directions
 
 
 class DatasetDiscoveryError(Exception):
@@ -27,7 +35,10 @@ class DatasetFinder:
         config: OpenNeuroStudies configuration
         github_client: GitHub API client
         test_dataset_filter: Optional list of dataset IDs to filter for testing
-        include_derivatives: Whether to include derivatives of filtered datasets
+        include_derivatives: DEPRECATED. Whether to include derivatives of filtered datasets
+        include_related: Set of relationship types to expand filter with
+                        (e.g., {"derivatives"}, {"sources"}, {"all"})
+        max_workers: Maximum number of parallel workers for dataset processing
     """
 
     def __init__(
@@ -36,6 +47,7 @@ class DatasetFinder:
         github_client: Optional[GitHubClient] = None,
         test_dataset_filter: Optional[List[str]] = None,
         include_derivatives: bool = False,
+        include_related: Optional[set[str]] = None,
         max_workers: int = 10,
     ):
         """Initialize dataset finder.
@@ -45,9 +57,15 @@ class DatasetFinder:
             github_client: GitHub API client (creates new if None)
             test_dataset_filter: Optional list of dataset IDs for testing
                                 (e.g., ["ds000001", "ds005256"])
-            include_derivatives: When True, automatically include derivatives whose
+            include_derivatives: DEPRECATED. Use include_related={"derivatives"} instead.
+                               When True, automatically include derivatives whose
                                source_datasets intersect with test_dataset_filter.
                                Recursively includes derivatives of derivatives.
+            include_related: Set of relationship types to expand filter with.
+                           Options: {"derivatives"}, {"sources"}, {"all"}, or {"derivatives", "sources"}
+                           - "derivatives": Include derivatives of filtered datasets
+                           - "sources": Include source datasets of filtered derivatives
+                           - "all": Include both derivatives and sources (bidirectional)
             max_workers: Maximum number of parallel workers for dataset processing (default: 10)
         """
         self.config = config
@@ -56,6 +74,7 @@ class DatasetFinder:
         self.github_client = github_client or GitHubClient(max_connections=max(max_workers * 2, 50))
         self.test_dataset_filter = test_dataset_filter
         self.include_derivatives = include_derivatives
+        self.include_related = include_related or set()
         self.max_workers = max_workers
 
     def discover_all(
@@ -65,17 +84,21 @@ class DatasetFinder:
     ) -> Dict[str, List[Union[SourceDataset, DerivativeDataset]]]:
         """Discover all datasets from configured sources.
 
-        When include_derivatives is True and test_dataset_filter is set, this method:
-        1. Discovers all datasets from derivative sources (no filter) to find relationships
-        2. Expands the filter to include derivatives whose source_datasets intersect
-           with the filtered set (recursively, to handle derivatives of derivatives)
+        When include_related is set and test_dataset_filter is set, this method:
+        1. Discovers all datasets from sources (no filter) to find relationships
+        2. Expands the filter to include related datasets based on include_related settings:
+           - "derivatives": Include derivatives whose source_datasets intersect with filter
+           - "sources": Include source datasets referenced by derivatives in filter
+           - "all": Include both derivatives and sources (bidirectional expansion)
         3. Returns only datasets matching the expanded filter
+
+        For backward compatibility, include_derivatives=True is treated as include_related={"derivatives"}
 
         Args:
             progress_callback: Optional callback function called for each processed dataset
                              with the dataset ID as argument
-            expansion_progress_callback: Optional callback(phase, message) for derivative
-                                        expansion progress reporting
+            expansion_progress_callback: Optional callback(phase, message) for expansion
+                                        progress reporting
 
         Returns:
             Dictionary with 'raw' and 'derivative' keys containing lists of datasets
@@ -83,9 +106,23 @@ class DatasetFinder:
         Raises:
             DatasetDiscoveryError: If discovery fails
         """
-        # If include_derivatives is set, we need to expand the filter
+        # Determine which expansion method to use
         effective_filter = self.test_dataset_filter
-        if self.include_derivatives and self.test_dataset_filter:
+
+        # Priority: include_related > include_derivatives (for backward compatibility)
+        if self.include_related and self.test_dataset_filter:
+            effective_filter = self._expand_filter_with_related(
+                include_related=self.include_related,
+                progress_callback=expansion_progress_callback
+            )
+            logger.info(
+                "Expanded filter from %d to %d datasets (including related: %s)",
+                len(self.test_dataset_filter),
+                len(effective_filter),
+                ", ".join(sorted(self.include_related)),
+            )
+        elif self.include_derivatives and self.test_dataset_filter:
+            # Backward compatibility: include_derivatives=True → include_related={"derivatives"}
             effective_filter = self._expand_filter_with_derivatives(
                 progress_callback=expansion_progress_callback
             )
@@ -303,6 +340,238 @@ class DatasetFinder:
                                     "added",
                                     f"  + {src} (source required by {deriv.dataset_id})",
                                 )
+
+        return list(expanded_set)
+
+    def _expand_filter_with_sources(
+        self,
+        progress_callback: Optional[Callable[[str, str], None]] = None,
+    ) -> List[str]:
+        """Expand test_dataset_filter to include sources of filtered derivatives.
+
+        This method discovers all derivatives (without filter) and then finds which
+        source datasets are referenced by derivatives in the filtered set. It recursively
+        expands to include sources of sources (derivative chains).
+
+        Args:
+            progress_callback: Optional callback(phase, message) for progress reporting
+
+        Returns:
+            Expanded list of dataset IDs including sources
+        """
+        if not self.test_dataset_filter:
+            return []
+
+        # Start with the original filter set
+        expanded_set = set(self.test_dataset_filter)
+
+        # Discover all derivatives from derivative sources to find relationships
+        # We need to discover without filter to find all potential derivatives
+        all_derivatives: List[DerivativeDataset] = []
+
+        for source_spec in self.config.sources:
+            try:
+                org_path: Any = source_spec.organization_url.path
+                org_name = str(org_path).strip("/")
+
+                if progress_callback:
+                    progress_callback("scan", f"Listing repositories from {org_name}...")
+
+                # List ALL repositories (no filter) to find derivatives
+                repos = self.github_client.list_repositories(org_name, dataset_filter=None)
+
+                # Filter by inclusion/exclusion patterns
+                filtered_repos = self._filter_repos(repos, source_spec.inclusion_patterns)
+                if source_spec.exclusion_patterns:
+                    filtered_repos = [
+                        r
+                        for r in filtered_repos
+                        if not any(
+                            re.match(pattern, r["name"])
+                            for pattern in source_spec.exclusion_patterns
+                        )
+                    ]
+
+                if progress_callback:
+                    progress_callback(
+                        "scan",
+                        f"Scanning {len(filtered_repos)} repos in {org_name} for derivatives...",
+                    )
+
+                # Process repositories to find derivatives
+                processed_count = 0
+                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                    future_to_repo = {
+                        executor.submit(self._process_dataset, org_name, repo): repo
+                        for repo in filtered_repos
+                    }
+
+                    for future in as_completed(future_to_repo):
+                        processed_count += 1
+                        try:
+                            dataset = future.result()
+                            if dataset and isinstance(dataset, DerivativeDataset):
+                                all_derivatives.append(dataset)
+                                if progress_callback:
+                                    progress_callback(
+                                        "found",
+                                        f"[{processed_count}/{len(filtered_repos)}] "
+                                        f"Found derivative: {dataset.dataset_id}",
+                                    )
+                            elif progress_callback and processed_count % 50 == 0:
+                                # Report progress every 50 repos
+                                progress_callback(
+                                    "progress",
+                                    f"[{processed_count}/{len(filtered_repos)}] "
+                                    f"Scanning {org_name}...",
+                                )
+                        except Exception as e:
+                            logger.debug("Error processing dataset: %s", e)
+
+                if progress_callback:
+                    progress_callback(
+                        "done", f"Found {len(all_derivatives)} derivatives in {org_name}"
+                    )
+
+            except GitHubAPIError as e:
+                logger.warning("Failed to list derivatives from %s: %s", source_spec.name, e)
+
+        # Iteratively expand the set to include sources of derivatives in the set
+        # This handles the derivative chain case (derivative → source → source's source)
+        if progress_callback:
+            progress_callback("expand", "Expanding filter to include related sources...")
+
+        changed = True
+        iteration = 0
+        while changed:
+            changed = False
+            iteration += 1
+            for deriv in all_derivatives:
+                # If this derivative is in our set, add all its sources
+                if deriv.dataset_id in expanded_set:
+                    for source_id in deriv.source_datasets:
+                        if source_id not in expanded_set:
+                            expanded_set.add(source_id)
+                            changed = True
+                            logger.debug(
+                                "Added source %s (from derivative %s)",
+                                source_id,
+                                deriv.dataset_id,
+                            )
+                            if progress_callback:
+                                progress_callback(
+                                    "added",
+                                    f"  + {source_id} (source of {deriv.dataset_id})",
+                                )
+
+            if changed and progress_callback:
+                progress_callback(
+                    "expand",
+                    f"Iteration {iteration}: expanded to {len(expanded_set)} datasets",
+                )
+
+        return list(expanded_set)
+
+    def _expand_filter_with_related(
+        self,
+        include_related: set[str],
+        progress_callback: Optional[Callable[[str, str], None]] = None,
+    ) -> List[str]:
+        """Expand test_dataset_filter to include related datasets (derivatives and/or sources).
+
+        This orchestrator method handles both unidirectional and bidirectional expansion:
+        - "derivatives": Raw → Derivatives (forward)
+        - "sources": Derivatives → Sources (backward)
+        - "all": Both directions until closure
+
+        Args:
+            include_related: Set of relation types to expand (e.g., {"derivatives", "sources"})
+            progress_callback: Optional callback(phase, message) for progress reporting
+
+        Returns:
+            Expanded list of dataset IDs including related datasets
+        """
+        if not self.test_dataset_filter:
+            return []
+
+        # Normalize "all" to both directions
+        directions = include_related.copy()
+        if "all" in directions:
+            directions = {"derivatives", "sources"}
+
+        # Single direction case: delegate to specific method
+        if len(directions) == 1:
+            direction = next(iter(directions))
+            if direction == "derivatives":
+                if progress_callback:
+                    progress_callback("expand", "Expanding filter with derivatives...")
+                return self._expand_filter_with_derivatives(progress_callback=progress_callback)
+            elif direction == "sources":
+                if progress_callback:
+                    progress_callback("expand", "Expanding filter with sources...")
+                return self._expand_filter_with_sources(progress_callback=progress_callback)
+
+        # Bidirectional case: iterate both directions until closure
+        if progress_callback:
+            progress_callback("expand", "Expanding filter bidirectionally (derivatives + sources)...")
+
+        expanded_set = set(self.test_dataset_filter)
+        changed = True
+        iteration = 0
+
+        while changed:
+            changed = False
+            iteration += 1
+            prev_size = len(expanded_set)
+
+            if progress_callback:
+                progress_callback(
+                    "expand",
+                    f"Iteration {iteration}: Starting with {prev_size} datasets",
+                )
+
+            # Temporarily set test_dataset_filter to current expanded set
+            original_filter = self.test_dataset_filter
+            self.test_dataset_filter = list(expanded_set)
+
+            # Expand in both directions
+            if "derivatives" in directions:
+                if progress_callback:
+                    progress_callback("expand", f"  Expanding derivatives (iteration {iteration})...")
+                deriv_expanded = set(self._expand_filter_with_derivatives(progress_callback=progress_callback))
+                expanded_set.update(deriv_expanded)
+
+            if "sources" in directions:
+                if progress_callback:
+                    progress_callback("expand", f"  Expanding sources (iteration {iteration})...")
+                source_expanded = set(self._expand_filter_with_sources(progress_callback=progress_callback))
+                expanded_set.update(source_expanded)
+
+            # Restore original filter
+            self.test_dataset_filter = original_filter
+
+            # Check if we added anything new
+            if len(expanded_set) > prev_size:
+                changed = True
+                if progress_callback:
+                    progress_callback(
+                        "expand",
+                        f"Iteration {iteration}: Expanded to {len(expanded_set)} datasets "
+                        f"(+{len(expanded_set) - prev_size})",
+                    )
+            else:
+                if progress_callback:
+                    progress_callback(
+                        "expand",
+                        f"Iteration {iteration}: No new datasets found, closure reached",
+                    )
+
+        logger.info(
+            "Bidirectional expansion complete: %d → %d datasets in %d iterations",
+            len(self.test_dataset_filter),
+            len(expanded_set),
+            iteration,
+        )
 
         return list(expanded_set)
 
