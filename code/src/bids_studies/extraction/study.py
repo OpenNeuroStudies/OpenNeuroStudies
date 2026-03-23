@@ -5,6 +5,7 @@ in study metadata files.
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,7 @@ from bids_studies.extraction.tsv import (
     write_subjects_tsv,
 )
 from bids_studies.schemas import get_schema_path
+from openneuro_studies.lib.error_tracking import ErrorLevel, log_error
 
 logger = logging.getLogger(__name__)
 
@@ -160,17 +162,89 @@ def extract_study_stats(
             f"Study extraction completed with {len(all_extraction_errors)} errors. "
             f"First 5 errors:\n" + "\n".join(all_extraction_errors[:5])
         )
-        # Write errors to file
-        errors_file = sourcedata_path / "extraction_errors.log"
+
+        # Write structured error log (JSONL format)
+        study_id = study_path.name  # e.g., "study-ds001506"
+        errors_jsonl = sourcedata_path / "errors.jsonl"
+
         try:
+            # Extract dataset_id from study_id (e.g., "ds001506" from "study-ds001506")
+            dataset_match = re.match(r"study-(ds\d+)", study_id)
+            dataset_id = dataset_match.group(1) if dataset_match else "unknown"
+
+            # Get dataset version from git if available
+            dataset_version = None
+            for source_dir in source_dirs:
+                try:
+                    import subprocess
+                    result = subprocess.run(
+                        ["git", "-C", str(source_dir), "rev-parse", "--short", "HEAD"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    if result.returncode == 0:
+                        dataset_version = result.stdout.strip()
+                        break
+                except Exception:
+                    pass
+
+            # Log each error to structured error tracking
+            for error_msg in all_extraction_errors:
+                # Try to extract context from error message
+                # Format: "dataset_id: Failed to extract from sub-01/ses-01/file.nii.gz: error"
+                # or: "Failed to extract imaging metrics from file.nii.gz: error"
+
+                # Default to dataset level
+                level: ErrorLevel = "dataset"
+                subject_id = None
+                session_id = None
+                file_path = None
+
+                # Try to extract subject/session/file from error message
+                if "sub-" in error_msg:
+                    subject_match = re.search(r"(sub-\w+)", error_msg)
+                    if subject_match:
+                        subject_id = subject_match.group(1)
+                        level = "subject"
+
+                    session_match = re.search(r"(ses-\w+)", error_msg)
+                    if session_match:
+                        session_id = session_match.group(1)
+                        level = "session"
+
+                    # Extract file path if present
+                    file_match = re.search(r"(sub-[^:]+\.nii\.gz|sub-[^:]+\.json)", error_msg)
+                    if file_match:
+                        file_path = file_match.group(1)
+                        level = "file"
+
+                # Log the error
+                log_error(
+                    error_log_path=errors_jsonl,
+                    study_id=study_id,
+                    dataset_id=dataset_id,
+                    error_msg=error_msg,
+                    level=level,
+                    dataset_version=dataset_version,
+                    subject_id=subject_id,
+                    session_id=session_id,
+                    file_path=file_path,
+                )
+
+            logger.error(f"Structured error log written to: {errors_jsonl}")
+
+            # Also write legacy plain-text log for backward compatibility
+            errors_file = sourcedata_path / "extraction_errors.log"
             with open(errors_file, "w") as f:
                 f.write(f"Extraction Errors ({len(all_extraction_errors)} total)\n")
                 f.write("=" * 60 + "\n\n")
                 for error in all_extraction_errors:
                     f.write(f"{error}\n")
-            logger.error(f"Full error log written to: {errors_file}")
+            logger.info(f"Legacy error log written to: {errors_file}")
+
         except Exception as e:
-            logger.warning(f"Failed to write error log: {e}")
+            logger.warning(f"Failed to write error logs: {e}")
 
     # Write TSV files
     if write_files and all_subjects_stats:

@@ -9,6 +9,7 @@ import click
 
 from openneuro_studies import __version__
 from openneuro_studies.cli.discover import discover as discover_cmd
+from openneuro_studies.cli.errors import errors as errors_cmd
 from openneuro_studies.cli.init import init as init_cmd
 from openneuro_studies.cli.migrate import migrate as migrate_cmd
 from openneuro_studies.cli.organize import organize as organize_cmd
@@ -97,6 +98,7 @@ cli.add_command(provision_cmd, name="provision")
 cli.add_command(migrate_cmd, name="migrate")
 cli.add_command(publish_cmd, name="publish")
 cli.add_command(unpublish_cmd, name="unpublish")
+cli.add_command(errors_cmd, name="errors")
 
 
 @cli.group()
