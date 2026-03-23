@@ -56,6 +56,10 @@ htmlcov/
 # Keep *.log pattern for any stray logs outside subdataset
 *.log
 
+# Generated analysis reports (logs/ at repository root)
+# These are created by analysis scripts and should not be committed
+logs/
+
 # Temporary files
 *.tmp
 *.bak
