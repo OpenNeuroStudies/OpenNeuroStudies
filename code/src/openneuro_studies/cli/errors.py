@@ -343,16 +343,10 @@ def analyze_quality(output_format, output):
         openneuro-studies errors analyze-quality --format tsv --output quality.tsv
     """
     import json
-    from collections import defaultdict
-    import os
-
-    # DEBUG
-    click.echo(f"[analyze_quality] CWD: {os.getcwd()}", err=True)
-    click.echo(f"[analyze_quality] Looking in: {Path('.snakemake/extracted').absolute()}", err=True)
 
     # Find all extraction JSON files
     json_files = sorted(Path(".snakemake/extracted").glob("study-*.json"))
-    click.echo(f"[analyze_quality] Found {len(json_files)} JSON files", err=True)
+    logger.debug(f"Found {len(json_files)} extraction JSON files")
 
     if not json_files:
         click.echo("No extraction JSON files found in .snakemake/extracted/")
@@ -361,7 +355,6 @@ def analyze_quality(output_format, output):
 
     # Analyze all studies
     results = []
-    click.echo(f"[analyze_quality] Processing {len(json_files)} files", err=True)
     for json_path in json_files:
         try:
             with open(json_path) as f:
@@ -402,33 +395,24 @@ def analyze_quality(output_format, output):
                     "missing_count": missing_imaging,
                 }
             )
-            click.echo(f"[analyze_quality] Processed {study_id}, status={status}", err=True)
         except Exception as e:
             click.echo(f"Warning: Failed to analyze {json_path}: {e}", err=True)
 
-    click.echo(f"[analyze_quality] Total results: {len(results)}", err=True)
     if not results:
         click.echo("No valid extraction results found.")
         return
 
-    click.echo(f"[analyze_quality] Grouping by status", err=True)
-    # Group by status
-    by_status = defaultdict(list)
-    click.echo(f"[analyze_quality] Created defaultdict", err=True)
-    try:
-        for r in results:
-            click.echo(f"[analyze_quality] Processing result: {r.get('study_id')}", err=True)
-            by_status[r["status"]].append(r)
-            click.echo(f"[analyze_quality] Appended to status: {r['status']}", err=True)
-        click.echo(f"[analyze_quality] Grouped {len(by_status)} statuses", err=True)
-    except Exception as e:
-        click.echo(f"[analyze_quality] ERROR in grouping: {e}", err=True)
-        raise
+    # Group by status - use regular dict instead of defaultdict
+    # (defaultdict causes issues with Click's command processing)
+    by_status = {}
+    for r in results:
+        status_key = r["status"]
+        if status_key not in by_status:
+            by_status[status_key] = []
+        by_status[status_key].append(r)
 
-    click.echo(f"[analyze_quality] output_format={output_format}", err=True)
     # Output
     if output_format == "table":
-        click.echo(f"[analyze_quality] Entering table output", err=True)
         click.echo(f"\nAnalyzed {len(results)} studies\n")
 
         click.echo("## Summary by Status\n")
@@ -440,12 +424,12 @@ def analyze_quality(output_format, output):
             "missing_imaging_metrics",
             "no_bold",
         ]:
-            count = len(by_status[status])
+            count = len(by_status.get(status, []))
             if count > 0:
                 click.echo(f"{status:<30} {count:<10}")
 
         # Show datasets with missing imaging metrics
-        if by_status["missing_imaging_metrics"]:
+        if by_status.get("missing_imaging_metrics"):
             click.echo(
                 f"\n## Datasets Missing Imaging Metrics ({len(by_status['missing_imaging_metrics'])})\n"
             )
@@ -455,14 +439,14 @@ def analyze_quality(output_format, output):
             )
             click.echo("-" * 67)
 
-            for r in sorted(by_status["missing_imaging_metrics"], key=lambda x: x["study_id"]):
+            for r in sorted(by_status.get("missing_imaging_metrics", []), key=lambda x: x["study_id"]):
                 click.echo(
                     f"{r['study_id']:<25} {str(r['subjects_num']):<10} "
                     f"{str(r['bold_num']):<12} {str(r['t1w_num']):<10}"
                 )
 
         # Show datasets with partial metrics
-        if by_status["partial_imaging_metrics"]:
+        if by_status.get("partial_imaging_metrics", []):
             click.echo(
                 f"\n## Datasets with Partial Imaging Metrics ({len(by_status['partial_imaging_metrics'])})\n"
             )
@@ -472,7 +456,7 @@ def analyze_quality(output_format, output):
             )
             click.echo("-" * 72)
 
-            for r in sorted(by_status["partial_imaging_metrics"], key=lambda x: x["study_id"]):
+            for r in sorted(by_status.get("partial_imaging_metrics", []), key=lambda x: x["study_id"]):
                 click.echo(
                     f"{r['study_id']:<25} {str(r['subjects_num']):<10} "
                     f"{str(r['bold_num']):<12} {r['missing_count']}/4"
