@@ -3,7 +3,7 @@
 # Prerequisites: openneuro-studies and snakemake must be in PATH
 # (activate venv before running make, or install globally)
 
-.PHONY: help discover organize extract metadata full-refresh refresh studies-init clean full-clean analyze-state test-expectations
+.PHONY: help discover organize extract metadata full-refresh refresh studies-init clean full-clean analyze-state test-expectations errors-quality errors-legacy errors-report
 
 # Default number of cores for parallel operations
 CORES ?= 8
@@ -25,6 +25,11 @@ help:
 	@echo "  make studies-tsv     - Update studies.tsv only"
 	@echo "  make derivatives-tsv - Update studies+derivatives.tsv only"
 	@echo "  make metadata        - Generate all metadata files"
+	@echo ""
+	@echo "Error Analysis:"
+	@echo "  make errors-quality  - Analyze extraction quality (n/a metrics)"
+	@echo "  make errors-legacy   - Analyze legacy extraction_errors.log files"
+	@echo "  make errors-report   - Generate comprehensive error report"
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make extract-one STUDY=<name>  - Extract single study"
@@ -145,3 +150,26 @@ analyze-state:
 test-expectations:
 	@echo "Running metadata extraction expectations tests..."
 	@bash code/tests/test-expectations.sh
+
+# Error Analysis Commands
+errors-quality:
+	@echo "Analyzing extraction quality..."
+	@openneuro-studies errors analyze-quality --format table
+	@echo ""
+	@echo "Detailed TSV report: logs/extraction_quality.tsv"
+
+errors-legacy:
+	@echo "Analyzing legacy extraction error logs..."
+	@openneuro-studies errors analyze-legacy --format table
+	@echo ""
+	@echo "Detailed TSV report: logs/extraction_errors.tsv"
+
+errors-report: errors-quality errors-legacy
+	@echo ""
+	@echo "════════════════════════════════════════════════════════════"
+	@echo "Error Analysis Complete"
+	@echo "════════════════════════════════════════════════════════════"
+	@echo "Quality report:  logs/extraction_quality.tsv"
+	@echo "Legacy report:   logs/extraction_errors.tsv"
+	@echo ""
+	@echo "Use 'openneuro-studies errors --help' for more options"

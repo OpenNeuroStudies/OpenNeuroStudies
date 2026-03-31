@@ -217,6 +217,11 @@ make extract-one STUDY=study-ds002843
 # Discover new datasets and organize
 make full-refresh CORES=4
 
+# Error analysis and diagnostics
+make errors-quality    # Analyze extraction quality (n/a metrics)
+make errors-legacy     # Analyze legacy extraction_errors.log files
+make errors-report     # Generate comprehensive error report (both)
+
 # Clean Snakemake locks/cache
 make clean
 ```
@@ -273,6 +278,12 @@ openneuro-studies validate
 
 # Check status
 openneuro-studies status
+
+# Error analysis
+openneuro-studies errors analyze-quality --format table
+openneuro-studies errors analyze-quality --format tsv --output custom_report.tsv
+openneuro-studies errors analyze-legacy --format table
+openneuro-studies errors list  # List all error logs
 ```
 
 ### Testing
