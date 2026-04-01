@@ -530,18 +530,23 @@ def analyze_legacy(output_format, output):
             with open(log_path) as f:
                 content = f.read()
 
-            # Parse header
-            dataset_match = re.search(
-                r"^(\w+): Extraction (?:failed|completed)", content, re.MULTILINE
-            )
-            dataset_id = dataset_match.group(1) if dataset_match else "unknown"
-
-            errors_match = re.search(r"(\d+) errors across (\d+) subjects", content)
+            # Parse header - format: "Extraction Errors (N total)"
+            errors_match = re.search(r"Extraction Errors \((\d+) total\)", content)
             total_errors = int(errors_match.group(1)) if errors_match else 0
-            total_subjects = int(errors_match.group(2)) if errors_match else 0
 
-            rate_match = re.search(r"error rate: ([\d.]+)%", content)
-            error_rate = float(rate_match.group(1)) if rate_match else 0.0
+            # Extract dataset ID from study directory name
+            # study-dsXXXXXX -> dsXXXXXX
+            study_id_match = re.match(r"study-(ds\d+)", study_id)
+            if study_id_match:
+                dataset_id = study_id_match.group(1)
+            else:
+                # Try to extract from error messages
+                dataset_match = re.search(r"sourcedata/(ds\d+)", content)
+                dataset_id = dataset_match.group(1) if dataset_match else "unknown"
+
+            # Subject count not available in legacy logs
+            total_subjects = 0
+            error_rate = 0.0
 
             # Extract first few errors
             first_errors = []
@@ -577,14 +582,13 @@ def analyze_legacy(output_format, output):
         click.echo(f"\nFound {len(error_logs)} studies with extraction errors\n")
 
         click.echo("## Studies with Errors (sorted by count)\n")
-        click.echo(f"{'Study':<20} {'Dataset':<15} {'Errors':<10} {'Subjects':<10} {'Rate':<10}")
-        click.echo("-" * 75)
+        click.echo(f"{'Study':<25} {'Dataset':<15} {'Errors':<10}")
+        click.echo("-" * 55)
 
         total_errors_all = 0
         for r in results:
             click.echo(
-                f"{r['study_id']:<20} {r['dataset_id']:<15} {r['total_errors']:<10} "
-                f"{r['total_subjects']:<10} {r['error_rate']:.1f}%"
+                f"{r['study_id']:<25} {r['dataset_id']:<15} {r['total_errors']:<10}"
             )
             total_errors_all += r["total_errors"]
 
@@ -618,9 +622,7 @@ def analyze_legacy(output_format, output):
         click.echo("\n## Top 5 Most Problematic Datasets\n")
         for i, r in enumerate(results[:5], 1):
             click.echo(f"{i}. {r['study_id']} ({r['dataset_id']})")
-            click.echo(
-                f"   Errors: {r['total_errors']} across {r['total_subjects']} subjects ({r['error_rate']:.1f}%)"
-            )
+            click.echo(f"   Total errors: {r['total_errors']}")
             click.echo(f"   Log: {r['log_path']}")
             if r["first_errors"]:
                 click.echo(f"   First error: {r['first_errors'][0][:100]}...")
@@ -631,11 +633,12 @@ def analyze_legacy(output_format, output):
     output_path.parent.mkdir(exist_ok=True)
 
     with open(output_path, "w") as f:
-        f.write("study_id\tdataset_id\ttotal_errors\ttotal_subjects\terror_rate\tlog_path\n")
+        f.write("study_id\tdataset_id\ttotal_errors\tlog_path\tfirst_error\n")
         for r in results:
+            first_error = r['first_errors'][0] if r['first_errors'] else ""
             f.write(
                 f"{r['study_id']}\t{r['dataset_id']}\t{r['total_errors']}\t"
-                f"{r['total_subjects']}\t{r['error_rate']:.1f}\t{r['log_path']}\n"
+                f"{r['log_path']}\t{first_error}\n"
             )
 
     click.echo(f"\n✓ Detailed summary written to: {output_path}")

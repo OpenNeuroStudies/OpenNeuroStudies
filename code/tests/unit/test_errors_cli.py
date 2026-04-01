@@ -231,7 +231,8 @@ class TestAnalyzeLegacy:
         study_dir = tmp_path / "study-ds001506" / "sourcedata"
         study_dir.mkdir(parents=True)
 
-        error_log = """ds001506: Extraction completed with 100 errors across 10 subjects (error rate: 100.0%).
+        error_log = """Extraction Errors (100 total)
+============================================================
 
 Failed to extract from sub-01: No remote URL found for file
 Failed to extract from sub-02: No remote URL found for file
@@ -245,15 +246,14 @@ Failed to extract from sub-03: Network connection timeout
         assert "Found 1 studies with extraction errors" in result.output
         assert "ds001506" in result.output
         assert "100" in result.output
-        assert "10" in result.output
-        assert "100.0%" in result.output
 
     def test_error_categorization(self, runner, tmp_path):
         """Test error categorization by type."""
         study_dir = tmp_path / "study-test" / "sourcedata"
         study_dir.mkdir(parents=True)
 
-        error_log = """dstest: Extraction completed with 50 errors across 5 subjects (error rate: 100.0%).
+        error_log = """Extraction Errors (5 total)
+============================================================
 
 Failed to extract: No remote URL found
 Failed to extract: Network connection failed
@@ -278,13 +278,13 @@ Failed to extract: Unknown error
         # Study with many errors
         study1_dir = tmp_path / "study-ds000001" / "sourcedata"
         study1_dir.mkdir(parents=True)
-        log1 = "ds000001: Extraction completed with 500 errors across 50 subjects (error rate: 100.0%)."
+        log1 = "Extraction Errors (500 total)\n============================================================\n"
         (study1_dir / "extraction_errors.log").write_text(log1)
 
         # Study with few errors
         study2_dir = tmp_path / "study-ds000002" / "sourcedata"
         study2_dir.mkdir(parents=True)
-        log2 = "ds000002: Extraction completed with 10 errors across 5 subjects (error rate: 20.0%)."
+        log2 = "Extraction Errors (10 total)\n============================================================\n"
         (study2_dir / "extraction_errors.log").write_text(log2)
 
         result = run_in_dir(runner, errors, ["analyze-legacy", "--format", "table"], tmp_path)
@@ -305,7 +305,7 @@ Failed to extract: Unknown error
             study_dir = tmp_path / f"study-ds00000{i}" / "sourcedata"
             study_dir.mkdir(parents=True)
             error_count = i * 100
-            log = f"ds00000{i}: Extraction completed with {error_count} errors across {i*10} subjects (error rate: 100.0%).\nFailed to extract: test error"
+            log = f"Extraction Errors ({error_count} total)\n============================================================\n\nFailed to extract: test error"
             (study_dir / "extraction_errors.log").write_text(log)
 
         result = run_in_dir(runner, errors, ["analyze-legacy", "--format", "table"], tmp_path)
@@ -323,9 +323,9 @@ Failed to extract: Unknown error
 
     def test_tsv_output_format(self, runner, tmp_path):
         """Test TSV output format."""
-        study_dir = tmp_path / "study-test" / "sourcedata"
+        study_dir = tmp_path / "study-ds999999" / "sourcedata"
         study_dir.mkdir(parents=True)
-        error_log = "dstest: Extraction completed with 50 errors across 5 subjects (error rate: 100.0%)."
+        error_log = "Extraction Errors (50 total)\n============================================================\n\nFailed to extract: test error"
         (study_dir / "extraction_errors.log").write_text(error_log)
 
         output_file = tmp_path / "output.tsv"
@@ -343,7 +343,7 @@ Failed to extract: Unknown error
         assert "study_id\tdataset_id\ttotal_errors" in lines[0]
 
         # Check data row
-        assert "study-test\tdstest\t50\t5\t100.0" in lines[1]
+        assert "study-ds999999\tds999999\t50" in lines[1]
 
     def test_malformed_log_handling(self, runner, tmp_path):
         """Test handling of malformed log files."""
@@ -355,14 +355,14 @@ Failed to extract: Unknown error
         # Valid log
         study2_dir = tmp_path / "study-valid" / "sourcedata"
         study2_dir.mkdir(parents=True)
-        valid_log = "dsvalid: Extraction completed with 10 errors across 2 subjects (error rate: 50.0%)."
+        valid_log = "Extraction Errors (10 total)\n============================================================\n"
         (study2_dir / "extraction_errors.log").write_text(valid_log)
 
         result = run_in_dir(runner, errors, ["analyze-legacy"], tmp_path)
 
         assert result.exit_code == 0
         # Should process valid log despite malformed one
-        assert "dsvalid" in result.output or "Found 1 studies" in result.output
+        assert "valid" in result.output or "Found 1 studies" in result.output
 
     def test_empty_error_log(self, runner, tmp_path):
         """Test handling of empty error log files."""
