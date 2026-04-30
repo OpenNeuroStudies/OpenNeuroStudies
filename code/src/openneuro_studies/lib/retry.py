@@ -118,6 +118,11 @@ def _is_retriable_network_error(error: Exception) -> bool:
     # Check error type name (avoid hard dependency on optional libraries)
     error_type = type(error).__name__
 
+    # FileNotFoundError is an OSError subclass but is NOT a network error —
+    # missing files/URLs are not transient and should not be retried
+    if isinstance(error, FileNotFoundError):
+        return False
+
     # OSError and subclasses (ConnectionError, TimeoutError, etc.)
     if isinstance(error, (OSError, TimeoutError)):
         return True

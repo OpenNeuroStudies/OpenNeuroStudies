@@ -52,9 +52,10 @@ dev = [
     "types-requests>=2.31.0",
 ]
 # Note: sparse and imaging dependencies are now in core dependencies
-# Keep datalad-fuse as optional (alternative to fsspec)
+# datalad-fuse with S3 exporttree workaround (datalad/datalad-fuse#133)
+# TODO: switch back to release once PR is merged/released
 fuse = [
-    "datalad-fuse>=0.4.0",
+    "datalad-fuse @ git+https://github.com/datalad/datalad-fuse.git@enh-s3-via-export",
 ]
 
 [project.scripts]

@@ -35,7 +35,7 @@ except ImportError:
 
 # Try to import datalad-fuse, but don't require it
 try:
-    from datalad_fuse import FsspecAdapter
+    from datalad_fuse.fsspec import FsspecAdapter
 
     DATALAD_FUSE_AVAILABLE = True
 except ImportError:
@@ -78,7 +78,9 @@ class SparseDataset:
         """Enter context manager."""
         if DATALAD_FUSE_AVAILABLE:
             try:
-                self._adapter = FsspecAdapter(str(self.path))
+                # FsspecAdapter needs absolute path for dataset root resolution
+                abs_path = str(self.path.resolve())
+                self._adapter = FsspecAdapter(abs_path, caching=False)
             except Exception as e:
                 logger.warning(f"Failed to initialize FsspecAdapter: {e}")
                 self._adapter = None
@@ -90,9 +92,8 @@ class SparseDataset:
         """Exit context manager."""
         if self._adapter is not None:
             try:
-                # FsspecAdapter may have cleanup
-                if hasattr(self._adapter, "close"):
-                    self._adapter.close()
+                if hasattr(self._adapter, "__exit__"):
+                    self._adapter.__exit__(exc_type, exc_val, exc_tb)
             except Exception:
                 pass
             self._adapter = None
@@ -295,14 +296,15 @@ class SparseDataset:
         """
         if self._adapter is not None:
             try:
-                return self._adapter.open(path)
+                # FsspecAdapter.open expects path relative to adapter root
+                # which is self.path (resolved to absolute in __enter__)
+                return self._adapter.open(str(self.path.resolve() / path))
             except Exception as e:
                 logger.warning(f"FsspecAdapter.open failed: {e}")
 
         # Fall back to direct fsspec with git-annex whereis
         return self._open_via_whereis(path)
 
-    @retry_on_network_error(max_attempts=5, max_wait_seconds=60)
     def _open_via_whereis(self, path: str) -> Any:
         """Open file using git-annex whereis and fsspec.
 

@@ -161,6 +161,7 @@ def test_retry_preserves_last_error_info():
         (OSError("Connection reset"), True),
         (TimeoutError("Request timeout"), True),
         (ConnectionError("Connection refused"), True),
+        (FileNotFoundError("No remote URL"), False),
         (ValueError("Invalid data"), False),
         (KeyError("Missing key"), False),
         (RuntimeError("Runtime error"), False),
