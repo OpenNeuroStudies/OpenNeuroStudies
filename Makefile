@@ -3,7 +3,7 @@
 # Prerequisites: openneuro-studies and snakemake must be in PATH
 # (activate venv before running make, or install globally)
 
-.PHONY: help discover organize extract metadata full-refresh refresh studies-init clean full-clean analyze-state test-expectations errors-quality errors-legacy errors-report unlock extract-one
+.PHONY: help discover organize extract metadata full-refresh refresh refresh-existing studies-init clean full-clean analyze-state test-expectations errors-quality errors-legacy errors-report unlock extract-one
 
 # Default number of cores for parallel operations
 CORES ?= 8
@@ -14,6 +14,7 @@ help:
 	@echo "Fresh Clone Workflow:"
 	@echo "  make studies-init    - Initialize study-* subdatasets (required after clone)"
 	@echo "  make refresh         - Refresh existing studies only (no discovery)"
+	@echo "  make refresh-existing - Re-discover existing studies (with derivatives)"
 	@echo ""
 	@echo "Discovery Workflow:"
 	@echo "  make discover        - Discover datasets from GitHub"
@@ -70,6 +71,18 @@ refresh:
 	openneuro-studies organize study-*
 	$(MAKE) extract metadata
 	@echo "✓ Refresh complete"
+
+# Refresh existing studies: re-discover (with derivatives) + organize + extract
+# Unlike 'refresh' (no discovery) or 'full-refresh' (discovers everything),
+# this re-discovers only the datasets that already have study-* directories.
+refresh-existing:
+	@echo "Discovering updates for existing studies..."
+	openneuro-studies discover --include-derivatives \
+		$(patsubst study-%,--test-filter %,$(wildcard study-ds*))
+	@echo "Organizing existing studies..."
+	openneuro-studies organize study-*
+	$(MAKE) extract metadata
+	@echo "✓ Refresh of existing studies complete"
 
 # Discovery workflow
 discover:
