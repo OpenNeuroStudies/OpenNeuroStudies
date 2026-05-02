@@ -97,82 +97,131 @@ but from `openneuro_studies` for the top-level aggregation.
    - Temporary subdataset install/drop cycles that are unnecessary if intermediate
      TSVs already exist
 
+## Decisions (Clarified 2026-05-01)
+
+1. **All extraction/aggregation in bids_studies** — `openneuro_studies` only does CLI/orchestration
+2. **No imports from openneuro_studies in bids_studies** — move error_tracking into bids_studies
+3. **Migrate `derivative_extractor.py` entirely to bids_studies** — SparseDataset gains git-annex size queries
+4. **Parallel modules, shared utils** — sourcedata and derivatives use separate extraction modules with common aggregation utilities
+5. **Per-subject uptodate in bids_studies** — determined from git history (which subjects' source files changed after processed_raw_version)
+6. **Derivative subdatasets installed before extraction** — `datalad install` required
+7. **`derivatives.tsv` contains ALL metadata needed for `studies+derivatives.tsv`** — no derivative access needed at aggregation stage
+8. **File naming**: `derivative+subjects.tsv` / `derivative+subjects+sessions.tsv` (singular "derivative" matching entity), `derivatives.tsv` (per-study aggregate, one row per derivative)
+
 ## Proposed Architecture
 
 ### Principle: bids_studies Does All Extraction/Aggregation
 
 ```
-bids_studies (generic library, no openneuro_studies imports):
+bids_studies (generic library, NEVER imports openneuro_studies):
 ├── extraction/
 │   ├── subject.py          — per-subject sourcedata stats
-│   ├── dataset.py          — per-dataset aggregation
+│   ├── dataset.py          — per-dataset aggregation (shared utils)
 │   ├── study.py            — per-study aggregation, file writing
-│   ├── derivative.py       — per-subject derivative stats
+│   ├── derivative.py       — per-subject derivative stats + version tracking
+│   ├── derivative_metadata.py — git-based derivative metadata (migrated from openneuro_studies)
 │   └── tsv.py              — column definitions, writers
-├── sparse/                 — sparse data access
+├── error_tracking/         — structured JSONL error logging (moved from openneuro_studies)
+├── sparse/                 — sparse data access (enhanced with git-annex size queries)
 └── schemas/                — JSON sidecars
 
 openneuro_studies (application layer, uses bids_studies):
 ├── cli/                    — user commands
 ├── metadata/
 │   ├── studies_tsv.py      — reads sourcedata.tsv → studies.tsv
-│   ├── studies_plus_derivatives_tsv.py  — reads derivatives+datasets.tsv → studies+derivatives.tsv
-│   └── ...
+│   ├── studies_plus_derivatives_tsv.py  — reads derivatives.tsv → studies+derivatives.tsv
+│   └── ...                 — NO extraction logic here
 └── ...
 ```
 
 ### Target Data Flow for Derivatives
 
 ```
-Snakemake extract rule (already does step 1-2):
-  1. bids_studies.extraction.extract_derivative_stats()
-     → study-*/derivatives/{tool}/derivatives+subjects[+sessions].tsv
-     → study-*/derivatives/{tool}/derivatives+datasets.tsv
-  2. Aggregate per-study: study-*/derivatives/derivatives.tsv  (NEW - one row per derivative)
+Snakemake extract rule:
+  1. Install derivative subdatasets (datalad install)
+  2. bids_studies.extraction.extract_derivative_stats()
+     → study-*/derivatives/derivative+subjects[+sessions].tsv  (per-subject, incl. uptodate)
+     → study-*/derivatives/derivatives.tsv  (per-derivative aggregate + identity metadata)
+  3. Uninstall derivative subdatasets
 
-studies+derivatives.tsv generation:
-  3. Read study-*/derivatives/derivatives.tsv for each study
-  4. Combine into top-level studies+derivatives.tsv (with study_id prefix)
+studies+derivatives.tsv generation (no subdataset access needed):
+  4. Read study-*/derivatives/derivatives.tsv for each study
+  5. Prefix with study_id → top-level studies+derivatives.tsv
 ```
+
+### Per-Subject Derivative File Schema
+
+`study-ds000001/derivatives/derivative+subjects.tsv`:
+
+| Column | Description |
+|--------|-------------|
+| derivative_id | Directory name (e.g., MRIQC-21.0.0rc2) |
+| subject_id | Subject (e.g., sub-01) |
+| session_id | Session or "n/a" |
+| output_num | Number of output files |
+| output_size | Total output bytes |
+| nifti_num | NIfTI file count |
+| nifti_size | NIfTI total bytes |
+| html_num | HTML report count |
+| uptodate | Whether source files for this subject unchanged since processed_raw_version |
+
+### Per-Derivative Aggregate File Schema
+
+`study-ds000001/derivatives/derivatives.tsv`:
+
+| Column | Description |
+|--------|-------------|
+| derivative_id | Directory name |
+| tool_name | Processing tool |
+| tool_version | Tool version |
+| datalad_uuid | DataLad UUID (disambiguation) |
+| url | Repository URL |
+| size_total | Total size (git + annex) |
+| size_annexed | Annexed content size |
+| file_count | Total file count |
+| processed_raw_version | Raw dataset commit when derivative was produced |
+| current_raw_version | Current raw dataset HEAD |
+| uptodate | All subjects up-to-date? |
+| outdatedness | Commits behind (dataset-level) |
+| tasks_processed | BOLD tasks present in derivative |
+| tasks_missing | BOLD tasks in raw but missing from derivative |
+| anat_processed | Anatomical subjects processed |
+| func_processed | Functional subjects processed |
+| processing_complete | All subjects/modalities processed? |
+| template_spaces | Template spaces with data |
+| transform_spaces | Transform spaces |
+| descriptions | Description entities |
+| subjects_num | Number of subjects |
+| sessions_num | Number of sessions |
+| output_num | Total output files |
+| output_size | Total output bytes |
+| nifti_num | Total NIfTI files |
+| nifti_size | Total NIfTI bytes |
+| html_num | Total HTML reports |
 
 ### What Needs to Change
 
-| Change | Package | Effort |
-|--------|---------|--------|
-| Remove `openneuro_studies` imports from `bids_studies/extraction/study.py` | bids_studies | Small |
-| Remove `openneuro_studies` imports from `bids_studies/extraction/derivative.py` | bids_studies | Small |
-| Add error logging abstraction to `bids_studies` (callback or simple file logger) | bids_studies | Medium |
-| Add `derivatives.tsv` aggregation (one row per derivative within a study) | bids_studies | Medium |
-| Move git-based derivative metadata extraction to `bids_studies` or keep as complementary | Both | Decision needed |
-| Rewrite `studies+derivatives.tsv` generation to read from `derivatives.tsv`/`derivatives+datasets.tsv` | openneuro_studies | Medium |
-| Update Makefile freshness check (currently checks sourcedata timestamps for derivatives) | Makefile | Small |
+| Change | Package | Priority |
+|--------|---------|----------|
+| Move `error_tracking.py` → `bids_studies/error_tracking/` | bids_studies | P1 (unblocks all) |
+| Remove all `openneuro_studies` imports from `bids_studies` | bids_studies | P1 |
+| Migrate `derivative_extractor.py` (1026 lines) → `bids_studies/extraction/derivative_metadata.py` | bids_studies | P2 |
+| Enhance `SparseDataset` with git-annex size queries | bids_studies | P2 |
+| Add per-subject `uptodate` computation from git history | bids_studies | P2 |
+| Add `derivatives.tsv` writer (per-study aggregate with all columns) | bids_studies | P2 |
+| Rewrite `studies+derivatives.tsv` to read from `derivatives.tsv` only | openneuro_studies | P3 |
+| Update Makefile freshness check (use derivatives.tsv timestamps) | Makefile | P3 |
+| Rename existing `derivatives+subjects.tsv` → `derivative+subjects.tsv` in schemas | bids_studies | P2 |
 
-## Open Questions
+## Implementation Steps
 
-1. **What metadata in `studies+derivatives.tsv` is NOT available from `bids_studies` extraction?**
-   - `processed_raw_version` / `current_raw_version` / `uptodate` / `outdatedness` — version tracking
-   - `tasks_processed` / `tasks_missing` / `processing_complete` — completeness analysis
-   - `template_spaces` / `transform_spaces` — space detection
-   - These require comparing derivative contents against the source dataset. Should this logic
-     move to `bids_studies` or remain in `openneuro_studies`?
-
-2. **Should `derivatives.tsv` (per-study aggregation) be a new file?**
-   - Currently `sourcedata.tsv` is the per-study aggregation for sourcedata
-   - The equivalent for derivatives would be `derivatives.tsv` (one row per derivative)
-   - Or should it be `derivatives+datasets.tsv` at the study level?
-
-3. **How to handle the git-only extraction path?**
-   - `bids_studies` uses `SparseDataset` (needs cloned repo or fuse mount)
-   - `openneuro_studies/derivative_extractor.py` uses bare git commands (no clone needed)
-   - Both approaches have value; should `bids_studies` support git-only mode?
-
-## Immediate Next Steps
-
-1. Fix circular imports: remove `openneuro_studies` imports from `bids_studies`
-2. Verify `derivatives+subjects.tsv` / `derivatives+datasets.tsv` are actually generated
-   by current Snakemake runs (check a study directory)
-3. Decide on question #1 above (what stays in openneuro_studies)
-4. Implement the aggregation path from intermediate TSVs → `studies+derivatives.tsv`
+1. **Fix circular imports** (P1): Move `error_tracking` to bids_studies, remove all reverse imports
+2. **Migrate derivative_extractor.py** (P2): Move to bids_studies, integrate with SparseDataset
+3. **Add per-subject uptodate** (P2): Git history comparison in derivative extraction
+4. **Add derivatives.tsv writer** (P2): Aggregate derivative+subjects.tsv → derivatives.tsv with all identity+stats columns
+5. **Update Snakemake** (P2): Call new bids_studies functions, produce derivatives.tsv
+6. **Rewrite studies+derivatives.tsv** (P3): Simple reader of derivatives.tsv files, no subdataset access
+7. **Update Makefile** (P3): Fix freshness checks, update targets
 
 ## References
 
