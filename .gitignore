@@ -82,3 +82,4 @@ studies_test.tsv
 
 # Working notes (keep in working directory, not in git)
 doc/note-todos/
+.trash
