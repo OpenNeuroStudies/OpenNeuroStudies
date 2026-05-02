@@ -259,7 +259,8 @@ class DatasetFinder:
                 logger.warning("Failed to list derivatives from %s: %s", source_spec.name, e)
 
         # Iteratively expand the set to include derivatives whose sources are in the set
-        # This handles the derivative-of-derivative case
+        # This handles the derivative-of-derivative case AND ensures that derivatives
+        # already in the set (from the original filter) have all their sources added.
         if progress_callback:
             progress_callback("expand", "Expanding filter to include related derivatives...")
 
@@ -282,22 +283,26 @@ class DatasetFinder:
                                 "added",
                                 f"  + {deriv.dataset_id} (derivative of {', '.join(deriv.source_datasets)})",
                             )
-                        # Also add ALL source datasets of this derivative to ensure
-                        # organize can link all required sources (FR-017b)
-                        for src in deriv.source_datasets:
-                            if src not in expanded_set:
-                                expanded_set.add(src)
-                                changed = True
-                                logger.debug(
-                                    "Added source %s (required by derivative %s)",
-                                    src,
-                                    deriv.dataset_id,
+
+                # For derivatives already in the set (including just-added ones),
+                # ensure ALL their source datasets are also in the set (FR-017b).
+                # This handles multi-source derivatives where the derivative itself
+                # was in the original filter but not all its sources were.
+                if deriv.dataset_id in expanded_set:
+                    for src in deriv.source_datasets:
+                        if src not in expanded_set:
+                            expanded_set.add(src)
+                            changed = True
+                            logger.debug(
+                                "Added source %s (required by derivative %s)",
+                                src,
+                                deriv.dataset_id,
+                            )
+                            if progress_callback:
+                                progress_callback(
+                                    "added",
+                                    f"  + {src} (source required by {deriv.dataset_id})",
                                 )
-                                if progress_callback:
-                                    progress_callback(
-                                        "added",
-                                        f"  + {src} (source required by {deriv.dataset_id})",
-                                    )
 
         return list(expanded_set)
 
