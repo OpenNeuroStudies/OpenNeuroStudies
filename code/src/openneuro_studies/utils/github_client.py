@@ -115,74 +115,85 @@ class GitHubClient:
 
         for attempt in range(retry):
             try:
-                response = self.session.get(url, params=params, timeout=30)
+                response = self._do_request(url, params)
+                return self._parse_response(response, url)
 
-                # Handle rate limiting
-                if response.status_code == 403 and "rate limit" in response.text.lower():
-                    reset_time = int(response.headers.get("X-RateLimit-Reset", 0))
-                    if reset_time:
-                        max(0, reset_time - time.time())
-
-                        # Provide helpful message if no token is set
-                        token_hint = ""
-                        if not self.token:
-                            token_hint = (
-                                " Set GITHUB_TOKEN environment variable for higher rate limits."
-                            )
-
-                        # Use lock to coordinate waiting across threads
-                        # Only one thread should wait, others will see cache or wait their turn
-                        with _rate_limit_lock:
-                            # Check again in case another thread already waited
-                            current_wait = max(0, reset_time - time.time())
-                            if current_wait > 0:
-                                logger.warning(
-                                    "Rate limit exceeded. Waiting %.1f seconds until reset...%s",
-                                    current_wait,
-                                    token_hint,
-                                )
-                                time.sleep(current_wait + 1)
-                        continue
-
-                response.raise_for_status()
-
-                # Handle empty/None response content (can happen with cache corruption)
-                if response.content is None:
-                    logger.warning(
-                        "Empty response from %s (possibly cached). Retrying without cache.",
-                        url
-                    )
-                    # Force cache bypass and retry
-                    response = self.session.get(url, params=params, timeout=30, headers={"Cache-Control": "no-cache"})
-                    response.raise_for_status()
-
-                try:
-                    return response.json()
-                except (ValueError, TypeError) as e:
-                    # Deserialization failed - log details for debugging
-                    logger.error(
-                        "Failed to deserialize response from %s: %s (content_type=%s, content_length=%s)",
-                        url,
-                        e,
-                        response.headers.get("content-type"),
-                        response.headers.get("content-length")
-                    )
-                    raise GitHubAPIError(f"Invalid JSON response from {url}: {e}") from e
-
+            except GitHubAPIError:
+                raise  # Propagate our own errors without re-wrapping
             except requests.exceptions.RequestException as e:
-                if attempt == retry - 1:  # Last attempt
-                    raise GitHubAPIError(f"GitHub API request failed: {e}") from e
-                time.sleep(2**attempt)  # Exponential backoff
+                if attempt == retry - 1:
+                    raise GitHubAPIError(
+                        f"GitHub API request failed for {url}: {e}"
+                    ) from e
+                time.sleep(2**attempt)
             except Exception as e:
-                # Catch cache backend errors (e.g., sqlite3.OperationalError)
-                # and provide context about which cache file is involved
-                cache_file = f"{self.cache_dir / 'github_api_cache.sqlite'}"
+                # Cache backend errors (e.g., sqlite3.OperationalError) or other
+                # unexpected failures — wrap with context for troubleshooting
+                cache_file = self.cache_dir / "github_api_cache.sqlite"
                 raise GitHubAPIError(
-                    f"Cache error while requesting {url}: {type(e).__name__}: {e} "
+                    f"{type(e).__name__} while requesting {url}: {e} "
                     f"(cache: {cache_file})"
                 ) from e
 
         raise GitHubAPIError(f"Failed to fetch {url} after {retry} attempts")
+
+    def _do_request(self, url: str, params: Optional[Dict[str, Any]] = None) -> Any:
+        """Execute a single HTTP request, handling rate limits.
+
+        Returns the response object. Raises on HTTP errors or rate limit exhaustion.
+        """
+        response = self.session.get(url, params=params, timeout=30)
+
+        # Handle rate limiting
+        if response.status_code == 403 and "rate limit" in response.text.lower():
+            reset_time = int(response.headers.get("X-RateLimit-Reset", 0))
+            if reset_time:
+                token_hint = ""
+                if not self.token:
+                    token_hint = (
+                        " Set GITHUB_TOKEN environment variable for higher rate limits."
+                    )
+
+                # Use lock to coordinate waiting across threads
+                with _rate_limit_lock:
+                    current_wait = max(0, reset_time - time.time())
+                    if current_wait > 0:
+                        logger.warning(
+                            "Rate limit exceeded. Waiting %.1f seconds until reset...%s",
+                            current_wait,
+                            token_hint,
+                        )
+                        time.sleep(current_wait + 1)
+
+                # Retry after waiting
+                response = self.session.get(url, params=params, timeout=30)
+
+        response.raise_for_status()
+
+        # Handle empty/None response content (can happen with cache corruption)
+        if response.content is None:
+            logger.warning(
+                "Empty response from %s (possibly corrupted cache entry). Retrying.",
+                url,
+            )
+            response = self.session.get(
+                url, params=params, timeout=30,
+                headers={"Cache-Control": "no-cache"},
+            )
+            response.raise_for_status()
+
+        return response
+
+    def _parse_response(self, response: Any, url: str) -> Any:
+        """Parse JSON from response, raising GitHubAPIError on failure."""
+        try:
+            return response.json()
+        except (ValueError, TypeError) as e:
+            raise GitHubAPIError(
+                f"Invalid JSON response from {url}: {e} "
+                f"(content_type={response.headers.get('content-type')}, "
+                f"length={response.headers.get('content-length')})"
+            ) from e
 
     def list_repositories(
         self, organization: str, dataset_filter: Optional[List[str]] = None
