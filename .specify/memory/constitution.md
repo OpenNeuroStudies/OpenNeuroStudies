@@ -109,6 +109,7 @@ Critical errors during metadata extraction MUST be visible and NOT hidden:
 - Workflows MUST provide error summaries (e.g., "15/40 studies had extraction warnings")
 - Error logs MUST be written to accessible locations (logs/, .snakemake/errors.tsv, stderr)
 - Failed extractions producing "n/a" values MUST be distinguishable from legitimately missing data
+- Error messages MUST include contextual identifiers (dataset ID, URL, file path, subject) to enable troubleshooting without requiring reproduction of the failure. Errors from dependencies (e.g., cache deserialization, API failures) MUST be wrapped or augmented with the operation context (which dataset/URL was being processed)
 - **Rationale**: Hidden errors lead to incomplete metadata that appears valid but contains "n/a" placeholders. Operators must know when extraction fails so they can investigate root causes, fix infrastructure issues, and ensure metadata completeness.
 
 **Rationale**: With 1000+ studies, operators need quick visibility into dataset status, missing data, and processing completeness without inspecting individual directories.

@@ -12,6 +12,18 @@ from requests_cache import CachedSession
 
 logger = logging.getLogger(__name__)
 
+# TODO: requests_cache logs "Unable to deserialize response" at ERROR level without
+# URL/dataset context when cached entries are corrupted (e.g., after library upgrades).
+# Per constitution V (Error Visibility), errors must include contextual identifiers.
+# Options to fix:
+# 1. Add a logging filter on 'requests_cache.backends.base' that captures the URL
+#    from the thread-local request context
+# 2. Suppress requests_cache ERROR logging and handle cache misses in _request()
+#    with our own contextual warning
+# 3. Use requests_cache's serializer parameter to use a more robust format (JSON
+#    instead of pickle) that degrades gracefully across versions
+# For now, deleting the cache file resolves the issue after upgrades.
+
 # Global lock for rate limit coordination across threads
 _rate_limit_lock = threading.Lock()
 

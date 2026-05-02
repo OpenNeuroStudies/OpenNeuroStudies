@@ -282,6 +282,22 @@ class DatasetFinder:
                                 "added",
                                 f"  + {deriv.dataset_id} (derivative of {', '.join(deriv.source_datasets)})",
                             )
+                        # Also add ALL source datasets of this derivative to ensure
+                        # organize can link all required sources (FR-017b)
+                        for src in deriv.source_datasets:
+                            if src not in expanded_set:
+                                expanded_set.add(src)
+                                changed = True
+                                logger.debug(
+                                    "Added source %s (required by derivative %s)",
+                                    src,
+                                    deriv.dataset_id,
+                                )
+                                if progress_callback:
+                                    progress_callback(
+                                        "added",
+                                        f"  + {src} (source required by {deriv.dataset_id})",
+                                    )
 
         return list(expanded_set)
 

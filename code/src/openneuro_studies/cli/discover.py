@@ -31,7 +31,8 @@ from openneuro_studies.discovery import DatasetDiscoveryError, DatasetFinder
     "--include-derivatives",
     is_flag=True,
     help="When using --test-filter, also include derivatives of filtered datasets "
-    "(recursively includes derivatives of derivatives)",
+    "and all source datasets required by those derivatives "
+    "(recursively includes derivatives of derivatives and their sources)",
 )
 @click.option(
     "--workers",
