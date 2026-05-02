@@ -173,6 +173,14 @@ class GitHubClient:
                 if attempt == retry - 1:  # Last attempt
                     raise GitHubAPIError(f"GitHub API request failed: {e}") from e
                 time.sleep(2**attempt)  # Exponential backoff
+            except Exception as e:
+                # Catch cache backend errors (e.g., sqlite3.OperationalError)
+                # and provide context about which cache file is involved
+                cache_file = f"{self.cache_dir / 'github_api_cache.sqlite'}"
+                raise GitHubAPIError(
+                    f"Cache error while requesting {url}: {type(e).__name__}: {e} "
+                    f"(cache: {cache_file})"
+                ) from e
 
         raise GitHubAPIError(f"Failed to fetch {url} after {retry} attempts")
 

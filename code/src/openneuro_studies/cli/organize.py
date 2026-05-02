@@ -306,5 +306,8 @@ def organize(
         click.echo(f"Error: {e}", err=True)
         ctx.exit(1)
     except Exception as e:
-        click.echo(f"Unexpected error: {e}", err=True)
+        import traceback
+
+        click.echo(f"Unexpected error: {type(e).__name__}: {e}", err=True)
+        click.echo(traceback.format_exc(), err=True)
         ctx.exit(1)
