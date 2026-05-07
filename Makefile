@@ -77,7 +77,7 @@ refresh:
 # this re-discovers only the datasets that already have study-* directories.
 refresh-existing:
 	@echo "Discovering updates for existing studies..."
-	openneuro-studies discover --include-derivatives \
+	openneuro-studies discover --include-related all \
 		$(patsubst study-%,--test-filter %,$(wildcard study-ds*))
 	@echo "Organizing existing studies..."
 	openneuro-studies organize study-*
