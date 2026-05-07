@@ -30,9 +30,19 @@ from openneuro_studies.discovery import DatasetDiscoveryError, DatasetFinder
 @click.option(
     "--include-derivatives",
     is_flag=True,
-    help="When using --test-filter, also include derivatives of filtered datasets "
-    "and all source datasets required by those derivatives "
-    "(recursively includes derivatives of derivatives and their sources)",
+    help="DEPRECATED: Use --include-related derivatives instead. "
+    "When using --test-filter, also include derivatives of filtered datasets "
+    "and all source datasets required by those derivatives.",
+)
+@click.option(
+    "--include-related",
+    "include_related",
+    type=click.Choice(["derivatives", "sources", "all"], case_sensitive=False),
+    default=None,
+    help="When using --test-filter, expand the filter to include related datasets. "
+    "'derivatives' includes derivatives of filtered datasets (forward). "
+    "'sources' includes source datasets of filtered derivatives (backward). "
+    "'all' includes both directions transitively until closure.",
 )
 @click.option(
     "--workers",
@@ -61,6 +71,7 @@ def discover(
     output: str,
     test_filter: tuple[str, ...],
     include_derivatives: bool,
+    include_related: Optional[str],
     workers: int,
     progress: bool,
     mode: str,
@@ -75,10 +86,20 @@ def discover(
 
     Datasets are processed in parallel using multiple workers for faster discovery.
 
+    When --include-related is used with --test-filter, the filter is expanded to include
+    related datasets based on the specified mode:
+
+    \b
+      derivatives  Include derivatives whose source datasets match the filter
+      sources      Include source datasets referenced by derivatives in the filter
+      all          Include both directions transitively until no new datasets are found
+
     \b
     Examples:
         openneuro-studies discover
         openneuro-studies discover --test-filter ds000001 --test-filter ds005256
+        openneuro-studies discover --test-filter ds000001 --include-related derivatives
+        openneuro-studies discover --test-filter ds006131 --include-related all
         openneuro-studies discover --test-filter ds000001 --include-derivatives
         openneuro-studies discover --workers 20 --no-progress
         openneuro-studies discover --mode overwrite  # Replace all existing results
@@ -88,26 +109,46 @@ def discover(
         config_path = config or ctx.obj.get("config", ".openneuro-studies/config.yaml")
         cfg = load_config(config_path, require_tokens=False)
 
+        # Resolve --include-related vs --include-derivatives precedence
+        # --include-related takes precedence over --include-derivatives
+        effective_include_related: Optional[set[str]] = None
+        effective_include_derivatives = False
+
+        if include_related:
+            # --include-related was explicitly provided
+            effective_include_related = {include_related}
+        elif include_derivatives:
+            # Backward compatibility: --include-derivatives maps to include_derivatives=True
+            effective_include_derivatives = True
+
         # Create dataset finder with specified workers
         test_dataset_filter = list(test_filter) if test_filter else None
         finder = DatasetFinder(
             cfg,
             test_dataset_filter=test_dataset_filter,
-            include_derivatives=include_derivatives,
+            include_derivatives=effective_include_derivatives,
+            include_related=effective_include_related,
             max_workers=workers,
         )
+
+        # Determine if any expansion is active (for progress bar logic)
+        expansion_active = bool(effective_include_related) or effective_include_derivatives
 
         # Discover datasets
         click.echo("Discovering datasets from configured sources...")
         if test_dataset_filter:
             click.echo(f"Using test filter: {', '.join(test_dataset_filter)}")
-            if include_derivatives:
+            if effective_include_related:
+                click.echo(
+                    f"  (including related datasets: {include_related})"
+                )
+            elif effective_include_derivatives:
                 click.echo("  (including derivatives of filtered datasets)")
         click.echo(f"Using {workers} parallel workers")
 
-        # Set up expansion progress callback for --include-derivatives
+        # Set up expansion progress callback for --include-related or --include-derivatives
         expansion_progress_callback = None
-        if include_derivatives and test_dataset_filter:
+        if expansion_active and test_dataset_filter:
 
             def expansion_cb(phase: str, message: str) -> None:
                 click.echo(message)
@@ -118,9 +159,9 @@ def discover(
         progress_callback = None
         pbar = None
         if progress:
-            # Skip repo counting if include_derivatives is set - we'll show progress differently
+            # Skip repo counting if expansion is active - we'll show progress differently
             # because the filter gets expanded after scanning
-            if not include_derivatives:
+            if not expansion_active:
                 # Use click.progressbar for progress tracking
                 # We'll need to count repos first to know the total
                 total_repos = 0
