@@ -32,6 +32,10 @@ def datalad_push_since(
     Returns:
         Tuple of (pushed_count, skipped_count, pushed_paths)
     """
+    if dry_run:
+        logger.info("Dry run: skipping datalad push")
+        return 0, 0, []
+
     import datalad.api as dl
 
     try:
@@ -40,7 +44,6 @@ def datalad_push_since(
             since=since,
             to=to,
             recursive=recursive,
-            dry_run=dry_run,
         )
 
         # Parse results
