@@ -88,6 +88,7 @@ All state changes MUST be committed through git/DataLad with descriptive message
   - Direct `git submodule` commands should be avoided in favor of DataLad's higher-level abstractions
   - **Rationale**: DataLad provides more robust subdataset management, handles edge cases better, and ensures consistency with the project's DataLad-based architecture
 - For gitlinks created without cloning (via `git update-index`), empty directories MUST be created at submodule paths to prevent "deleted" status markers
+- **Scoped Commits**: Commands that auto-commit MUST only stage and commit files relevant to that command's operation. A command MUST NOT commit unrelated changes that happen to be present in the working tree. For example, `organize` must only commit `.gitmodules` and the study submodule gitlinks it created — not unrelated code changes. Use explicit `path=` arguments with `datalad save` or `git add` specific files rather than blanket saves
 
 **Rationale**: DataLad extends git and git-annex to ease handling collections of large datasets while maintaining complete provenance. This provides scientific audit trails and enables distributed collaboration. Clean git status ensures operations are complete and no uncommitted changes exist.
 

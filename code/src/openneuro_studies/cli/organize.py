@@ -267,7 +267,12 @@ def organize(
 
                 from openneuro_studies import __version__
 
-                # Use dataset="^" to save from top dataset
+                # TODO: Scope the save to only files modified by organize.
+                # Currently dl.save(dataset="^") without path= commits ALL
+                # dirty files in the working tree, including unrelated code
+                # changes. Should instead pass explicit paths:
+                #   path=[".gitmodules"] + [s.name for s in successful_studies]
+                # See Constitution Principle IV (Scoped Commits).
                 dl.save(
                     dataset="^",
                     message=f"Organize {len(successful_studies)} study datasets\n\n"
