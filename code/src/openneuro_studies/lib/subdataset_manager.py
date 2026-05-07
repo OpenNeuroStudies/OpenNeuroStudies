@@ -104,6 +104,33 @@ def get_uninitialized_sourcedata(study_path: Path) -> list[Path]:
     return sorted(uninitialized)
 
 
+def get_uninitialized_derivatives(study_path: Path) -> list[Path]:
+    """Find derivative subdatasets that need initialization.
+
+    Args:
+        study_path: Path to study directory (e.g., study-ds000001)
+
+    Returns:
+        List of paths to uninitialized derivative subdatasets
+        (e.g., [study-ds000001/derivatives/fMRIPrep-21.0.1, ...])
+    """
+    derivatives_dir = study_path / "derivatives"
+    if not derivatives_dir.exists():
+        return []
+
+    uninitialized = []
+    for subdataset_path in derivatives_dir.iterdir():
+        if (
+            subdataset_path.is_dir()
+            and not subdataset_path.name.startswith(".")
+            and subdataset_path.name != "bids-validator"
+            and not is_subdataset_initialized(subdataset_path)
+        ):
+            uninitialized.append(subdataset_path)
+
+    return sorted(uninitialized)
+
+
 def _find_immediate_parent_repo(subdataset_path: Path, repo_root: Path) -> Path | None:
     """Find the immediate parent repository that registers this subdataset.
 

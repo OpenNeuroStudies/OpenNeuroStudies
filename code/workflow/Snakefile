@@ -151,8 +151,9 @@ rule extract_study:
 
     Subdataset Management:
     - Initializes sourcedata subdatasets if needed (fail-fast on errors)
-    - Subdatasets remain initialized for future operations
-    - No deinitialization (simplified from original temporary install/restore)
+    - Initializes derivative subdatasets for metadata extraction (steps 3b/3c)
+    - Deinitializes derivative subdatasets after extraction to free disk space
+    - Sourcedata subdatasets remain initialized for future operations
     """
     output:
         json_file = f".snakemake/extracted/{{study}}.json"
@@ -164,6 +165,7 @@ rule extract_study:
         from openneuro_studies.metadata.studies_tsv import collect_study_metadata
         from openneuro_studies.lib.subdataset_manager import (
             get_uninitialized_sourcedata,
+            get_uninitialized_derivatives,
             initialize_subdatasets,
         )
 
@@ -172,7 +174,7 @@ rule extract_study:
         # 1. Find sourcedata subdatasets that need initialization
         to_init = get_uninitialized_sourcedata(study_path)
 
-        # 2. Initialize if needed (FAIL FAST on operational errors)
+        # 2a. Initialize sourcedata if needed (FAIL FAST on operational errors)
         if to_init:
             logger.info(f"Initializing {len(to_init)} sourcedata subdatasets for {wildcards.study}")
             init_results = initialize_subdatasets(to_init, parent_path=Path("."))
@@ -181,6 +183,22 @@ rule extract_study:
                 raise RuntimeError(
                     f"Failed to initialize required subdatasets for {wildcards.study}: {failed}. "
                     "This is an operational error - extraction cannot proceed without initialized sourcedata."
+                )
+
+        # 2b. Initialize derivative subdatasets for steps 3b/3c
+        #     Track which we initialized so we can deinit them after extraction
+        derivs_to_init = get_uninitialized_derivatives(study_path)
+        derivs_we_initialized = []
+        if derivs_to_init:
+            logger.info(f"Initializing {len(derivs_to_init)} derivative subdatasets for {wildcards.study}")
+            deriv_results = initialize_subdatasets(derivs_to_init, parent_path=Path("."))
+            derivs_we_initialized = [p for p, success in deriv_results.items() if success]
+            deriv_failed = [p for p, success in deriv_results.items() if not success]
+            if deriv_failed:
+                # Warn but don't fail — derivative extraction is best-effort
+                logger.warning(
+                    f"Failed to initialize {len(deriv_failed)} derivative subdatasets for {wildcards.study}: "
+                    f"{[str(p) for p in deriv_failed]}"
                 )
 
         # 3. Extract metadata (subdatasets now guaranteed initialized)
@@ -282,7 +300,15 @@ rule extract_study:
             with open(cache_path, "w", newline="") as f:
                 f.write("\t".join(STUDIES_DERIVATIVES_COLUMNS) + "\n")
 
-        # 3d. Extract study-level metadata
+        # 3d. Deinitialize derivative subdatasets we initialized (free disk space)
+        #     Sourcedata subdatasets remain initialized for future operations.
+        if derivs_we_initialized:
+            from openneuro_studies.lib.subdataset_manager import _deinitialize_single_subdataset
+            logger.info(f"Deinitializing {len(derivs_we_initialized)} derivative subdatasets for {wildcards.study}")
+            for deriv_path in derivs_we_initialized:
+                _deinitialize_single_subdataset(deriv_path, parent_path=Path("."))
+
+        # 3e. Extract study-level metadata
         result = collect_study_metadata(study_path, stage="imaging")
         Path(output.json_file).parent.mkdir(parents=True, exist_ok=True)
         with open(output.json_file, "w") as f:
@@ -413,6 +439,9 @@ rule merge_derivatives_tsv:
     Reads .snakemake/extracted/{study}.derivatives.tsv files (produced by
     extract_study rule) and merges them into the canonical studies+derivatives.tsv.
     This is a fast file-merge operation (seconds) per FR-042h.
+
+    Preserves existing entries for studies that don't have fresh cache files,
+    so incremental extraction (subset of studies) doesn't lose data.
     """
     input:
         # Depend on per-study JSON files (produced alongside .derivatives.tsv)
@@ -426,17 +455,43 @@ rule merge_derivatives_tsv:
             generate_studies_derivatives_json,
         )
 
-        all_rows = []
+        canonical_path = Path(output.canonical)
+
+        # Load existing studies+derivatives.tsv to preserve entries for
+        # studies without fresh cache files (incremental extraction).
+        # Key: (study_id, derivative_id) -> row dict
+        existing = {}
+        if canonical_path.exists():
+            with open(canonical_path, newline="") as f:
+                reader = csv.DictReader(f, delimiter="\t")
+                for row in reader:
+                    key = (row.get("study_id", ""), row.get("derivative_id", ""))
+                    if key[0] and key[1]:
+                        existing[key] = dict(row)
+
+        # Track which studies have fresh cache files
+        studies_with_cache = set()
+
+        # Overlay fresh cache data onto existing entries
         for study in STUDIES:
             tsv_path = Path(f".snakemake/extracted/{study}.derivatives.tsv")
             if not tsv_path.exists() or tsv_path.stat().st_size == 0:
                 continue
+
+            has_data = False
             with open(tsv_path, newline="") as f:
                 reader = csv.DictReader(f, delimiter="\t")
                 for row in reader:
-                    # Skip empty rows (header-only files)
                     if row.get("study_id") and row.get("derivative_id"):
-                        all_rows.append(dict(row))
+                        key = (row["study_id"], row["derivative_id"])
+                        existing[key] = dict(row)
+                        has_data = True
+
+            if has_data:
+                studies_with_cache.add(study)
+
+        # All rows: existing preserved + fresh cache overlaid
+        all_rows = list(existing.values())
 
         # Sort by study_id, derivative_id
         all_rows.sort(key=lambda r: (r.get("study_id", ""), r.get("derivative_id", "")))
@@ -451,13 +506,10 @@ rule merge_derivatives_tsv:
         # Also generate JSON sidecar
         generate_studies_derivatives_json(Path("studies+derivatives.json"))
 
-        if all_rows:
-            print(f"Merged {len(all_rows)} derivative entries into {output.canonical}")
-        else:
-            print(
-                f"WARNING: No derivative cache files found under .snakemake/extracted/. "
-                f"Run 'make extract' first to produce per-study .derivatives.tsv caches."
-            )
+        cached_count = len(studies_with_cache)
+        preserved_count = len(STUDIES) - cached_count
+        print(f"Merged {len(all_rows)} derivative entries into {output.canonical}")
+        print(f"  Fresh cache: {cached_count} studies, preserved: {preserved_count} studies")
 
 
 rule clean_provenance:
