@@ -10,6 +10,12 @@ See: https://github.com/bids-standard/bids-specification/issues/2273
 
 As this naming convention is not yet part of the BIDS standard,
 studies+derivatives.tsv must be listed in .bidsignore.
+
+Performance note (FR-042h):
+    The primary generation path reads pre-computed per-study derivative cache
+    files produced by Snakemake's extract_study rule. This avoids re-cloning
+    derivative subdatasets and makes generation a fast file-merge operation.
+    The legacy collect_derivatives_for_study() path is retained as fallback.
 """
 
 import configparser
@@ -27,6 +33,9 @@ from openneuro_studies.metadata.derivative_extractor import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Default cache directory for per-study derivative TSVs (produced by Snakemake)
+DERIVATIVES_CACHE_DIR = Path(".snakemake/extracted")
 
 # Column definitions for studies+derivatives.tsv (FR-010)
 STUDIES_DERIVATIVES_COLUMNS = [
@@ -359,27 +368,39 @@ def _load_existing_derivatives(output_path: Path) -> dict[tuple[str, str], dict[
 def generate_studies_derivatives_tsv(
     studies: list[Path],
     output_path: Path,
+    cache_dir: Path | None = None,
 ) -> Path:
-    """Generate studies+derivatives.tsv from list of study directories.
+    """Generate studies+derivatives.tsv by merging pre-computed derivative caches.
+
+    Primary path (fast, FR-042h): Reads .snakemake/extracted/{study}.derivatives.tsv
+    files produced by Snakemake extract_study rule. This is a pure file-merge operation
+    that completes in seconds.
+
+    Fallback path (slow): If cache files are missing, falls back to
+    collect_derivatives_for_study() which clones derivative subdatasets.
 
     This function implements FR-012a: when updating specific studies,
-    existing entries for other studies are preserved. New/updated entries
-    are merged with existing data rather than replacing the entire file.
-
-    Note: Output filename should be studies+derivatives.tsv per BIDS #2273.
+    existing entries for other studies are preserved.
 
     Args:
         studies: List of study directory paths
         output_path: Path to output studies+derivatives.tsv
+        cache_dir: Directory containing per-study .derivatives.tsv caches.
+                   Defaults to .snakemake/extracted/
 
     Returns:
         Path to generated file
     """
+    if cache_dir is None:
+        cache_dir = DERIVATIVES_CACHE_DIR
+
     # Load existing entries (FR-012a: preserve unmodified studies)
     existing = _load_existing_derivatives(output_path)
 
     # Track which studies are being updated
     updated_study_ids: set[str] = set()
+    cache_hits = 0
+    cache_misses = 0
 
     for study_path in studies:
         try:
@@ -391,11 +412,28 @@ def generate_studies_derivatives_tsv(
             for key in keys_to_remove:
                 del existing[key]
 
-            # Add new entries
-            derivatives = collect_derivatives_for_study(study_path)
-            for deriv in derivatives:
-                key = (deriv["study_id"], deriv["derivative_id"])
-                existing[key] = deriv
+            # Try reading from pre-computed cache (fast path)
+            cache_path = cache_dir / f"{study_id}.derivatives.tsv"
+            if cache_path.exists() and cache_path.stat().st_size > 0:
+                with open(cache_path, newline="") as f:
+                    reader = csv.DictReader(f, delimiter="\t")
+                    for row in reader:
+                        key = (row.get("study_id", ""), row.get("derivative_id", ""))
+                        if key[0] and key[1]:
+                            existing[key] = dict(row)
+                cache_hits += 1
+            else:
+                # Fallback: extract directly (slow path)
+                logger.warning(
+                    f"No derivative cache for {study_id} at {cache_path}; "
+                    f"falling back to direct extraction (slow). "
+                    f"Run 'make extract' first for fast generation."
+                )
+                derivatives = collect_derivatives_for_study(study_path)
+                for deriv in derivatives:
+                    key = (deriv["study_id"], deriv["derivative_id"])
+                    existing[key] = deriv
+                cache_misses += 1
 
         except Exception as e:
             logger.warning(f"Failed to collect derivatives for {study_path.name}: {e}")
@@ -404,8 +442,6 @@ def generate_studies_derivatives_tsv(
     rows = [existing[k] for k in sorted(existing.keys())]
 
     # Write TSV manually to avoid CSV escaping of JSON strings
-    # Using csv.writer with QUOTE_NONE would escape quotes in JSON, creating "\{\"key\":\"value\"\}"
-    # Instead, write raw tab-separated values
     with open(output_path, "w", newline="") as f:
         # Write header
         f.write("\t".join(STUDIES_DERIVATIVES_COLUMNS) + "\n")
@@ -419,7 +455,8 @@ def generate_studies_derivatives_tsv(
     preserved_count = len([k for k in existing if k[0] not in updated_study_ids])
     logger.info(
         f"Generated {output_path} with {len(rows)} derivative entries "
-        f"({len(updated_study_ids)} studies updated, {preserved_count} entries preserved)"
+        f"({len(updated_study_ids)} studies updated, {preserved_count} entries preserved, "
+        f"{cache_hits} cache hits, {cache_misses} cache misses)"
     )
     return output_path
 

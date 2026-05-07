@@ -3,7 +3,7 @@
 # Prerequisites: openneuro-studies and snakemake must be in PATH
 # (activate venv before running make, or install globally)
 
-.PHONY: help discover organize extract metadata full-refresh refresh refresh-existing studies-init clean full-clean analyze-state test-expectations errors-quality errors-legacy errors-report unlock extract-one
+.PHONY: help discover organize extract metadata full-refresh refresh refresh-existing studies-init clean full-clean analyze-state test-expectations errors-quality errors-legacy errors-report unlock extract-one derivatives-tsv
 
 # Default number of cores for parallel operations
 CORES ?= 8
@@ -109,18 +109,18 @@ studies.tsv:
 		 echo "To unlock, run: make unlock"; \
 		 exit 1)
 
-# Generate studies+derivatives.tsv - skip if newer than source files
+# Generate studies+derivatives.tsv via Snakemake (merges cached per-study derivative TSVs)
+# Cache files are produced by extract_study rule alongside .json files.
+# This merge step completes in seconds (pure file operation, no cloning).
+# Uses mtime triggers only — extract_study re-runs are handled by 'make extract'.
 studies+derivatives.tsv: studies.tsv
-	@if [ -f studies+derivatives.tsv ]; then \
-		newest_source=$$(find study-*/sourcedata -name 'sourcedata*.tsv' -newer studies+derivatives.tsv 2>/dev/null | head -1); \
-		if [ -z "$$newest_source" ]; then \
-			echo "✓ studies+derivatives.tsv is up-to-date"; \
-			touch studies+derivatives.tsv; \
-			exit 0; \
-		fi; \
-	fi; \
-	echo "Generating studies+derivatives.tsv from hierarchical stats..."; \
-	openneuro-studies metadata generate --derivatives-tsv --stage imaging study-*
+	@snakemake -s code/workflow/Snakefile --cores $(CORES) --rerun-triggers mtime -- studies+derivatives.tsv || \
+		(echo ""; \
+		 echo "ERROR: Snakemake failed. If directory is locked, run: make unlock"; \
+		 exit 1)
+
+# Shorthand to invoke the file target
+derivatives-tsv: studies+derivatives.tsv
 
 metadata-tsv: studies.tsv studies+derivatives.tsv
 

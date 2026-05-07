@@ -136,9 +136,10 @@ def get_study_deps_with_version(study: str) -> dict:
 # ============================================================================
 
 rule all:
-    """Default target: merge extracted metadata into canonical studies.tsv."""
+    """Default target: merge extracted metadata into canonical studies.tsv and studies+derivatives.tsv."""
     input:
-        "studies.tsv"
+        "studies.tsv",
+        "studies+derivatives.tsv"
 
 
 rule extract_study:
@@ -214,7 +215,74 @@ rule extract_study:
                     except Exception as e:
                         logger.warning(f"Failed to extract derivative {derivative_id}: {e}")
 
-        # 3c. Extract study-level metadata
+        # 3c. Cache derivative metadata for studies+derivatives.tsv (FR-042h)
+        #     Writes per-study .derivatives.tsv so merge_derivatives_tsv can
+        #     produce the canonical file via fast file-merge (no re-cloning).
+        import csv as _csv
+        from openneuro_studies.metadata.studies_plus_derivatives_tsv import STUDIES_DERIVATIVES_COLUMNS
+        from openneuro_studies.metadata.derivative_extractor import extract_derivative_metadata
+
+        derivatives_cache = []
+        if derivatives_dir.exists():
+            source_id = study_path.name.replace("study-", "")
+            # Determine raw_path (sourcedata subdataset)
+            raw_path = None
+            sourcedata_dir = study_path / "sourcedata"
+            if sourcedata_dir.exists():
+                for src_candidate in sourcedata_dir.iterdir():
+                    if src_candidate.is_dir() and not src_candidate.name.startswith("."):
+                        raw_path = src_candidate
+                        break
+
+            for derivative_path in derivatives_dir.iterdir():
+                if derivative_path.is_dir() and not derivative_path.name.startswith("."):
+                    if derivative_path.name == "bids-validator":
+                        continue
+                    try:
+                        meta = extract_derivative_metadata(derivative_path, raw_path)
+                        # Add identifiers
+                        meta["study_id"] = wildcards.study
+                        meta["derivative_id"] = derivative_path.name
+                        # Parse tool name/version from directory name
+                        from openneuro_studies.metadata.studies_plus_derivatives_tsv import _parse_derivative_name
+                        tool_name, tool_version = _parse_derivative_name(derivative_path.name)
+                        meta["tool_name"] = tool_name
+                        meta["tool_version"] = tool_version
+                        # Extract DataLad UUID
+                        from openneuro_studies.metadata.derivative_extractor import _extract_datalad_uuid
+                        meta.setdefault("datalad_uuid", _extract_datalad_uuid(derivative_path))
+                        # Extract URL from .gitmodules
+                        import configparser as _cp
+                        gitmodules_path = study_path / ".gitmodules"
+                        url = ""
+                        if gitmodules_path.exists():
+                            cfg = _cp.ConfigParser()
+                            cfg.read(gitmodules_path)
+                            rel_path = f"derivatives/{derivative_path.name}"
+                            for section in cfg.sections():
+                                if cfg.get(section, "path", fallback="") == rel_path:
+                                    url = cfg.get(section, "url", fallback="")
+                                    break
+                        meta["url"] = url
+                        derivatives_cache.append(meta)
+                    except Exception as e:
+                        logger.warning(f"Failed to cache derivative metadata for {derivative_path.name}: {e}")
+
+        # Write per-study derivatives cache TSV
+        cache_path = Path(f".snakemake/extracted/{wildcards.study}.derivatives.tsv")
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        if derivatives_cache:
+            with open(cache_path, "w", newline="") as f:
+                writer = _csv.DictWriter(f, fieldnames=STUDIES_DERIVATIVES_COLUMNS, delimiter="\t", extrasaction="ignore")
+                writer.writeheader()
+                writer.writerows(derivatives_cache)
+            logger.info(f"Cached {len(derivatives_cache)} derivative entries for {wildcards.study}")
+        else:
+            # No derivatives — create empty file (header only) so Snakemake expand() works
+            with open(cache_path, "w", newline="") as f:
+                f.write("\t".join(STUDIES_DERIVATIVES_COLUMNS) + "\n")
+
+        # 3d. Extract study-level metadata
         result = collect_study_metadata(study_path, stage="imaging")
         Path(output.json_file).parent.mkdir(parents=True, exist_ok=True)
         with open(output.json_file, "w") as f:
@@ -337,6 +405,59 @@ rule merge_into_canonical:
 
         prov_manager.record(output.canonical, "merge_into_canonical", params.all_deps)
         print(f"Updated {output.canonical}: {len(rows)} studies")
+
+
+rule merge_derivatives_tsv:
+    """Merge per-study derivative caches into canonical studies+derivatives.tsv.
+
+    Reads .snakemake/extracted/{study}.derivatives.tsv files (produced by
+    extract_study rule) and merges them into the canonical studies+derivatives.tsv.
+    This is a fast file-merge operation (seconds) per FR-042h.
+    """
+    input:
+        # Depend on per-study JSON files (produced alongside .derivatives.tsv)
+        study_jsons = expand(".snakemake/extracted/{study}.json", study=STUDIES)
+    output:
+        canonical = "studies+derivatives.tsv"
+    run:
+        import csv
+        from openneuro_studies.metadata.studies_plus_derivatives_tsv import (
+            STUDIES_DERIVATIVES_COLUMNS,
+            generate_studies_derivatives_json,
+        )
+
+        all_rows = []
+        for study in STUDIES:
+            tsv_path = Path(f".snakemake/extracted/{study}.derivatives.tsv")
+            if not tsv_path.exists() or tsv_path.stat().st_size == 0:
+                continue
+            with open(tsv_path, newline="") as f:
+                reader = csv.DictReader(f, delimiter="\t")
+                for row in reader:
+                    # Skip empty rows (header-only files)
+                    if row.get("study_id") and row.get("derivative_id"):
+                        all_rows.append(dict(row))
+
+        # Sort by study_id, derivative_id
+        all_rows.sort(key=lambda r: (r.get("study_id", ""), r.get("derivative_id", "")))
+
+        # Write canonical TSV (raw tab-separated to avoid CSV escaping of JSON)
+        with open(output.canonical, "w", newline="") as f:
+            f.write("\t".join(STUDIES_DERIVATIVES_COLUMNS) + "\n")
+            for row in all_rows:
+                fields = [str(row.get(col, "")) if row.get(col) is not None else "" for col in STUDIES_DERIVATIVES_COLUMNS]
+                f.write("\t".join(fields) + "\n")
+
+        # Also generate JSON sidecar
+        generate_studies_derivatives_json(Path("studies+derivatives.json"))
+
+        if all_rows:
+            print(f"Merged {len(all_rows)} derivative entries into {output.canonical}")
+        else:
+            print(
+                f"WARNING: No derivative cache files found under .snakemake/extracted/. "
+                f"Run 'make extract' first to produce per-study .derivatives.tsv caches."
+            )
 
 
 rule clean_provenance:
