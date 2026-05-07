@@ -7,19 +7,21 @@
 
 This document breaks down the implementation into discrete, executable tasks organized by user story priority. Each phase builds upon the previous, enabling incremental delivery and independent testing.
 
-**Total Tasks**: 48
-**Estimated Timeline**: 5 weeks
+**Total Tasks**: 61
 **MVP Scope**: Phase 3 (User Story 1 - Discovery & Organization)
+**Current Status**: Phases 1-6, 8 substantially complete (see per-task status)
 
 ## Task Organization
 
 Tasks are organized into phases:
-- **Phase 1**: Setup & Project Initialization (T001-T007)
-- **Phase 2**: Foundational Infrastructure (T008-T013)
-- **Phase 3**: User Story 1 - Discovery & Organization [P1] (T014-T027)
-- **Phase 4**: User Story 2 - Metadata Generation [P2] (T028-T038)
-- **Phase 5**: User Story 3 - Validation Integration [P3] (T039-T043)
-- **Phase 6**: Polish & Cross-Cutting Concerns (T044-T048)
+- **Phase 1**: Setup & Project Initialization (T001-T007) ✅
+- **Phase 2**: Foundational Infrastructure (T008-T013) ✅
+- **Phase 3**: User Story 1 - Discovery & Organization [P1] (T014-T027) ✅
+- **Phase 4**: User Story 2 - Metadata Generation [P2] (T028-T038) ✅
+- **Phase 5**: User Story 3 - Validation Integration [P3] (T039-T043) ✅
+- **Phase 6**: Polish & Cross-Cutting Concerns (T044-T048) ✅
+- **Phase 7**: Documentation & Polish (T049-T050) ⚠️
+- **Phase 8**: User Story 4 - GitHub Publishing [US4] (T051-T061) ✅ mostly
 
 **Legend**:
 - `[P]` = Parallelizable (can run simultaneously with other [P] tasks)
@@ -1059,8 +1061,226 @@ Each phase must pass quality gate before proceeding:
 - **API Caching**: Essential for respecting GitHub rate limits
 - **No Cloning**: Except for outdatedness and imaging metrics (separate stages)
 
+## Phase 7: Documentation & Polish
+
+**Goal**: Finalize documentation, handle remaining edge cases, prepare for release.
+
+**Duration**: 1 week
+
+### T049: Update CHANGES File for Release [DONE]
+
+**File**: `CHANGES`
+
+**Task**: Generate CHANGES entries following CPAN::Changes::Spec format (FR-034):
+- Summarize changes since last release
+- Use `/openneuro-studies.release` command
+- Create matching git tag
+
+**Status**: ✅ CHANGES file exists and is maintained. Release process works.
+
 ---
 
-**Generated**: 2025-10-09
-**Status**: Ready for implementation
-**Next Step**: Begin Phase 1 (T001-T007)
+### T050: Update Plan and Spec Documentation [TODO]
+
+**File**: `specs/001-read-file-doc/plan.md`
+
+**Task**: Update plan.md to reflect actual codebase structure:
+- Fix file paths (e.g., `utils/` → `lib/`, `derivatives_tsv.py` → `studies_plus_derivatives_tsv.py`)
+- Document Snakemake workflow role
+- Document `bids_studies` library boundary
+- Update phase completion status
+
+**Deliverable**: Plan.md reflects reality
+
+---
+
+## Phase 8: GitHub Publishing [US4]
+
+**Goal**: Publish and manage study repositories on GitHub.
+
+**User Story**: As a dataset curator, I need to publish organized study repositories to GitHub so that researchers can access them publicly, and manage their lifecycle (create, update, delete, sync).
+
+**Duration**: 1 week
+
+**Status**: ✅ Mostly complete. All core functionality implemented. Minor gaps remain.
+
+### T051: [US4] Create Publication Data Model [DONE]
+
+**File**: `code/src/openneuro_studies/models/publication.py`
+
+**Task**: Implement Pydantic models for publication tracking (FR-024c):
+- `PublishedStudy`: study_id, github_url, published_at, last_push_commit_sha, last_push_at
+- `PublicationStatus`: studies list, organization, last_updated
+- Validators: study_id pattern, commit_sha format (40 hex chars)
+
+**Status**: ✅ Complete. Models with validation, add/remove/lookup methods.
+
+---
+
+### T052: [US4] Implement GitHub Publisher [DONE]
+
+**File**: `code/src/openneuro_studies/publishing/github_publisher.py`
+
+**Task**: Implement core GitHub publishing operations (FR-024a):
+- `GitHubPublisher` class using PyGithub
+- Methods: repository_exists, create_repository, delete_repository, push_to_github, publish_study
+- Fast-forward detection (compare merge-base)
+- Remote URL management (add/update origin)
+- `datalad_push_since()` for incremental pushes via DataLad
+
+**Status**: ✅ Complete. Full implementation with error handling.
+
+---
+
+### T053: [US4] Implement Publication Status Tracker [DONE]
+
+**File**: `code/src/openneuro_studies/publishing/status_tracker.py`
+
+**Task**: Implement persistence for publication status (FR-024c):
+- `PublicationTracker` class
+- `load_publication_status()` / `save_publication_status()`
+- Commit tracking file to `.openneuro-studies` subdataset via datalad.save
+
+**Status**: ✅ Complete. Loads/saves to `.openneuro-studies/published-studies.json`.
+
+---
+
+### T054: [US4] Implement Sync Reconciliation [DONE]
+
+**File**: `code/src/openneuro_studies/publishing/sync.py`
+
+**Task**: Implement GitHub state reconciliation (FR-024d):
+- `sync_publication_status()` function
+- Query GitHub API for all study-* repos in organization
+- Add entries found on GitHub but missing locally
+- Remove entries deleted from GitHub
+- Update commit SHAs for existing entries
+- Return `SyncResult` with change summary
+
+**Status**: ✅ Complete.
+
+---
+
+### T055: [US4] Implement Publish CLI Command [DONE]
+
+**File**: `code/src/openneuro_studies/cli/publish.py`
+
+**Task**: Implement `publish` CLI command (FR-024a):
+- Arguments: study_ids (optional, defaults to all)
+- Options: --organization, --token, --force, --sync, --dry-run, --since
+- Create GitHub repos, push content, track status
+- Support --sync mode for reconciliation
+- Support --since for incremental DataLad push
+
+**Status**: ✅ Complete. All options working.
+
+---
+
+### T056: [US4] Implement Unpublish CLI Command [PARTIAL]
+
+**File**: `code/src/openneuro_studies/cli/unpublish.py`
+
+**Task**: Implement `unpublish` CLI command with safety controls (FR-024b):
+- Arguments: study_ids (required)
+- Options: --organization, --token, --yes (skip confirmation)
+- Interactive confirmation prompt
+- Delete remote repositories via PyGithub
+- Update tracking file
+
+**Status**: ⚠️ Partial. Core functionality works but missing:
+- [ ] `--dry-run` mode (spec requires it, only publish has it)
+- [ ] `--all` flag (spec mentions `unpublish --all --confirm`)
+- [ ] Pattern/glob filtering (spec mentions `unpublish "study-ds0000*"`)
+
+---
+
+### T057: [US4] [P] Unit Tests for Publishing [DONE]
+
+**File**: `code/tests/unit/test_publishing.py`
+
+**Task**: Write unit tests for publishing module:
+- Test PublishedStudy validation
+- Test PublicationStatus operations
+- Test PublicationTracker persistence
+- Test GitHubPublisher (mocked PyGithub)
+- Test sync reconciliation logic
+
+**Status**: ✅ Complete. 437 lines, 7 test classes, comprehensive coverage.
+
+---
+
+### T058: [US4] Integration Tests for Publishing [TODO]
+
+**File**: `code/tests/integration/test_publishing.py`
+
+**Task**: Write end-to-end integration tests:
+- Test publish flow with test GitHub organization
+- Test unpublish with confirmation
+- Test sync reconciliation with real GitHub state
+- Test --since incremental push
+
+**Status**: ❌ Not implemented. Only unit tests exist.
+
+---
+
+### T059: [US4] Implement Maintainers Team Configuration [TODO]
+
+**File**: `code/src/openneuro_studies/config/models.py`, `code/src/openneuro_studies/publishing/github_publisher.py`
+
+**Task**: Add optional team permission configuration (FR-024e):
+- Add `maintainers_team` field to `OpenNeuroStudiesConfig`
+- When configured, add team with "push" permission to created repos
+- Use PyGithub team.add_to_repos() API
+
+**Status**: ❌ Not implemented. No `maintainers_team` in config model.
+
+---
+
+### T060: [US4] Add Makefile Targets for Publishing [TODO]
+
+**File**: `Makefile`
+
+**Task**: Add make targets for common publishing operations:
+- `make publish` — publish all studies
+- `make publish-sync` — reconcile with GitHub
+- `make unpublish STUDY=study-ds000001` — unpublish specific study
+
+**Status**: ❌ Not implemented. No publishing targets in Makefile.
+
+---
+
+### T061: [US4] Enhanced Status Command with Publication Info [DONE]
+
+**File**: `code/src/openneuro_studies/cli/main.py`
+
+**Task**: Update `status` command to show publication status:
+- Count of published vs local-only studies
+- List unpublished studies
+- Show last publish timestamp
+
+**Status**: ✅ Complete. Status command includes publication section.
+
+---
+
+**Checkpoint**: ✅ Phase 8 substantially complete. T056 (unpublish gaps), T058-T060 remain.
+
+---
+
+## Updated Dependency Graph
+
+```
+Phase 1 (Setup) ✅
+  └─→ Phase 2 (Foundational) ✅
+        ├─→ Phase 3 (US1: Discovery & Organization) ✅
+        │     ├─→ Phase 4 (US2: Metadata Generation) ✅
+        │     │     └─→ Phase 5 (US3: Validation) ✅
+        │     │           └─→ Phase 6 (Polish) ✅
+        │     └─→ Phase 8 (US4: Publishing) ✅ (mostly)
+        └─→ Phase 7 (Documentation) ⚠️ partial
+```
+
+---
+
+**Updated**: 2026-05-07
+**Status**: Phases 1-6 and 8 substantially complete. Remaining: T050 (plan docs), T056 (unpublish gaps), T058-T060 (publishing polish).
+**Next Step**: Address remaining TODO tasks; see separate specs for 004-hierarchical-extraction and 005-provision.
