@@ -196,30 +196,22 @@ class DatasetFinder:
 
         return discovered
 
-    def _expand_filter_with_derivatives(
+    def _discover_all_derivatives(
         self,
         progress_callback: Optional[Callable[[str, str], None]] = None,
-    ) -> List[str]:
-        """Expand test_dataset_filter to include derivatives of filtered datasets.
+    ) -> List[DerivativeDataset]:
+        """Discover all derivative datasets from all configured sources.
 
-        This method discovers all derivatives (without filter) and then finds which
-        ones have source_datasets that intersect with the filtered set. It recursively
-        expands to include derivatives of derivatives.
+        Scans all configured source organizations (without filter) to find every
+        derivative dataset and its source_datasets relationships. This is the shared
+        foundation for both forward (derivatives) and backward (sources) filter expansion.
 
         Args:
             progress_callback: Optional callback(phase, message) for progress reporting
 
         Returns:
-            Expanded list of dataset IDs including derivatives
+            List of all discovered DerivativeDataset objects
         """
-        if not self.test_dataset_filter:
-            return []
-
-        # Start with the original filter set
-        expanded_set = set(self.test_dataset_filter)
-
-        # Discover all derivatives from derivative sources to find relationships
-        # We need to discover without filter to find all potential derivatives
         all_derivatives: List[DerivativeDataset] = []
 
         for source_spec in self.config.sources:
@@ -284,7 +276,7 @@ class DatasetFinder:
                                 "Error processing dataset %s from %s: %s",
                                 repo.get("name", "unknown"),
                                 org_name,
-                                e
+                                e,
                             )
 
                 if progress_callback:
@@ -294,6 +286,30 @@ class DatasetFinder:
 
             except GitHubAPIError as e:
                 logger.warning("Failed to list derivatives from %s: %s", source_spec.name, e)
+
+        return all_derivatives
+
+    def _expand_filter_with_derivatives(
+        self,
+        progress_callback: Optional[Callable[[str, str], None]] = None,
+    ) -> List[str]:
+        """Expand test_dataset_filter to include derivatives of filtered datasets.
+
+        This method discovers all derivatives (without filter) and then finds which
+        ones have source_datasets that intersect with the filtered set. It recursively
+        expands to include derivatives of derivatives.
+
+        Args:
+            progress_callback: Optional callback(phase, message) for progress reporting
+
+        Returns:
+            Expanded list of dataset IDs including derivatives
+        """
+        if not self.test_dataset_filter:
+            return []
+
+        expanded_set = set(self.test_dataset_filter)
+        all_derivatives = self._discover_all_derivatives(progress_callback=progress_callback)
 
         # Iteratively expand the set to include derivatives whose sources are in the set
         # This handles the derivative-of-derivative case AND ensures that derivatives
@@ -362,82 +378,11 @@ class DatasetFinder:
         if not self.test_dataset_filter:
             return []
 
-        # Start with the original filter set
         expanded_set = set(self.test_dataset_filter)
-
-        # Discover all derivatives from derivative sources to find relationships
-        # We need to discover without filter to find all potential derivatives
-        all_derivatives: List[DerivativeDataset] = []
-
-        for source_spec in self.config.sources:
-            try:
-                org_path: Any = source_spec.organization_url.path
-                org_name = str(org_path).strip("/")
-
-                if progress_callback:
-                    progress_callback("scan", f"Listing repositories from {org_name}...")
-
-                # List ALL repositories (no filter) to find derivatives
-                repos = self.github_client.list_repositories(org_name, dataset_filter=None)
-
-                # Filter by inclusion/exclusion patterns
-                filtered_repos = self._filter_repos(repos, source_spec.inclusion_patterns)
-                if source_spec.exclusion_patterns:
-                    filtered_repos = [
-                        r
-                        for r in filtered_repos
-                        if not any(
-                            re.match(pattern, r["name"])
-                            for pattern in source_spec.exclusion_patterns
-                        )
-                    ]
-
-                if progress_callback:
-                    progress_callback(
-                        "scan",
-                        f"Scanning {len(filtered_repos)} repos in {org_name} for derivatives...",
-                    )
-
-                # Process repositories to find derivatives
-                processed_count = 0
-                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                    future_to_repo = {
-                        executor.submit(self._process_dataset, org_name, repo): repo
-                        for repo in filtered_repos
-                    }
-
-                    for future in as_completed(future_to_repo):
-                        processed_count += 1
-                        try:
-                            dataset = future.result()
-                            if dataset and isinstance(dataset, DerivativeDataset):
-                                all_derivatives.append(dataset)
-                                if progress_callback:
-                                    progress_callback(
-                                        "found",
-                                        f"[{processed_count}/{len(filtered_repos)}] "
-                                        f"Found derivative: {dataset.dataset_id}",
-                                    )
-                            elif progress_callback and processed_count % 50 == 0:
-                                # Report progress every 50 repos
-                                progress_callback(
-                                    "progress",
-                                    f"[{processed_count}/{len(filtered_repos)}] "
-                                    f"Scanning {org_name}...",
-                                )
-                        except Exception as e:
-                            logger.debug("Error processing dataset: %s", e)
-
-                if progress_callback:
-                    progress_callback(
-                        "done", f"Found {len(all_derivatives)} derivatives in {org_name}"
-                    )
-
-            except GitHubAPIError as e:
-                logger.warning("Failed to list derivatives from %s: %s", source_spec.name, e)
+        all_derivatives = self._discover_all_derivatives(progress_callback=progress_callback)
 
         # Iteratively expand the set to include sources of derivatives in the set
-        # This handles the derivative chain case (derivative → source → source's source)
+        # This handles the derivative chain case (derivative -> source -> source's source)
         if progress_callback:
             progress_callback("expand", "Expanding filter to include related sources...")
 
