@@ -21,8 +21,8 @@ from bids_studies.extraction.tsv import (
     write_derivative_subjects_tsv,
     write_subjects_tsv,
 )
+from bids_studies.error_tracking import ErrorLevel, log_error
 from bids_studies.schemas import get_schema_path
-from openneuro_studies.lib.error_tracking import ErrorLevel, log_error
 
 logger = logging.getLogger(__name__)
 

@@ -8,15 +8,8 @@ import logging
 from pathlib import Path
 from typing import Any, Optional
 
+from bids_studies.exceptions import NetworkError
 from bids_studies.sparse import SparseDataset
-
-# Import NetworkError if available (bids_studies can be used standalone)
-try:
-    from openneuro_studies.lib.exceptions import NetworkError
-    NETWORK_ERROR_AVAILABLE = True
-except ImportError:
-    NetworkError = Exception  # type: ignore[misc, assignment]
-    NETWORK_ERROR_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

@@ -36,7 +36,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from openneuro_studies.lib.error_classification import ErrorType, classify_error
+from bids_studies.error_classification import ErrorType, classify_error
 
 logger = logging.getLogger(__name__)
 
