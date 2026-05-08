@@ -3,7 +3,7 @@
 # Prerequisites: openneuro-studies and snakemake must be in PATH
 # (activate venv before running make, or install globally)
 
-.PHONY: help discover organize extract metadata full-refresh refresh refresh-existing studies-init clean full-clean analyze-state test-expectations errors-quality errors-legacy errors-report unlock extract-one derivatives-tsv
+.PHONY: help discover organize provision provision-force extract metadata full-refresh refresh refresh-existing studies-init clean full-clean analyze-state test-expectations errors-quality errors-legacy errors-report unlock extract-one derivatives-tsv
 
 # Default number of cores for parallel operations
 CORES ?= 8
@@ -19,7 +19,9 @@ help:
 	@echo "Discovery Workflow:"
 	@echo "  make discover        - Discover datasets from GitHub"
 	@echo "  make organize        - Organize discovered datasets into studies"
-	@echo "  make full-refresh    - Complete workflow (discover → organize → extract)"
+	@echo "  make provision       - Provision studies with templated content"
+	@echo "  make provision-force - Force re-provision all studies"
+	@echo "  make full-refresh    - Complete workflow (discover → organize → provision → extract)"
 	@echo ""
 	@echo "Metadata Extraction:"
 	@echo "  make extract         - Extract metadata via Snakemake (with subdataset mgmt)"
@@ -91,6 +93,14 @@ discover:
 organize:
 	openneuro-studies organize
 
+# Provision study datasets with template content
+provision:
+	openneuro-studies provision
+
+# Force re-provision all studies (even if up-to-date)
+provision-force:
+	openneuro-studies provision --force
+
 # Extraction workflow
 extract:
 	@snakemake -s code/workflow/Snakefile --cores $(CORES) --rerun-triggers params || \
@@ -126,8 +136,8 @@ metadata-tsv: studies.tsv studies+derivatives.tsv
 
 metadata: extract metadata-tsv
 
-# Complete workflow (discover new + organize + extract)
-full-refresh: studies-init discover organize extract metadata
+# Complete workflow (discover new + organize + provision + extract)
+full-refresh: studies-init discover organize provision extract metadata
 	@echo "✓ Full refresh complete"
 
 # Extract single study (usage: make extract-one STUDY=study-ds000001)

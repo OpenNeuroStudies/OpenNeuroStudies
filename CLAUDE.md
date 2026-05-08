@@ -299,7 +299,11 @@ make metadata CORES=4
 # Process single study
 make extract-one STUDY=study-ds002843
 
-# Discover new datasets and organize
+# Provision studies with templated content
+make provision           # Provision only outdated/new studies
+make provision-force     # Force re-provision all studies
+
+# Discover new datasets, organize, provision, and extract
 make full-refresh CORES=4
 
 # Error analysis and diagnostics
@@ -357,6 +361,12 @@ openneuro-studies organize https://github.com/OpenNeuroDerivatives/ds001761-fmri
 
 # Generate metadata
 openneuro-studies metadata generate --stage basic
+
+# Provision studies with templated content
+openneuro-studies provision
+openneuro-studies provision --dry-run
+openneuro-studies provision --force study-ds000001
+openneuro-studies provision --when=always
 
 # Validate
 openneuro-studies validate
