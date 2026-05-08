@@ -14,6 +14,7 @@ from bids_studies.extraction.derivative import (
 )
 from bids_studies.extraction.study import (
     aggregate_to_study,
+    extract_all_derivatives_stats,
     extract_derivative_stats,
     extract_study_stats,
 )
@@ -47,6 +48,7 @@ __all__ = [
     "extract_derivative_subjects_stats",
     "aggregate_derivative_to_dataset",
     "extract_derivative_stats",
+    "extract_all_derivatives_stats",
     "write_derivative_subjects_tsv",
     "write_derivative_datasets_tsv",
     "DERIVATIVE_SUBJECTS_COLUMNS",

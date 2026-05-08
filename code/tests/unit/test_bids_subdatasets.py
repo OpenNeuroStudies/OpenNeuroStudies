@@ -113,7 +113,10 @@ class TestEnsureSubdatasetsInstalled:
         child_ds2 = Mock()
         child_ds2.is_installed.return_value = False  # Needs install
 
-        mock_dataset.side_effect = [parent_ds, child_ds1, child_ds2]
+        # ensure_subdatasets_installed calls Dataset twice with study_path
+        # (once for itself, once via iter_sourcedata_subdatasets), then
+        # once per subdataset path for state checking
+        mock_dataset.side_effect = [parent_ds, parent_ds, child_ds1, child_ds2]
 
         newly, existing = ensure_subdatasets_installed(study_path)
 
@@ -147,7 +150,7 @@ class TestEnsureSubdatasetsInstalled:
         child_ds = Mock()
         child_ds.is_installed.return_value = False
 
-        mock_dataset.side_effect = [parent_ds, child_ds]
+        mock_dataset.side_effect = [parent_ds, parent_ds, child_ds]
 
         with patch('bids_studies.subdatasets.time.sleep'):  # Skip actual sleep
             newly, existing = ensure_subdatasets_installed(study_path, max_retries=3)
@@ -172,7 +175,7 @@ class TestEnsureSubdatasetsInstalled:
         child_ds = Mock()
         child_ds.is_installed.return_value = False
 
-        mock_dataset.side_effect = [parent_ds, child_ds]
+        mock_dataset.side_effect = [parent_ds, parent_ds, child_ds]
 
         with patch('bids_studies.subdatasets.time.sleep'):
             with pytest.raises(RuntimeError, match="Installation failed after .* retries"):
@@ -239,6 +242,7 @@ class TestTemporarySubdatasetInstall:
         child_ds.is_installed.return_value = False  # Needs install
 
         mock_dataset.side_effect = [
+            parent_ds,  # For ensure_subdatasets_installed's own Dataset call
             parent_ds,  # For iter_sourcedata_subdatasets
             child_ds,   # For checking if installed
             parent_ds,  # For drop_subdatasets
@@ -268,7 +272,7 @@ class TestTemporarySubdatasetInstall:
         child_ds = Mock()
         child_ds.is_installed.return_value = True
 
-        mock_dataset.side_effect = [parent_ds, child_ds]
+        mock_dataset.side_effect = [parent_ds, parent_ds, child_ds]
 
         with TemporarySubdatasetInstall(study_path) as (newly, existing):
             assert len(newly) == 0
@@ -293,8 +297,9 @@ class TestExtractStudyWithSubdatasets:
 
         mock_dataset.return_value = parent_ds
 
-        # Mock extraction
-        with patch('bids_studies.subdatasets.collect_study_metadata') as mock_extract:
+        # Patch at the source module (function is imported locally inside
+        # extract_study_with_subdatasets)
+        with patch('openneuro_studies.metadata.studies_tsv.collect_study_metadata') as mock_extract:
             mock_extract.return_value = {'study_id': 'study-ds000001', 'subjects_num': 10}
 
             result = extract_study_with_subdatasets(study_path, stage='sizes')

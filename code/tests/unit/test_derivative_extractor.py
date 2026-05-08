@@ -31,29 +31,38 @@ class TestExtractDerivativeStats:
 
     def test_extract_stats_basic(self, tmp_path):
         """Test basic stats extraction from git-annex info."""
-        # Mock git-annex info output
         annex_info = {
             "size of annexed files in working tree": "1234567890",
             "local annex size": "9876543210",
         }
 
         with patch("subprocess.run") as mock_run:
-            # Mock git annex info call
-            mock_run.return_value = Mock(
-                stdout=json.dumps(annex_info),
-                returncode=0,
-            )
+            def side_effect(*args, **kwargs):
+                cmd = args[0]
+                # git annex info
+                if "annex" in cmd and "info" in cmd:
+                    return Mock(stdout=json.dumps(annex_info), returncode=0)
+                # git ls-tree -r -l HEAD (for _calculate_git_tracked_size)
+                if "ls-tree" in cmd and "-l" in cmd:
+                    # Return some git-tracked files with sizes
+                    # Format: mode type hash size\tpath
+                    return Mock(
+                        stdout="100644 blob abc123  500\tREADME.md\n"
+                               "100644 blob def456  500\tdataset_description.json",
+                        returncode=0,
+                    )
+                # git ls-files (for file count)
+                if "ls-files" in cmd:
+                    return Mock(stdout="file1.nii.gz\nfile2.nii.gz\nfile3.json", returncode=0)
+                return Mock(stdout="", returncode=0)
 
-            # Call extraction (first call is annex info, second is ls-files)
-            mock_run.side_effect = [
-                Mock(stdout=json.dumps(annex_info), returncode=0),
-                Mock(stdout="file1.nii.gz\nfile2.nii.gz\nfile3.json", returncode=0),
-            ]
+            mock_run.side_effect = side_effect
 
             result = extract_derivative_stats(tmp_path)
 
             assert result["size_annexed"] == "1234567890"
-            assert result["size_total"] == "9876543210"
+            # size_total = git_tracked_size (1000) + annex_size (1234567890)
+            assert result["size_total"] == str(1234567890 + 1000)
             assert result["file_count"] == 3
 
     def test_extract_stats_no_annex(self, tmp_path):
@@ -84,20 +93,28 @@ class TestVersionTracking:
 
     def test_version_tracking_uptodate(self, tmp_path):
         """Test version tracking when derivative is up-to-date."""
-        # Create mock dataset_description.json
         deriv_path = tmp_path / "derivative"
         deriv_path.mkdir()
-        dd_path = deriv_path / "dataset_description.json"
-        dd_path.write_text(json.dumps({
-            "SourceDatasets": [{"Version": "1.0.0"}]
-        }))
 
+        # raw_path needs .git so _get_git_version uses git describe
         raw_path = tmp_path / "raw"
         raw_path.mkdir()
+        (raw_path / ".git").mkdir()
+
+        dd_content = json.dumps({"SourceDatasets": [{"Version": "1.0.0"}]})
 
         with patch("subprocess.run") as mock_run:
-            # Mock git describe to return matching version
-            mock_run.return_value = Mock(stdout="1.0.0\n", returncode=0)
+            def side_effect(*args, **kwargs):
+                cmd = args[0]
+                # git show HEAD:dataset_description.json
+                if "show" in cmd:
+                    return Mock(stdout=dd_content, returncode=0)
+                # git describe --tags
+                if "describe" in cmd:
+                    return Mock(stdout="1.0.0\n", returncode=0)
+                return Mock(stdout="", returncode=0)
+
+            mock_run.side_effect = side_effect
 
             result = extract_version_tracking(deriv_path, raw_path)
 
@@ -110,18 +127,20 @@ class TestVersionTracking:
         """Test version tracking when derivative is outdated."""
         deriv_path = tmp_path / "derivative"
         deriv_path.mkdir()
-        dd_path = deriv_path / "dataset_description.json"
-        dd_path.write_text(json.dumps({
-            "SourceDatasets": [{"Version": "1.0.0"}]
-        }))
 
+        # raw_path needs .git so _get_git_version uses git describe
         raw_path = tmp_path / "raw"
         raw_path.mkdir()
+        (raw_path / ".git").mkdir()
+
+        dd_content = json.dumps({"SourceDatasets": [{"Version": "1.0.0"}]})
 
         with patch("subprocess.run") as mock_run:
             def side_effect(*args, **kwargs):
                 cmd = args[0]
-                if "describe" in cmd:
+                if "show" in cmd:
+                    return Mock(stdout=dd_content, returncode=0)
+                elif "describe" in cmd:
                     return Mock(stdout="1.2.0\n", returncode=0)
                 elif "rev-list" in cmd:
                     return Mock(stdout="5\n", returncode=0)
@@ -634,19 +653,29 @@ class TestCombinedExtraction:
         """Test full metadata extraction."""
         deriv_path = tmp_path / "derivative"
         deriv_path.mkdir()
-        dd_path = deriv_path / "dataset_description.json"
-        dd_path.write_text(json.dumps({
-            "SourceDatasets": [{"Version": "1.0.0"}]
-        }))
 
+        # raw_path needs .git so _get_git_version uses git describe
         raw_path = tmp_path / "raw"
         raw_path.mkdir()
+        (raw_path / ".git").mkdir()
+
+        dd_content = json.dumps({"SourceDatasets": [{"Version": "1.0.0"}]})
+
+        all_files = (
+            "sub-01/anat/sub-01_desc-preproc_T1w.nii.gz\n"
+            "sub-01/func/sub-01_task-rest_desc-preproc_bold.nii.gz"
+        )
 
         with patch("subprocess.run") as mock_run:
             def side_effect(*args, **kwargs):
                 cmd = args[0]
+                cmd_str = " ".join(str(c) for c in cmd)
 
-                # git annex info
+                # git show HEAD:dataset_description.json
+                if "show" in cmd and "dataset_description" in cmd_str:
+                    return Mock(stdout=dd_content, returncode=0)
+
+                # git annex info --json
                 if "annex" in cmd and "info" in cmd:
                     return Mock(
                         stdout=json.dumps({
@@ -656,53 +685,36 @@ class TestCombinedExtraction:
                         returncode=0,
                     )
 
-                # git ls-files for file count
-                if "ls-files" in cmd and len(cmd) == 4:
-                    return Mock(stdout="file1\nfile2\nfile3", returncode=0)
+                # git ls-tree -r -l HEAD (for _calculate_git_tracked_size)
+                if "ls-tree" in cmd and "-l" in cmd:
+                    return Mock(stdout="", returncode=0)
 
-                # git describe
+                # git ls-files (all files, for file_count and tasks/descriptions)
+                if "ls-files" in cmd:
+                    return Mock(stdout=all_files, returncode=0)
+
+                # git describe --tags
                 if "describe" in cmd:
                     return Mock(stdout="1.0.0\n", returncode=0)
 
-                # git ls-files func/
-                if "func/" in cmd:
-                    return Mock(
-                        stdout="sub-01/func/sub-01_task-rest_desc-preproc_bold.nii.gz",
-                        returncode=0,
-                    )
-
-                # git ls-files anat/
-                if "anat/" in cmd:
-                    return Mock(
-                        stdout="sub-01/anat/sub-01_desc-preproc_T1w.nii.gz",
-                        returncode=0,
-                    )
-
-                # git ls-files (all files)
-                if "ls-files" in cmd and len(cmd) == 5:
-                    return Mock(
-                        stdout="sub-01/anat/sub-01_desc-preproc_T1w.nii.gz\n"
-                               "sub-01/func/sub-01_task-rest_desc-preproc_bold.nii.gz",
-                        returncode=0,
-                    )
-
-                # git ls-tree for raw directories
+                # git ls-tree HEAD (for raw directories, no -l flag)
                 if "ls-tree" in cmd:
                     return Mock(
                         stdout="040000 tree anat\n040000 tree func\n",
                         returncode=0,
                     )
 
-                raise ValueError(f"Unexpected command: {cmd}")
+                raise ValueError(f"Unexpected command: {cmd_str}")
 
             mock_run.side_effect = side_effect
 
             result = extract_derivative_metadata(deriv_path, raw_path)
 
             # Check all expected fields
-            assert result["size_total"] == "2000000"
+            # size_total = git_tracked(0) + annex(1000000) = 1000000
+            assert result["size_total"] == "1000000"
             assert result["size_annexed"] == "1000000"
-            assert result["file_count"] == 3
+            assert result["file_count"] == 2  # 2 files in all_files
             assert result["processed_raw_version"] == "1.0.0"
             assert result["current_raw_version"] == "1.0.0"
             assert result["uptodate"] is True

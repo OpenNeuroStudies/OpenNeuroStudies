@@ -261,6 +261,151 @@ class TestStudyAggregation:
         assert result["bold_voxels_total"] == 217088
 
 
+class TestDerivativeExtraction:
+    """Test derivative extraction and file placement."""
+
+    def test_extract_derivative_stats_returns_tuple(self, tmp_path):
+        """Test that extract_derivative_stats returns (subjects, dataset) tuple."""
+        from bids_studies.extraction.study import extract_derivative_stats
+
+        deriv_path = tmp_path / "MRIQC"
+        deriv_path.mkdir()
+
+        mock_ds = Mock()
+        mock_ds.list_dirs.side_effect = lambda pattern: {
+            "sub-*": ["sub-01"],
+            "sub-01/ses-*": [],
+        }.get(pattern, [])
+        mock_ds.list_files.return_value = ["sub-01/anat/sub-01_T1w.nii.gz"]
+        mock_ds.get_file_size.return_value = 100
+
+        with patch('bids_studies.extraction.derivative.SparseDataset') as MockSparse:
+            MockSparse.return_value.__enter__.return_value = mock_ds
+            subjects, dataset = extract_derivative_stats(
+                deriv_path, "ds000001", "MRIQC"
+            )
+
+        assert isinstance(subjects, list)
+        assert isinstance(dataset, dict)
+        assert len(subjects) == 1
+        assert dataset["source_id"] == "ds000001"
+        assert dataset["derivative_id"] == "MRIQC"
+        assert dataset["subjects_num"] == 1
+
+    def test_extract_derivative_stats_empty_returns_zero_counts(self, tmp_path):
+        """Test that uninitialized derivatives return zero counts, not empty dict."""
+        from bids_studies.extraction.study import extract_derivative_stats
+
+        deriv_path = tmp_path / "fMRIPrep"
+        deriv_path.mkdir()
+
+        mock_ds = Mock()
+        mock_ds.list_dirs.return_value = []  # No subjects found
+        mock_ds.list_files.return_value = []
+
+        with patch('bids_studies.extraction.derivative.SparseDataset') as MockSparse:
+            MockSparse.return_value.__enter__.return_value = mock_ds
+            subjects, dataset = extract_derivative_stats(
+                deriv_path, "ds000001", "fMRIPrep"
+            )
+
+        assert subjects == []
+        assert dataset["source_id"] == "ds000001"
+        assert dataset["derivative_id"] == "fMRIPrep"
+        assert dataset["subjects_num"] == 0
+        assert dataset["output_num"] == 0
+
+    def test_extract_all_derivatives_writes_to_parent_dir(self, tmp_path):
+        """Test that TSV files are written to derivatives/ not inside individual derivative dirs."""
+        from bids_studies.extraction.study import extract_all_derivatives_stats
+
+        # Create derivative directories
+        derivatives_dir = tmp_path / "derivatives"
+        mriqc_dir = derivatives_dir / "MRIQC-25.0.0"
+        fmriprep_dir = derivatives_dir / "fMRIPrep-24.1.1"
+        bidsval_dir = derivatives_dir / "bids-validator"
+        mriqc_dir.mkdir(parents=True)
+        fmriprep_dir.mkdir(parents=True)
+        bidsval_dir.mkdir(parents=True)
+
+        mock_ds = Mock()
+        mock_ds.list_dirs.side_effect = lambda pattern: {
+            "sub-*": ["sub-01"],
+            "sub-01/ses-*": [],
+        }.get(pattern, [])
+        mock_ds.list_files.return_value = ["sub-01/anat/sub-01_T1w.nii.gz"]
+        mock_ds.get_file_size.return_value = 100
+
+        with patch('bids_studies.extraction.derivative.SparseDataset') as MockSparse:
+            MockSparse.return_value.__enter__.return_value = mock_ds
+            results = extract_all_derivatives_stats(
+                derivatives_dir, source_id="ds000001", write_files=True
+            )
+
+        # Should have dataset stats for both derivatives (not bids-validator)
+        assert len(results) == 2
+        deriv_ids = [r["derivative_id"] for r in results]
+        assert "MRIQC-25.0.0" in deriv_ids
+        assert "fMRIPrep-24.1.1" in deriv_ids
+        assert "bids-validator" not in deriv_ids
+
+        # Files should be at derivatives/ level, NOT inside individual derivative dirs
+        assert (derivatives_dir / "derivatives+datasets.tsv").exists()
+        assert (derivatives_dir / "derivatives+subjects.tsv").exists()
+
+        # Files should NOT be inside individual derivative dirs
+        assert not list(mriqc_dir.glob("derivatives+*"))
+        assert not list(fmriprep_dir.glob("derivatives+*"))
+
+    def test_extract_all_derivatives_includes_uninitialized(self, tmp_path):
+        """Test that uninitialized derivatives still appear in datasets TSV with zero counts."""
+        from bids_studies.extraction.study import extract_all_derivatives_stats
+
+        derivatives_dir = tmp_path / "derivatives"
+        mriqc_dir = derivatives_dir / "MRIQC"
+        fmriprep_dir = derivatives_dir / "fMRIPrep"
+        mriqc_dir.mkdir(parents=True)
+        fmriprep_dir.mkdir(parents=True)
+
+        # MRIQC returns subjects; fMRIPrep returns nothing (uninitialized)
+        call_count = [0]
+
+        def mock_sparse_init(path):
+            cm = MagicMock()
+            mock_ds = Mock()
+            if "MRIQC" in str(path):
+                mock_ds.list_dirs.side_effect = lambda p: {"sub-*": ["sub-01"], "sub-01/ses-*": []}.get(p, [])
+                mock_ds.list_files.return_value = ["sub-01/file.html"]
+                mock_ds.get_file_size.return_value = 50
+            else:
+                mock_ds.list_dirs.return_value = []
+                mock_ds.list_files.return_value = []
+            cm.__enter__ = Mock(return_value=mock_ds)
+            cm.__exit__ = Mock(return_value=False)
+            return cm
+
+        with patch('bids_studies.extraction.derivative.SparseDataset', side_effect=mock_sparse_init):
+            results = extract_all_derivatives_stats(
+                derivatives_dir, source_id="ds006131", write_files=True
+            )
+
+        # Both derivatives should appear in results
+        assert len(results) == 2
+        mriqc_stats = next(r for r in results if r["derivative_id"] == "MRIQC")
+        fmriprep_stats = next(r for r in results if r["derivative_id"] == "fMRIPrep")
+
+        assert mriqc_stats["subjects_num"] == 1
+        assert fmriprep_stats["subjects_num"] == 0
+        assert fmriprep_stats["output_num"] == 0
+
+        # datasets TSV should exist and contain both derivatives
+        datasets_tsv = derivatives_dir / "derivatives+datasets.tsv"
+        assert datasets_tsv.exists()
+        content = datasets_tsv.read_text()
+        assert "MRIQC" in content
+        assert "fMRIPrep" in content
+
+
 class TestDatasetTypes:
     """Test that BIDS_DATATYPES constant is used for filtering."""
 

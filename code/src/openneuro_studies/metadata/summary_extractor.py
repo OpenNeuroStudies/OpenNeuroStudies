@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # - MAJOR: Breaking schema changes
 # - MINOR: New metrics added (backward compatible)
 # - PATCH: Bug fixes, no schema changes
-EXTRACTION_VERSION = "1.1.0"  # Added: bold_trs, bold_duration_total, nibabel-based parsing
+EXTRACTION_VERSION = "1.1.2"  # Fix: write derivative TSVs to derivatives/ dir, include all derivatives
 
 
 # ============================================================================

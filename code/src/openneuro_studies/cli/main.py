@@ -317,81 +317,68 @@ def metadata_generate(
                 else:
                     click.echo(f"  ✗ {study_path.name}: {error}", err=True)
 
-    # Generate derivative hierarchical TSV files for counts/sizes stages
+    # Generate combined derivative hierarchical TSV files for counts/sizes stages
     if stage in ("counts", "sizes", "imaging"):
-        from bids_studies.extraction import extract_derivative_stats
+        from bids_studies.extraction.study import extract_all_derivatives_stats
 
         click.echo(
-            f"\nGenerating per-derivative hierarchical statistics "
+            f"\nGenerating per-study derivative hierarchical statistics "
             f"({'parallel' if jobs > 1 else 'sequential'}, {jobs} job{'s' if jobs > 1 else ''})..."
         )
 
-        def process_derivative(study_path: Path, derivative_path: Path, source_id: str) -> tuple[Path, bool, str | None]:
-            """Process a single derivative, returning (derivative_path, success, error_msg)."""
+        def process_study_derivatives(study_path: Path, source_id: str) -> tuple[Path, bool, str | None]:
+            """Process all derivatives for a study, returning (study_path, success, error_msg)."""
             import logging
             logger = logging.getLogger(__name__)
 
-            derivative_id = derivative_path.name
+            derivatives_dir = study_path / "derivatives"
             try:
-                logger.info(f"Processing derivative stats for {study_path.name}/{derivative_id}")
-                extract_derivative_stats(
-                    derivative_path,
-                    source_id=source_id,
-                    derivative_id=derivative_id,
-                    write_files=True,
+                logger.info(f"Processing derivative stats for {study_path.name}")
+                extract_all_derivatives_stats(
+                    derivatives_dir, source_id=source_id, write_files=True
                 )
-                logger.info(f"  ✓ {study_path.name}/{derivative_id} derivative extraction complete")
-                return derivative_path, True, None
+                logger.info(f"  ✓ {study_path.name} derivative extraction complete")
+                return study_path, True, None
             except Exception as e:
-                logger.error(f"  ✗ {study_path.name}/{derivative_id} failed: {e}", exc_info=True)
-                return derivative_path, False, str(e)
+                logger.error(f"  ✗ {study_path.name} derivatives failed: {e}", exc_info=True)
+                return study_path, False, str(e)
 
-        # Collect all derivatives across studies
-        derivative_tasks = []
+        # Collect studies that have derivatives
+        deriv_study_tasks = []
         for study_path in study_paths:
             derivatives_dir = study_path / "derivatives"
             if not derivatives_dir.exists():
                 continue
-
-            # Determine source_id from study_id (e.g., "study-ds000001" -> "ds000001")
             source_id = study_path.name.replace("study-", "")
+            deriv_study_tasks.append((study_path, source_id))
 
-            # Find derivative subdirectories
-            for derivative_path in derivatives_dir.iterdir():
-                if derivative_path.is_dir() and not derivative_path.name.startswith("."):
-                    # Skip bids-validator derivative (not a dataset)
-                    if derivative_path.name == "bids-validator":
-                        continue
-                    derivative_tasks.append((study_path, derivative_path, source_id))
-
-        if derivative_tasks:
-            # Process derivatives in parallel or sequential
+        if deriv_study_tasks:
             if jobs > 1:
                 with ThreadPoolExecutor(max_workers=jobs) as executor:
-                    futures = {executor.submit(process_derivative, sp, dp, sid): (sp, dp) for sp, dp, sid in derivative_tasks}
+                    futures = {executor.submit(process_study_derivatives, sp, sid): sp for sp, sid in deriv_study_tasks}
                     for future in as_completed(futures):
-                        derivative_path, success, error = future.result()
+                        study_path, success, error = future.result()
+                        derivatives_dir = study_path / "derivatives"
                         if success:
-                            click.echo(f"  ✓ {derivative_path.parent.parent.name}/{derivative_path.name}/derivatives+*.tsv")
-                            # Add derivative files to modified paths
-                            for tsv in derivative_path.glob("derivatives+*.tsv"):
+                            click.echo(f"  ✓ {study_path.name}/derivatives/derivatives+*.tsv")
+                            for tsv in derivatives_dir.glob("derivatives+*.tsv"):
                                 modified_paths.append(tsv)
-                            for json_file in derivative_path.glob("derivatives+*.json"):
+                            for json_file in derivatives_dir.glob("derivatives+*.json"):
                                 modified_paths.append(json_file)
                         else:
-                            click.echo(f"  ✗ {derivative_path.parent.parent.name}/{derivative_path.name}: {error}", err=True)
+                            click.echo(f"  ✗ {study_path.name}: {error}", err=True)
             else:
-                # Sequential processing (jobs=1)
-                for study_path, derivative_path, source_id in derivative_tasks:
-                    derivative_path, success, error = process_derivative(study_path, derivative_path, source_id)
+                for study_path, source_id in deriv_study_tasks:
+                    study_path, success, error = process_study_derivatives(study_path, source_id)
+                    derivatives_dir = study_path / "derivatives"
                     if success:
-                        click.echo(f"  ✓ {study_path.name}/{derivative_path.name}/derivatives+*.tsv")
-                        for tsv in derivative_path.glob("derivatives+*.tsv"):
+                        click.echo(f"  ✓ {study_path.name}/derivatives/derivatives+*.tsv")
+                        for tsv in derivatives_dir.glob("derivatives+*.tsv"):
                             modified_paths.append(tsv)
-                        for json_file in derivative_path.glob("derivatives+*.json"):
+                        for json_file in derivatives_dir.glob("derivatives+*.json"):
                             modified_paths.append(json_file)
                     else:
-                        click.echo(f"  ✗ {study_path.name}/{derivative_path.name}: {error}", err=True)
+                        click.echo(f"  ✗ {study_path.name}: {error}", err=True)
         else:
             click.echo("  (no derivatives found)")
 
