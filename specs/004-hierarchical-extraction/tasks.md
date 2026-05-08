@@ -176,17 +176,15 @@
 
 ## Phase 9: Library Boundary (FR-HE-070 through FR-HE-073)
 
-### 9.1 [PARTIAL] bids_studies must not import openneuro_studies (FR-HE-071)
-- **Current violations** (6 import sites):
-  1. `bids_studies/extraction/subject.py` imports `openneuro_studies.lib.exceptions.NetworkError`
-  2. `bids_studies/extraction/subject.py` imports `openneuro_studies.lib.error_classification.aggregate_errors`
-  3. `bids_studies/extraction/derivative.py` imports `openneuro_studies.lib.exceptions.NetworkError`
-  4. `bids_studies/extraction/study.py` imports `openneuro_studies.lib.error_tracking.ErrorLevel, log_error`
-  5. `bids_studies/sparse/access.py` imports `openneuro_studies.lib.retry.retry_on_network_error`
-  6. `bids_studies/subdatasets/__init__.py` imports `openneuro_studies.metadata.studies_tsv.collect_study_metadata`
-- Items 1 and 3 use try/except ImportError with fallback, so they work standalone
-- Items 2 and 4 do NOT have fallbacks -- they will fail without openneuro_studies
-- **Required**: Move NetworkError, error_classification, error_tracking to bids_studies or remove the dependency
+### 9.1 [DONE] bids_studies must not import openneuro_studies (FR-HE-071)
+- **Resolved**: All 6 module-level import violations fixed.
+- Created `bids_studies.exceptions` with `NetworkError` (items 1, 3)
+- Created `bids_studies.error_classification` with `classify_error`, `aggregate_errors` (item 2)
+- Created `bids_studies.error_tracking` with `ErrorLevel`, `log_error` (item 4)
+- Created `bids_studies.retry` with `retry_on_network_error` (item 5)
+- Changed `subdatasets/__init__.py` to accept `metadata_extractor` parameter via dependency injection (item 6); lazy fallback import preserved for backward compat
+- `openneuro_studies.lib.error_classification` now re-exports from `bids_studies`
+- Unit test: `TestLibraryBoundary::test_no_openneuro_imports_in_extraction`
 
 ### 9.2 [TODO] Migrate derivative_extractor.py to bids_studies (FR-042i)
 - File: `code/src/openneuro_studies/metadata/derivative_extractor.py`
@@ -242,13 +240,13 @@
 
 ## Phase 12: Data Format (FR-HE-080 through FR-HE-083)
 
-### 12.1 [PARTIAL] TSV writing without CSV escaping (FR-HE-080)
+### 12.1 [DONE] TSV writing without CSV escaping (FR-HE-080)
 - Snakemake `merge_into_canonical` and `merge_derivatives_tsv` rules use manual TSV writing (correct)
 - `studies_tsv.py` `generate_studies_tsv()` uses manual TSV writing (correct)
 - `studies_plus_derivatives_tsv.py` uses manual TSV writing (correct)
-- **But**: `bids_studies/extraction/tsv.py` still uses `csv.DictWriter` for hierarchical files
-- **Impact**: JSON values in fields (if any) may get double-quoted
-- **Fix needed**: Switch `write_subjects_tsv()`, `write_datasets_tsv()`, etc. to manual TSV writing
+- `bids_studies/extraction/tsv.py` now uses manual `_write_tsv()` helper (tab join, no csv module for writes)
+- `_read_tsv()` helper also uses manual parsing for consistency
+- Unit test: `TestTsvRoundTrip::test_tsv_no_csv_escaping` verifies no quoting
 
 ### 12.2 [DONE] Consistent n/a handling
 - `_na()` helper converts None to "n/a"
@@ -263,12 +261,14 @@
 
 ## Phase 13: Testing
 
-### 13.1 [PARTIAL] Unit tests for extraction
+### 13.1 [DONE] Unit tests for extraction
 - File: `code/tests/unit/test_hierarchical_extraction.py`
 - Tests session validation, dataset aggregation, study aggregation
-- **Missing**: Tests for derivative extraction and aggregation
-- **Missing**: Tests for TSV read/write functions
-- **Missing**: Tests for error handling paths
+- Tests derivative extraction (`TestDerivativeExtraction`: 5 tests)
+- Tests TSV round-trip (`TestTsvRoundTrip`: 6 tests including no-escaping check)
+- Tests error classification (`TestErrorClassification`: 3 tests)
+- Tests library boundary (`TestLibraryBoundary`: 2 tests)
+- Total: 28 tests in file, all passing
 
 ### 13.2 [PARTIAL] Integration tests
 - File: `code/tests/integration/test_extraction_with_subdatasets.py`
@@ -294,21 +294,21 @@
 | 6. Derivative orchestration | PARTIAL | Per-study derivatives.tsv not generated (FR-042f) |
 | 7. Cross-study aggregation | PARTIAL | studies.tsv uses direct extraction, not hierarchical (DRY violation) |
 | 8. Snakemake workflow | DONE | -- |
-| 9. Library boundary | PARTIAL | bids_studies imports openneuro_studies (6 sites); derivative_extractor.py not migrated |
+| 9. Library boundary | PARTIAL | bids_studies module-level imports resolved; derivative_extractor.py not migrated |
 | 10. Subdataset management | DONE | -- |
 | 11. Error handling | DONE | -- |
-| 12. Data format | PARTIAL | Hierarchical TSV uses csv.DictWriter (should be manual) |
-| 13. Testing | PARTIAL | Missing derivative tests, regression test, multi-source test |
+| 12. Data format | DONE | All TSV writing uses manual tab-join (no csv.DictWriter) |
+| 13. Testing | PARTIAL | Missing regression test (13.3), multi-source integration test (13.2) |
 
 ### Critical Path (must-fix for spec compliance)
 
 1. **Phase 6.2**: Generate per-study `derivatives/derivatives.tsv` (FR-042f)
 2. **Phase 7.1**: Make studies.tsv read from hierarchical files, not re-extract (FR-042g, DRY)
-3. **Phase 9.1**: Remove openneuro_studies imports from bids_studies (FR-HE-071)
+3. ~~**Phase 9.1**: Remove openneuro_studies imports from bids_studies (FR-HE-071)~~ **DONE**
 4. **Phase 9.2**: Migrate derivative_extractor.py to bids_studies (FR-042i)
 
 ### Quality Improvements (important but not blocking)
 
-5. **Phase 12.1**: Switch hierarchical TSV writing to manual (no csv.DictWriter)
-6. **Phase 13.1**: Add derivative extraction unit tests
+5. ~~**Phase 12.1**: Switch hierarchical TSV writing to manual (no csv.DictWriter)~~ **DONE**
+6. ~~**Phase 13.1**: Add derivative extraction unit tests~~ **DONE**
 7. **Phase 13.3**: Add regression test comparing extraction paths
