@@ -1,7 +1,11 @@
 """Unit tests for study dataset provisioning (FR-041)."""
 
+import os
 from pathlib import Path
 
+from click.testing import CliRunner
+
+from openneuro_studies.cli.provision import provision
 from openneuro_studies.provision import (
     TEMPLATE_VERSION_DIR,
     TEMPLATE_VERSION_FILE,
@@ -309,3 +313,146 @@ class TestReadmeContent:
 
         assert "datalad run" in content
         assert "code/run-bids-validator" in content
+
+
+class TestProvisionCLI:
+    """Tests for the provision CLI command (Click test runner)."""
+
+    def test_provision_help(self):
+        """provision --help should show usage info and exit cleanly."""
+        runner = CliRunner()
+        result = runner.invoke(provision, ["--help"])
+
+        assert result.exit_code == 0
+        assert "Provision study datasets" in result.output
+        assert "--force" in result.output
+        assert "--dry-run" in result.output
+        assert "--commit" in result.output
+        assert "--when" in result.output
+        assert "STUDY_IDS" in result.output
+
+    def test_provision_no_studies(self, tmp_path: Path):
+        """provision with no study directories should report no studies found."""
+        runner = CliRunner()
+        orig_dir = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            result = runner.invoke(provision, ["--no-commit"])
+        finally:
+            os.chdir(orig_dir)
+
+        assert "No study directories found" in result.output
+
+    def test_provision_dry_run_with_studies(self, tmp_path: Path):
+        """provision --dry-run should list what would be provisioned."""
+        # Create study directories
+        (tmp_path / "study-ds000001").mkdir()
+        (tmp_path / "study-ds005256").mkdir()
+
+        runner = CliRunner()
+        orig_dir = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            result = runner.invoke(provision, ["--dry-run", "--no-commit"])
+        finally:
+            os.chdir(orig_dir)
+
+        assert result.exit_code == 0
+        assert "DRY RUN" in result.output
+        assert "study-ds000001" in result.output
+        assert "study-ds005256" in result.output
+        assert "Would provision:" in result.output
+
+    def test_provision_specific_studies(self, tmp_path: Path):
+        """provision with specific study IDs should only process those."""
+        (tmp_path / "study-ds000001").mkdir()
+        (tmp_path / "study-ds005256").mkdir()
+
+        runner = CliRunner()
+        orig_dir = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            result = runner.invoke(
+                provision, ["study-ds000001", "--no-commit"]
+            )
+        finally:
+            os.chdir(orig_dir)
+
+        assert result.exit_code == 0
+        assert "Provisioning 1 studies" in result.output
+        assert "study-ds000001" in result.output
+
+    def test_provision_normalizes_study_ids(self, tmp_path: Path):
+        """provision should accept ds000001 (without study- prefix)."""
+        (tmp_path / "study-ds000001").mkdir()
+
+        runner = CliRunner()
+        orig_dir = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            result = runner.invoke(
+                provision, ["ds000001", "--dry-run", "--no-commit"]
+            )
+        finally:
+            os.chdir(orig_dir)
+
+        assert result.exit_code == 0
+        assert "study-ds000001" in result.output
+
+    def test_provision_invalid_study_id(self, tmp_path: Path):
+        """provision with nonexistent study ID should warn."""
+        runner = CliRunner()
+        orig_dir = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            result = runner.invoke(
+                provision, ["study-ds999999", "--no-commit"]
+            )
+        finally:
+            os.chdir(orig_dir)
+
+        assert "Warning: Study directory not found: study-ds999999" in result.output
+
+    def test_provision_when_always(self, tmp_path: Path):
+        """provision --when=always should force re-provisioning."""
+        study_path = tmp_path / "study-ds000001"
+        study_path.mkdir()
+
+        # First provision the study to make it current
+        provision_study(study_path)
+
+        runner = CliRunner()
+        orig_dir = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            result = runner.invoke(
+                provision, ["--when=always", "--no-commit"]
+            )
+        finally:
+            os.chdir(orig_dir)
+
+        assert result.exit_code == 0
+        # With --when=always, it should re-provision even though up-to-date
+        assert "provisioned" in result.output
+        assert "Provisioned: 1" in result.output
+
+    def test_provision_when_outdated_skips_current(self, tmp_path: Path):
+        """provision --when=outdated should skip up-to-date studies."""
+        study_path = tmp_path / "study-ds000001"
+        study_path.mkdir()
+
+        # First provision the study to make it current
+        provision_study(study_path)
+
+        runner = CliRunner()
+        orig_dir = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            result = runner.invoke(
+                provision, ["--when=outdated", "--no-commit"]
+            )
+        finally:
+            os.chdir(orig_dir)
+
+        assert result.exit_code == 0
+        assert "skipped (up-to-date)" in result.output

@@ -30,6 +30,13 @@ logger = logging.getLogger(__name__)
     default=True,
     help="Commit changes with datalad save",
 )
+@click.option(
+    "--when",
+    type=click.Choice(["always", "outdated"], case_sensitive=False),
+    default="outdated",
+    help="When to provision: 'always' (all studies) or 'outdated' (only outdated versions)",
+    show_default=True,
+)
 @click.pass_context
 def provision(
     ctx: click.Context,
@@ -37,6 +44,7 @@ def provision(
     force: bool,
     dry_run: bool,
     commit: bool,
+    when: str,
 ) -> None:
     """Provision study datasets with templated content.
 
@@ -58,9 +66,16 @@ def provision(
         # Force re-provisioning
         openneuro-studies provision --force
 
+        # Re-provision all studies (equivalent to --force)
+        openneuro-studies provision --when=always
+
         # Preview changes
         openneuro-studies provision --dry-run
     """
+    # --when=always implies --force
+    if when.lower() == "always":
+        force = True
+
     root_path = Path(".")
 
     # Find study directories

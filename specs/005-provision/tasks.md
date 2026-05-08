@@ -175,25 +175,23 @@ status based on code review of the current codebase as of 2026-05-07.
 
 **Purpose**: Connect provisioning to the broader workflow
 
-- [ ] T027 [TODO] Add `make provision` target to Makefile
-  - Target: `provision`
-  - Command: `openneuro-studies provision`
-  - Dependencies: studies must exist (after organize)
-  - Support CORES variable for future parallelization
+- [x] T027 [DONE] Add `make provision` target to Makefile
+  - Target: `provision` and `provision-force`
+  - Command: `openneuro-studies provision` / `openneuro-studies provision --force`
+  - Added to .PHONY, help output, and discovery workflow section
 
-- [ ] T028 [TODO] Consider calling provision from organize workflow
+- [x] T028 [DONE] Consider calling provision from organize workflow
   - Currently provision is NOT called from organize (deliberate separation)
-  - Evaluate whether organize should optionally call provision on newly created studies
-  - If yes: add --provision/--no-provision flag to organize command
-  - Decision: keep separate for now; document as a future enhancement
+  - Decision: keep separate for now; provision is an independent step in the pipeline
+  - The `make full-refresh` target chains organize -> provision -> extract
 
-- [ ] T029 [TODO] Add provision step to `make full-refresh` pipeline
+- [x] T029 [DONE] Add provision step to `make full-refresh` pipeline
   - After organize, before metadata generation
-  - Ensures newly organized studies are provisioned before validation
+  - full-refresh: studies-init discover organize provision extract metadata
 
-- [ ] T030 [TODO] Add `--when` option to provision command (parity with validate)
-  - Modes: `always` (provision all), `outdated` (only outdated versions, default behavior)
-  - This would make the option explicit rather than implicit
+- [x] T030 [DONE] Add `--when` option to provision command (parity with validate)
+  - Modes: `always` (provision all, implies --force), `outdated` (only outdated versions, default)
+  - --when=always is equivalent to --force for clarity
 
 ---
 
@@ -201,21 +199,25 @@ status based on code review of the current codebase as of 2026-05-07.
 
 **Purpose**: Documentation and cross-cutting improvements
 
-- [ ] T031 [TODO] Add provision command to CLAUDE.md common commands section
-  - Under "Direct CLI Usage" section
-  - Under "Production Operations (Use Make)" section once make target exists
+- [x] T031 [DONE] Add provision command to CLAUDE.md common commands section
+  - Added to "Production Operations (Use Make)" section: make provision, make provision-force
+  - Added to "Direct CLI Usage" section with examples
 
-- [ ] T032 [TODO] Add provision to project README.md workflow description
-  - Brief mention in the workflow: discover -> organize -> provision -> metadata -> validate
+- [x] T032 [DONE] Add provision to project README.md workflow description
+  - Added workflow line: discover -> organize -> provision -> extract -> validate
 
-- [ ] T033 [TODO] Run shellcheck on generated run-bids-validator script
-  - Verify the template output passes shellcheck
-  - Fix any warnings
+- [x] T033 [DONE] Run shellcheck on generated run-bids-validator script
+  - Verified: template output passes shellcheck with zero warnings
 
-- [ ] T034 [TODO] Add CLI test for provision command (Click test runner)
-  - Test `openneuro-studies provision --help` output
-  - Test with mock study directories
-  - Test error handling for invalid study IDs
+- [x] T034 [DONE] Add CLI test for provision command (Click test runner)
+  - test_provision_help: verifies --help output includes all options
+  - test_provision_no_studies: verifies error message when no studies found
+  - test_provision_dry_run_with_studies: verifies dry-run output
+  - test_provision_specific_studies: verifies specific study targeting
+  - test_provision_normalizes_study_ids: verifies ds000001 -> study-ds000001
+  - test_provision_invalid_study_id: verifies warning for missing study
+  - test_provision_when_always: verifies --when=always forces re-provisioning
+  - test_provision_when_outdated_skips_current: verifies --when=outdated skips current
 
 ---
 
@@ -228,8 +230,8 @@ status based on code review of the current codebase as of 2026-05-07.
 - **Phase 3** (CLI Command): Depends on Phase 1 -- DONE
 - **Phase 4** (Unit Tests): Depends on Phase 1 -- DONE
 - **Phase 5** (Integration Tests): Depends on Phases 1-2 -- DONE
-- **Phase 6** (Workflow Integration): Depends on Phase 3 -- TODO
-- **Phase 7** (Documentation): Depends on Phase 3 -- TODO
+- **Phase 6** (Workflow Integration): Depends on Phase 3 -- DONE
+- **Phase 7** (Documentation): Depends on Phase 3 -- DONE
 
 ### Summary
 
@@ -240,18 +242,16 @@ status based on code review of the current codebase as of 2026-05-07.
 | 3. CLI Command | DONE | 6/6 | 0 |
 | 4. Unit Tests | DONE | 5/5 | 0 |
 | 5. Integration Tests | DONE | 4/4 | 0 |
-| 6. Workflow Integration | TODO | 0/4 | 4 |
-| 7. Documentation | TODO | 0/4 | 4 |
-| **Total** | | **26/34** | **8** |
+| 6. Workflow Integration | DONE | 4/4 | 0 |
+| 7. Documentation | DONE | 4/4 | 0 |
+| **Total** | | **34/34** | **0** |
 
 ### Key Finding
 
-The provision command is **substantially implemented** (76% complete). The core provisioner
-library, Copier templates, CLI command, and both unit and integration tests are all in place
-and functional. The remaining work is workflow integration (Makefile targets, organize
-integration) and documentation updates.
+The provision command is **fully implemented** (100% complete). All phases are done:
+core provisioner library, Copier templates, CLI command, unit tests, integration tests,
+workflow integration (Makefile targets), and documentation.
 
-The one notable gap is that **provisioning is not called from organize** -- it exists only as
-a standalone command. This is a deliberate design choice that keeps the commands independent,
-but it means curators must remember to run `provision` after `organize`. Adding a Make target
-that chains them (T029) would address this usability gap.
+Provisioning is deliberately separate from organize, but `make full-refresh` chains them:
+`discover -> organize -> provision -> extract -> metadata`. The `--when` option provides
+explicit control over when provisioning runs (`always` or `outdated`).

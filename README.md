@@ -16,6 +16,9 @@ This is a [DataLad super-dataset](https://docs.datalad.org/en/stable/glossary.ht
   - and other derivatives available for those datasets.
 
 
+The workflow is: `discover` -> `organize` -> `provision` -> `extract` -> `validate`.
+Use `make full-refresh` to run the complete pipeline, or individual steps as needed.
+
 Remember that for viewing .tsv files locally you can use an awesome
 [visidata](https://www.visidata.org/) tool.
 
