@@ -216,8 +216,8 @@ def extract_directory_summary(study_path: Path) -> dict[str, Any]:
     for source_dir in source_dirs:
         try:
             with SparseDataset(source_dir) as ds:
-                # Count subjects
-                subjects = ds.list_dirs("sub-*")
+                # Count subjects (top-level only, exclude derivative sub-*)
+                subjects = [s for s in ds.list_dirs("sub-*") if "/" not in s]
                 total_subjects += len(subjects)
 
                 # Count sessions per subject

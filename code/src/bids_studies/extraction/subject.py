@@ -294,8 +294,9 @@ def extract_subjects_stats(
 
     try:
         with SparseDataset(source_path) as ds:
-            # Find all subjects
-            subjects = ds.list_dirs("sub-*")
+            # Find all top-level subjects (exclude derivative paths like
+            # derivatives/mriqc/sub-* which also match the "sub-*" pattern)
+            subjects = [s for s in ds.list_dirs("sub-*") if "/" not in s]
             if not subjects:
                 return results, all_errors
 

@@ -36,7 +36,7 @@ class TestSessionValidation:
                 ],
             }.get(pattern, [])
 
-            results = extract_subjects_stats(Path("/fake"), "ds000001", include_imaging=False)
+            results, errors = extract_subjects_stats(Path("/fake"), "ds000001", include_imaging=False)
 
         # Should have exactly 2 rows (ses-01 and ses-02), not 4
         assert len(results) == 2
@@ -60,7 +60,7 @@ class TestSessionValidation:
                 "sub-02/ses-*": [],  # No sessions
             }.get(pattern, [])
 
-            results = extract_subjects_stats(Path("/fake"), "ds000001", include_imaging=False)
+            results, errors = extract_subjects_stats(Path("/fake"), "ds000001", include_imaging=False)
 
         # Should have 2 rows (one per subject)
         assert len(results) == 2
@@ -78,13 +78,45 @@ class TestSessionValidation:
                 "sub-01/ses-*": ["sub-01/ses-scan1", "sub-01/ses-scan2"],
             }.get(pattern, [])
 
-            results = extract_subjects_stats(Path("/fake"), "ds002843", include_imaging=False)
+            results, errors = extract_subjects_stats(Path("/fake"), "ds002843", include_imaging=False)
 
         # Should have 2 rows (one per session)
         assert len(results) == 2
         session_ids = [r["session_id"] for r in results]
         assert "ses-scan1" in session_ids
         assert "ses-scan2" in session_ids
+
+    def test_no_duplicate_rows_from_derivatives(self):
+        """Test that derivative sub-* dirs don't produce duplicate rows.
+
+        Regression test for https://github.com/OpenNeuroStudies/OpenNeuroStudies/issues/6
+        SparseDataset.list_dirs("sub-*") matches both root-level subjects
+        (sub-01) and derivative subjects (derivatives/mriqc/sub-01). The
+        extraction must filter to top-level only.
+        """
+        mock_ds = Mock()
+        mock_ds.list_files.return_value = []
+
+        with patch('bids_studies.extraction.subject.SparseDataset') as MockSparse:
+            MockSparse.return_value.__enter__.return_value = mock_ds
+            # Simulate list_dirs returning BOTH raw and derivative subjects
+            mock_ds.list_dirs.side_effect = lambda pattern: {
+                "sub-*": [
+                    "sub-01",
+                    "sub-02",
+                    "derivatives/mriqc/sub-01",  # Should be filtered out
+                    "derivatives/mriqc/sub-02",  # Should be filtered out
+                ],
+                "sub-01/ses-*": [],
+                "sub-02/ses-*": [],
+            }.get(pattern, [])
+
+            results, errors = extract_subjects_stats(Path("/fake"), "ds004636", include_imaging=False)
+
+        # Should have 2 rows (one per real subject), not 4
+        assert len(results) == 2
+        subject_ids = [r["subject_id"] for r in results]
+        assert subject_ids == ["sub-01", "sub-02"]
 
 
 class TestSessionCounting:
@@ -178,7 +210,7 @@ class TestImagingMetrics:
             }.get(pattern, [])
 
             # Test with imaging disabled (should have None for imaging metrics)
-            results = extract_subjects_stats(Path("/fake"), "ds000001", include_imaging=False)
+            results, errors = extract_subjects_stats(Path("/fake"), "ds000001", include_imaging=False)
 
         assert len(results) == 1
         result = results[0]

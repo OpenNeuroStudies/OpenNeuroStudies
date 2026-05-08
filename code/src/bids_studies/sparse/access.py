@@ -165,8 +165,13 @@ class SparseDataset:
     def list_dirs(self, pattern: str = "*") -> list[str]:
         """List directories matching a glob pattern.
 
+        Note: When pattern has no '/' (e.g., "sub-*"), this matches the
+        **last component** of ALL directory paths, including deeply nested ones
+        (e.g., "derivatives/mriqc/sub-01" matches "sub-*"). Callers wanting
+        only top-level matches should filter results with ``"/" not in d``.
+
         Args:
-            pattern: Glob pattern (e.g., "sub-*")
+            pattern: Glob pattern (e.g., "sub-*", "sub-01/ses-*")
 
         Returns:
             List of directory paths relative to repository root
