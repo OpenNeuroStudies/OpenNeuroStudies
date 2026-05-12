@@ -223,7 +223,7 @@ The existing `specs/001-read-file-doc/` was created through this workflow and se
 
 ### Slash Commands
 
-SpecKit provides slash commands invoked via `/speckit.<command>`. The standard workflow proceeds in order, though some commands are optional depending on the feature.
+SpecKit provides slash commands invoked via `/speckit.<command>`. Command prompt definitions live in `.claude/commands/speckit.*.md` (8 files). The standard workflow proceeds in order, though some commands are optional depending on the feature.
 
 #### Core Workflow (in order)
 
