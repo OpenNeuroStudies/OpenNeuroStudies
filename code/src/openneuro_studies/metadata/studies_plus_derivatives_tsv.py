@@ -441,16 +441,20 @@ def generate_studies_derivatives_tsv(
     # Sort by study_id, then derivative_id
     rows = [existing[k] for k in sorted(existing.keys())]
 
-    # Write TSV manually to avoid CSV escaping of JSON strings
+    # Use csv.DictWriter for proper TSV escaping (quotes fields containing tabs,
+    # newlines, or double-quotes). JSON fields like {"preproc":180} are quoted as
+    # "{""preproc"":180}" which any standard TSV/CSV reader handles correctly.
     with open(output_path, "w", newline="") as f:
-        # Write header
-        f.write("\t".join(STUDIES_DERIVATIVES_COLUMNS) + "\n")
+        writer = csv.DictWriter(
+            f, fieldnames=STUDIES_DERIVATIVES_COLUMNS, delimiter="\t",
+            extrasaction="ignore",
+        )
+        writer.writeheader()
 
-        # Write rows
         for row in rows:
-            # Convert each field to string, replacing None with empty string
-            fields = [str(row.get(col, "")) if row.get(col) is not None else "" for col in STUDIES_DERIVATIVES_COLUMNS]
-            f.write("\t".join(fields) + "\n")
+            # Convert values to strings, replacing None with empty string
+            clean = {col: str(row.get(col, "")) if row.get(col) is not None else "" for col in STUDIES_DERIVATIVES_COLUMNS}
+            writer.writerow(clean)
 
     preserved_count = len([k for k in existing if k[0] not in updated_study_ids])
     logger.info(

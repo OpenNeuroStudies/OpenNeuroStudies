@@ -346,18 +346,20 @@ def generate_studies_tsv(
     rows = [existing[sid] for sid in sorted(existing.keys())]
     logger.info(f"Writing {len(rows)} total studies ({len(updated_ids)} updated, {len(rows) - len(updated_ids)} preserved)")
 
-    # Write TSV manually to avoid CSV escaping of JSON strings (like studies+derivatives.tsv)
-    # Using csv.DictWriter would escape quotes in JSON fields, creating "{""key"":""value""}"
-    # Instead, write raw tab-separated values
+    # Use csv.DictWriter for proper TSV escaping (quotes fields containing tabs,
+    # newlines, or double-quotes). JSON fields like {"2.0":48} are quoted as
+    # "{""2.0"":48}" which any standard TSV/CSV reader handles correctly.
     with open(output_path, "w", newline="") as f:
-        # Write header
-        f.write("\t".join(STUDIES_COLUMNS) + "\n")
+        writer = csv.DictWriter(
+            f, fieldnames=STUDIES_COLUMNS, delimiter="\t",
+            extrasaction="ignore",
+        )
+        writer.writeheader()
 
-        # Write rows
         for row in rows:
-            # Convert each field to string, replacing None with empty string
-            fields = [str(row.get(col, "")) if row.get(col) is not None else "" for col in STUDIES_COLUMNS]
-            f.write("\t".join(fields) + "\n")
+            # Convert values to strings, replacing None with empty string
+            clean = {col: str(row.get(col, "")) if row.get(col) is not None else "" for col in STUDIES_COLUMNS}
+            writer.writerow(clean)
 
     logger.info(
         f"Generated {output_path} with {len(rows)} studies "
