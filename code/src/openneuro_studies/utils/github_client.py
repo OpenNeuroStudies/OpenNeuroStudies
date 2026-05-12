@@ -47,7 +47,7 @@ class GitHubClient:
         self,
         token: Optional[str] = None,
         cache_dir: str = ".openneuro-studies/cache",
-        cache_expire_after: int = 3600,
+        cache_expire_after: int = 86400,
         max_connections: int = 50,
     ):
         """Initialize GitHub client.
@@ -314,6 +314,38 @@ class GitHubClient:
                 continue
 
         # If all branches failed, raise error
+        raise GitHubAPIError(
+            f"Could not get commit SHA for {owner}/{repo}. "
+            f"Tried branches: {', '.join(branches)}"
+        )
+
+    def get_branch_sha(self, owner: str, repo: str, branch: str) -> str:
+        """Get commit SHA for a specific branch (skips repo info lookup).
+
+        Unlike get_default_branch_sha(), this method accepts the branch name
+        directly (e.g., from the listing response's default_branch field),
+        avoiding an extra /repos/{owner}/{repo} API call.
+
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            branch: Branch name to get SHA for
+
+        Returns:
+            Commit SHA (40-character hex string)
+
+        Raises:
+            GitHubAPIError: If request fails for all tried branches
+        """
+        branches = list(dict.fromkeys([branch, "main", "master"]))
+        for b in branches:
+            try:
+                endpoint = f"/repos/{owner}/{repo}/commits/{b}"
+                commit_data: Any = self._request(endpoint, retry=3)
+                if isinstance(commit_data, dict) and "sha" in commit_data:
+                    return str(commit_data["sha"])
+            except GitHubAPIError:
+                continue
         raise GitHubAPIError(
             f"Could not get commit SHA for {owner}/{repo}. "
             f"Tried branches: {', '.join(branches)}"

@@ -4,6 +4,7 @@ import json
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -76,6 +77,8 @@ class DatasetFinder:
         self.include_derivatives = include_derivatives
         self.include_related = include_related or set()
         self.max_workers = max_workers
+        self.force_rescan = False
+        self._cached_all_derivatives: Optional[List[DerivativeDataset]] = None
 
     def discover_all(
         self,
@@ -202,9 +205,49 @@ class DatasetFinder:
     ) -> List[DerivativeDataset]:
         """Discover all derivative datasets from all configured sources.
 
-        Scans all configured source organizations (without filter) to find every
-        derivative dataset and its source_datasets relationships. This is the shared
-        foundation for both forward (derivatives) and backward (sources) filter expansion.
+        Uses a three-tier caching strategy:
+        1. Session-level in-memory cache (fastest, same process)
+        2. Persistent disk cache at .openneuro-studies/cache/derivative_graph.json
+        3. Full API scan (slowest, ~2800 repos)
+
+        Args:
+            progress_callback: Optional callback(phase, message) for progress reporting
+
+        Returns:
+            List of all discovered DerivativeDataset objects
+        """
+        # 1. Session-level cache (avoids redundant scans within same run)
+        if self._cached_all_derivatives is not None:
+            logger.debug(
+                "Using cached derivative scan (%d derivatives)",
+                len(self._cached_all_derivatives),
+            )
+            return self._cached_all_derivatives
+
+        # 2. Persistent disk cache (avoids full scan on repeat runs)
+        if not self.force_rescan:
+            cached = self._load_derivative_graph_cache()
+            if cached is not None:
+                self._cached_all_derivatives = cached
+                if progress_callback:
+                    progress_callback(
+                        "cache", f"Loaded {len(cached)} derivatives from cache"
+                    )
+                return cached
+
+        # 3. Full scan
+        all_derivatives = self._scan_all_derivatives(progress_callback)
+        self._cached_all_derivatives = all_derivatives
+        self._save_derivative_graph_cache(all_derivatives)
+        return all_derivatives
+
+    def _scan_all_derivatives(
+        self,
+        progress_callback: Optional[Callable[[str, str], None]] = None,
+    ) -> List[DerivativeDataset]:
+        """Scan all configured sources for derivative datasets (full API scan).
+
+        This is the actual scanning logic, separated from caching concerns.
 
         Args:
             progress_callback: Optional callback(phase, message) for progress reporting
@@ -288,6 +331,93 @@ class DatasetFinder:
                 logger.warning("Failed to list derivatives from %s: %s", source_spec.name, e)
 
         return all_derivatives
+
+    # -- Persistent derivative graph cache -----------------------------------
+
+    _CACHE_VERSION = 1
+    _CACHE_TTL_SECONDS = 86400  # 24 hours
+
+    @property
+    def _cache_file(self) -> Path:
+        """Path to the persistent derivative graph cache file."""
+        return Path(".openneuro-studies/cache/derivative_graph.json")
+
+    def _load_derivative_graph_cache(self) -> Optional[List[DerivativeDataset]]:
+        """Load derivative graph from persistent disk cache.
+
+        Returns:
+            List of DerivativeDataset if cache is valid, None otherwise.
+            Cache is invalid if: missing, wrong version, expired TTL,
+            or deserialization fails.
+        """
+        if not self._cache_file.exists():
+            logger.debug("No derivative graph cache found at %s", self._cache_file)
+            return None
+
+        try:
+            with open(self._cache_file, "r") as f:
+                data = json.load(f)
+
+            # Version check
+            if data.get("version") != self._CACHE_VERSION:
+                logger.info(
+                    "Derivative graph cache version mismatch (got %s, expected %d), ignoring",
+                    data.get("version"),
+                    self._CACHE_VERSION,
+                )
+                return None
+
+            # TTL check
+            timestamp = data.get("timestamp")
+            if timestamp:
+                cache_time = datetime.fromisoformat(timestamp)
+                age = (datetime.now(timezone.utc) - cache_time).total_seconds()
+                if age > self._CACHE_TTL_SECONDS:
+                    logger.info(
+                        "Derivative graph cache expired (%.1f hours old, TTL=%.1f hours)",
+                        age / 3600,
+                        self._CACHE_TTL_SECONDS / 3600,
+                    )
+                    return None
+
+            # Deserialize derivatives
+            derivatives = [
+                DerivativeDataset(**d) for d in data.get("derivatives", [])
+            ]
+            logger.info(
+                "Loaded %d derivatives from cache (%s)",
+                len(derivatives),
+                self._cache_file,
+            )
+            return derivatives
+
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+            logger.warning("Failed to load derivative graph cache: %s", e)
+            return None
+
+    def _save_derivative_graph_cache(self, derivatives: List[DerivativeDataset]) -> None:
+        """Save derivative graph to persistent disk cache.
+
+        Args:
+            derivatives: List of DerivativeDataset objects to cache
+        """
+        try:
+            self._cache_file.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                "version": self._CACHE_VERSION,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "derivatives_count": len(derivatives),
+                "derivatives": [d.model_dump(mode="json") for d in derivatives],
+            }
+            with open(self._cache_file, "w") as f:
+                json.dump(data, f, indent=2)
+            logger.info(
+                "Saved %d derivatives to cache (%s)",
+                len(derivatives),
+                self._cache_file,
+            )
+        except OSError as e:
+            logger.warning("Failed to save derivative graph cache: %s", e)
 
     def _expand_filter_with_derivatives(
         self,
@@ -456,10 +586,13 @@ class DatasetFinder:
                     progress_callback("expand", "Expanding filter with sources...")
                 return self._expand_filter_with_sources(progress_callback=progress_callback)
 
-        # Bidirectional case: iterate both directions until closure
+        # Bidirectional case: single scan, single closure loop
+        # This avoids mutating self.test_dataset_filter and makes exactly one
+        # call to _discover_all_derivatives (which is also session-cached).
         if progress_callback:
             progress_callback("expand", "Expanding filter bidirectionally (derivatives + sources)...")
 
+        all_derivatives = self._discover_all_derivatives(progress_callback=progress_callback)
         expanded_set = set(self.test_dataset_filter)
         changed = True
         iteration = 0
@@ -469,46 +602,29 @@ class DatasetFinder:
             iteration += 1
             prev_size = len(expanded_set)
 
+            for deriv in all_derivatives:
+                # Forward: raw → derivative
+                if deriv.dataset_id not in expanded_set:
+                    if any(src in expanded_set for src in deriv.source_datasets):
+                        expanded_set.add(deriv.dataset_id)
+                        changed = True
+                # Backward: derivative → sources
+                if deriv.dataset_id in expanded_set:
+                    for src in deriv.source_datasets:
+                        if src not in expanded_set:
+                            expanded_set.add(src)
+                            changed = True
+
             if progress_callback:
-                progress_callback(
-                    "expand",
-                    f"Iteration {iteration}: Starting with {prev_size} datasets",
-                )
-
-            # Temporarily set test_dataset_filter to current expanded set
-            original_filter = self.test_dataset_filter
-            self.test_dataset_filter = list(expanded_set)
-
-            # Expand in both directions
-            if "derivatives" in directions:
-                if progress_callback:
-                    progress_callback("expand", f"  Expanding derivatives (iteration {iteration})...")
-                deriv_expanded = set(self._expand_filter_with_derivatives(progress_callback=progress_callback))
-                expanded_set.update(deriv_expanded)
-
-            if "sources" in directions:
-                if progress_callback:
-                    progress_callback("expand", f"  Expanding sources (iteration {iteration})...")
-                source_expanded = set(self._expand_filter_with_sources(progress_callback=progress_callback))
-                expanded_set.update(source_expanded)
-
-            # Restore original filter
-            self.test_dataset_filter = original_filter
-
-            # Check if we added anything new
-            if len(expanded_set) > prev_size:
-                changed = True
-                if progress_callback:
+                if len(expanded_set) > prev_size:
                     progress_callback(
                         "expand",
-                        f"Iteration {iteration}: Expanded to {len(expanded_set)} datasets "
-                        f"(+{len(expanded_set) - prev_size})",
+                        f"Iteration {iteration}: {prev_size} → {len(expanded_set)} datasets",
                     )
-            else:
-                if progress_callback:
+                else:
                     progress_callback(
                         "expand",
-                        f"Iteration {iteration}: No new datasets found, closure reached",
+                        f"Iteration {iteration}: closure reached at {len(expanded_set)} datasets",
                     )
 
         logger.info(
@@ -537,8 +653,9 @@ class DatasetFinder:
             SourceDataset or DerivativeDataset instance, or None if processing fails
         """
         try:
-            # Get current commit SHA
-            commit_sha = self.github_client.get_default_branch_sha(org_name, repo["name"])
+            # Use default_branch from listing response (avoids extra /repos/{owner}/{repo} call)
+            default_branch = repo.get("default_branch", "main")
+            commit_sha = self.github_client.get_branch_sha(org_name, repo["name"], default_branch)
 
             # Fetch dataset_description.json once
             try:

@@ -1,11 +1,13 @@
 """Unit tests for bidirectional filter expansion (--include-related).
 
 Tests the RelationType enum, _discover_all_derivatives helper,
-_expand_filter_with_sources, _expand_filter_with_related, and
-backward compatibility with include_derivatives=True.
+_expand_filter_with_sources, _expand_filter_with_related,
+backward compatibility with include_derivatives=True,
+session-level memoization, and persistent derivative graph cache.
 """
 
 import json
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from unittest.mock import MagicMock, patch
 
@@ -125,6 +127,7 @@ class TestDiscoverAllDerivatives:
         deriv_b = _make_derivative("ds000002-mriqc", ["ds000002"], tool_name="mriqc")
 
         finder = _make_finder(test_filter=["ds000001"])
+        finder.force_rescan = True  # Skip disk cache
 
         # Mock _process_dataset to return different results per repo
         repo_results = {
@@ -149,6 +152,7 @@ class TestDiscoverAllDerivatives:
         """Config with no sources yields no derivatives."""
         cfg = OpenNeuroStudiesConfig(sources=[])
         finder = _make_finder(config=cfg, test_filter=["ds000001"])
+        finder.force_rescan = True  # Skip disk cache
         result = finder._discover_all_derivatives()
         assert result == []
 
@@ -249,17 +253,13 @@ class TestExpandFilterWithRelated:
         assert set(result) == {"ds000001-fmriprep", "ds000001"}
 
     def test_all_mode_normalizes_to_both_directions(self) -> None:
-        """'all' mode should call both directions."""
-        finder = _make_finder(test_filter=["ds000001"])
+        """'all' mode should expand both forward and backward."""
+        # ds000001-fmriprep has sources [ds000001, ds999999]
+        # Starting from ds000001: forward finds ds000001-fmriprep, backward adds ds999999
+        deriv = _make_derivative("ds000001-fmriprep", ["ds000001", "ds999999"])
 
-        # Mock both expansion methods
-        with patch.object(
-            finder, "_expand_filter_with_derivatives",
-            return_value=["ds000001", "ds000001-fmriprep"],
-        ), patch.object(
-            finder, "_expand_filter_with_sources",
-            return_value=["ds000001", "ds000001-fmriprep", "ds999999"],
-        ):
+        finder = _make_finder(test_filter=["ds000001"])
+        with patch.object(finder, "_discover_all_derivatives", return_value=[deriv]):
             result = finder._expand_filter_with_related(include_related={"all"})
 
         assert set(result) == {"ds000001", "ds000001-fmriprep", "ds999999"}
@@ -412,3 +412,185 @@ class TestEdgeCases:
         assert callback.call_count > 0
         phases = [call.args[0] for call in callback.call_args_list]
         assert "expand" in phases
+
+
+# ---------------------------------------------------------------------------
+# Session-level memoization
+# ---------------------------------------------------------------------------
+
+class TestSessionMemoization:
+    """Tests for _discover_all_derivatives session-level caching."""
+
+    def test_scan_runs_only_once(self) -> None:
+        """Calling _discover_all_derivatives multiple times should scan only once."""
+        deriv = _make_derivative("ds000001-fmriprep", ["ds000001"])
+
+        finder = _make_finder(test_filter=["ds000001"])
+        finder._process_dataset = MagicMock(return_value=deriv)
+        finder.github_client.list_repositories.return_value = [
+            {"name": "ds000001-fmriprep"}
+        ]
+        # Ensure no disk cache is used
+        finder.force_rescan = True
+
+        result1 = finder._discover_all_derivatives()
+        result2 = finder._discover_all_derivatives()
+        result3 = finder._discover_all_derivatives()
+
+        # list_repositories should only have been called once (during the first scan)
+        assert finder.github_client.list_repositories.call_count == 1
+        assert len(result1) == 1
+        assert result1 is result2  # Same object, not a copy
+        assert result2 is result3
+
+    def test_cache_cleared_on_new_instance(self) -> None:
+        """A new DatasetFinder instance should not reuse another's session cache."""
+        finder1 = _make_finder(test_filter=["ds000001"])
+        finder1._cached_all_derivatives = [_make_derivative("ds000001-fmriprep", ["ds000001"])]
+
+        finder2 = _make_finder(test_filter=["ds000001"])
+        assert finder2._cached_all_derivatives is None
+
+
+# ---------------------------------------------------------------------------
+# Persistent derivative graph cache
+# ---------------------------------------------------------------------------
+
+class TestPersistentCache:
+    """Tests for persistent disk cache of derivative graph."""
+
+    def test_save_and_load_roundtrip(self, tmp_path) -> None:
+        """Cache save then load should return equivalent derivatives."""
+        derivs = [
+            _make_derivative("ds000001-fmriprep", ["ds000001"]),
+            _make_derivative("ds000002-mriqc", ["ds000002"], tool_name="mriqc"),
+        ]
+
+        finder = _make_finder(test_filter=["ds000001"])
+        cache_file = tmp_path / "derivative_graph.json"
+        # Override cache file path
+        type(finder)._cache_file = property(lambda self: cache_file)
+
+        finder._save_derivative_graph_cache(derivs)
+        assert cache_file.exists()
+
+        loaded = finder._load_derivative_graph_cache()
+        assert loaded is not None
+        assert len(loaded) == 2
+        assert {d.dataset_id for d in loaded} == {"ds000001-fmriprep", "ds000002-mriqc"}
+
+    def test_load_returns_none_when_missing(self, tmp_path) -> None:
+        """Loading from nonexistent file should return None."""
+        finder = _make_finder()
+        cache_file = tmp_path / "nonexistent.json"
+        type(finder)._cache_file = property(lambda self: cache_file)
+
+        assert finder._load_derivative_graph_cache() is None
+
+    def test_load_returns_none_on_version_mismatch(self, tmp_path) -> None:
+        """Cache with wrong version should be ignored."""
+        finder = _make_finder()
+        cache_file = tmp_path / "derivative_graph.json"
+        type(finder)._cache_file = property(lambda self: cache_file)
+
+        cache_file.write_text(json.dumps({
+            "version": 999,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "derivatives_count": 0,
+            "derivatives": [],
+        }))
+
+        assert finder._load_derivative_graph_cache() is None
+
+    def test_load_returns_none_on_expired_ttl(self, tmp_path) -> None:
+        """Cache older than TTL should be ignored."""
+        finder = _make_finder()
+        cache_file = tmp_path / "derivative_graph.json"
+        type(finder)._cache_file = property(lambda self: cache_file)
+
+        # Write cache with old timestamp (48 hours ago)
+        old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
+        cache_file.write_text(json.dumps({
+            "version": 1,
+            "timestamp": old_time.isoformat(),
+            "derivatives_count": 0,
+            "derivatives": [],
+        }))
+
+        assert finder._load_derivative_graph_cache() is None
+
+    def test_force_rescan_bypasses_disk_cache(self, tmp_path) -> None:
+        """force_rescan=True should skip disk cache and do a full scan."""
+        deriv = _make_derivative("ds000001-fmriprep", ["ds000001"])
+
+        finder = _make_finder(test_filter=["ds000001"])
+        cache_file = tmp_path / "derivative_graph.json"
+        type(finder)._cache_file = property(lambda self: cache_file)
+
+        # Pre-populate valid disk cache
+        finder._save_derivative_graph_cache([deriv])
+        assert cache_file.exists()
+
+        # Set up mock for a fresh scan
+        finder.force_rescan = True
+        finder._process_dataset = MagicMock(return_value=deriv)
+        finder.github_client.list_repositories.return_value = [
+            {"name": "ds000001-fmriprep"}
+        ]
+
+        result = finder._discover_all_derivatives()
+
+        # Should have scanned (called list_repositories), not loaded from cache
+        finder.github_client.list_repositories.assert_called_once()
+        assert len(result) == 1
+
+    def test_load_returns_none_on_corrupt_json(self, tmp_path) -> None:
+        """Corrupted JSON should return None without raising."""
+        finder = _make_finder()
+        cache_file = tmp_path / "derivative_graph.json"
+        type(finder)._cache_file = property(lambda self: cache_file)
+
+        cache_file.write_text("not valid json {{{")
+
+        assert finder._load_derivative_graph_cache() is None
+
+
+# ---------------------------------------------------------------------------
+# Bidirectional closure (direct algorithm, no mutation)
+# ---------------------------------------------------------------------------
+
+class TestBidirectionalClosure:
+    """Tests for the restructured bidirectional closure algorithm."""
+
+    def test_does_not_mutate_test_dataset_filter(self) -> None:
+        """Bidirectional expansion should not mutate self.test_dataset_filter."""
+        deriv = _make_derivative("ds000001-fmriprep", ["ds000001", "ds000002"])
+
+        finder = _make_finder(test_filter=["ds000001"])
+        original_filter = finder.test_dataset_filter.copy()
+
+        with patch.object(finder, "_discover_all_derivatives", return_value=[deriv]):
+            finder._expand_filter_with_related(include_related={"all"})
+
+        assert finder.test_dataset_filter == original_filter
+
+    def test_bidirectional_closure_uses_direct_algorithm(self) -> None:
+        """Bidirectional expansion should call _discover_all_derivatives once,
+        not delegate to _expand_filter_with_derivatives/_sources."""
+        deriv = _make_derivative("ds000001-fmriprep", ["ds000001"])
+
+        finder = _make_finder(test_filter=["ds000001"])
+
+        with patch.object(
+            finder, "_discover_all_derivatives", return_value=[deriv]
+        ) as mock_discover, patch.object(
+            finder, "_expand_filter_with_derivatives"
+        ) as mock_fwd, patch.object(
+            finder, "_expand_filter_with_sources"
+        ) as mock_bwd:
+            result = finder._expand_filter_with_related(include_related={"all"})
+
+        mock_discover.assert_called_once()
+        mock_fwd.assert_not_called()
+        mock_bwd.assert_not_called()
+        assert set(result) == {"ds000001", "ds000001-fmriprep"}

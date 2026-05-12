@@ -64,6 +64,11 @@ from openneuro_studies.discovery import DatasetDiscoveryError, DatasetFinder
     help="Discovery mode: 'update' merges with existing results, 'overwrite' replaces all",
     show_default=True,
 )
+@click.option(
+    "--force-rescan",
+    is_flag=True,
+    help="Force re-scanning all repos, ignoring the derivative graph cache",
+)
 @click.pass_context
 def discover(
     ctx: click.Context,
@@ -75,6 +80,7 @@ def discover(
     workers: int,
     progress: bool,
     mode: str,
+    force_rescan: bool,
 ) -> None:
     """Discover datasets from configured sources.
 
@@ -130,6 +136,7 @@ def discover(
             include_related=effective_include_related,
             max_workers=workers,
         )
+        finder.force_rescan = force_rescan
 
         # Determine if any expansion is active (for progress bar logic)
         expansion_active = bool(effective_include_related) or effective_include_derivatives
@@ -145,6 +152,8 @@ def discover(
             elif effective_include_derivatives:
                 click.echo("  (including derivatives of filtered datasets)")
         click.echo(f"Using {workers} parallel workers")
+        if force_rescan:
+            click.echo("Force rescan enabled: ignoring derivative graph cache")
 
         # Set up expansion progress callback for --include-related or --include-derivatives
         expansion_progress_callback = None
