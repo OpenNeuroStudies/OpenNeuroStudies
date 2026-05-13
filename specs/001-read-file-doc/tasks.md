@@ -7,7 +7,7 @@
 
 This document breaks down the implementation into discrete, executable tasks organized by user story priority. Each phase builds upon the previous, enabling incremental delivery and independent testing.
 
-**Total Tasks**: 61
+**Total Tasks**: 72
 **MVP Scope**: Phase 3 (User Story 1 - Discovery & Organization)
 **Current Status**: Phases 1-6, 8 substantially complete (see per-task status)
 
@@ -22,6 +22,7 @@ Tasks are organized into phases:
 - **Phase 6**: Polish & Cross-Cutting Concerns (T044-T048) ✅
 - **Phase 7**: Documentation & Polish (T049-T050) ⚠️
 - **Phase 8**: User Story 4 - GitHub Publishing [US4] (T051-T061) ✅ mostly
+- **Phase 9**: Extraction Consolidation (T062-T072) ⬜ NEW
 
 **Legend**:
 - `[P]` = Parallelizable (can run simultaneously with other [P] tasks)
@@ -1281,6 +1282,343 @@ Phase 1 (Setup) ✅
 
 ---
 
-**Updated**: 2026-05-07
-**Status**: Phases 1-6 and 8 substantially complete. Remaining: T050 (plan docs), T056 (unpublish gaps), T058-T060 (publishing polish).
-**Next Step**: Address remaining TODO tasks; see separate specs for 004-hierarchical-extraction and 005-provision.
+**Updated**: 2026-05-13
+**Status**: Phases 1-6 and 8 substantially complete. Phase 9 (extraction consolidation) is next priority.
+**Next Step**: Implement Phase 9 tasks T062-T072 to eliminate duplicate extraction code per Constitution Principle VII.
+
+---
+
+## Phase 9: Extraction Consolidation
+
+**Goal**: Eliminate duplicate implementations between `bids_studies` and `openneuro_studies`, centralize TSV I/O, and ensure all study-level columns flow from subject-level extraction.
+
+**Motivation**: `/speckit.analyze` report (2026-05-13) found 6 CRITICAL/HIGH duplication findings (D1-D6), 2 coverage gaps (G1-G2), and 1 consistency issue (I1). Constitution Principle VII (No Duplicate Implementations) is violated.
+
+**Requirements**: FR-042j, FR-042k, FR-042l
+
+**Dependency Graph**:
+```
+T062 (TSV writer)      ─┐
+T063 (NIfTI parser)    ─┤
+T064 (raw metadata)    ─┘── can run in parallel
+T065 (subject columns) ─── depends on T063
+T066 (dataset aggregation) ── depends on T065
+T067 (study aggregation) ── depends on T066
+T068 (remove summary_extractor dupes) ── depends on T062, T067
+T069 (Snakefile update) ── depends on T062, T068
+T070 (tests) ── depends on T062-T069
+T071 (regenerate TSVs) ── depends on all above
+T072 (verification) ── depends on T071
+```
+
+---
+
+### T062: Centralize TSV Writing in bids_studies [P] [FR-042j]
+
+**Status**: ⬜ TODO
+
+**Files**:
+- `code/src/bids_studies/extraction/tsv.py`
+- `code/src/openneuro_studies/metadata/studies_tsv.py`
+- `code/src/openneuro_studies/metadata/studies_plus_derivatives_tsv.py`
+- `code/workflow/Snakefile`
+
+**Task**:
+1. In `bids_studies/extraction/tsv.py`:
+   - Replace `_write_tsv()` (manual tab-join) with public `write_tsv(output_path, columns, rows)` using `csv.DictWriter(delimiter="\t")`.
+   - Replace `_read_tsv()` (manual split) with public `read_tsv(input_path)` using `csv.DictReader(delimiter="\t")`.
+   - Update all internal callers (`write_subjects_tsv`, `write_datasets_tsv`, etc.) to use `write_tsv()`.
+   - `_na()` helper remains (converts None→"n/a").
+
+2. In `studies_tsv.py` and `studies_plus_derivatives_tsv.py`:
+   - Remove inline `csv.DictWriter` usage.
+   - Import and use `bids_studies.extraction.tsv.write_tsv()`.
+
+3. In Snakefile rules `merge_into_canonical` and `merge_derivatives_tsv`:
+   - Replace manual `f.write("\t".join(...))` with `from bids_studies.extraction.tsv import write_tsv`.
+
+**Acceptance**:
+- `grep -r '"\\t".join\|_write_tsv' code/src/ code/workflow/` returns zero hits.
+- `grep -r 'write_tsv' code/src/bids_studies/extraction/tsv.py` shows public function.
+- All existing TSV tests pass.
+
+---
+
+### T063: Consolidate NIfTI Header Parser [P] [FR-042k]
+
+**Status**: ⬜ TODO
+
+**Files**:
+- `code/src/bids_studies/extraction/subject.py`
+- `code/src/bids_studies/extraction/__init__.py`
+
+**Task**:
+1. In `bids_studies/extraction/subject.py`:
+   - Replace `_extract_nifti_header_from_gzip_stream()` (1MB read, struct-based) with nibabel-based version (10KB read) from `summary_extractor.py`.
+   - Rename to `extract_nifti_header_from_gzip_stream()` (public, no underscore).
+   - Add `import nibabel as nib` (lazy import inside function body to avoid hard dependency).
+   - Update `_extract_imaging_metrics()` to call the renamed function.
+
+2. In `bids_studies/extraction/__init__.py`:
+   - Add `extract_nifti_header_from_gzip_stream` to public exports.
+
+3. Ensure nibabel is in `bids_studies` dependencies (check `pyproject.toml` extras).
+
+**Acceptance**:
+- `grep -r '_extract_nifti_header' code/src/ | wc -l` returns 0 (no private versions).
+- `grep -r 'extract_nifti_header' code/src/ | grep -v test | grep -v __pycache__` shows exactly the bids_studies implementation and its callers.
+- Existing imaging metrics tests pass.
+
+---
+
+### T064: Move Raw Metadata Extraction to bids_studies [P]
+
+**Status**: ⬜ TODO
+
+**Files**:
+- `code/src/bids_studies/extraction/raw_metadata.py` (NEW)
+- `code/src/bids_studies/extraction/__init__.py`
+- `code/src/openneuro_studies/metadata/summary_extractor.py`
+
+**Task**:
+1. Create `bids_studies/extraction/raw_metadata.py`:
+   - Move `extract_raw_metadata(study_path)` and `_get_git_version(repo_path)` from `summary_extractor.py`.
+   - No changes to logic — these functions read `dataset_description.json` and call `git describe`.
+
+2. Export from `bids_studies/extraction/__init__.py`.
+
+3. In `summary_extractor.py`:
+   - Replace local functions with import: `from bids_studies.extraction.raw_metadata import extract_raw_metadata`.
+
+**Acceptance**:
+- `extract_raw_metadata` importable from `bids_studies.extraction`.
+- `summary_extractor.py` has no `def extract_raw_metadata` or `def _get_git_version`.
+
+---
+
+### T065: Add bold_tasks/timepoints/trs to Subject Extraction [FR-042l]
+
+**Status**: ⬜ TODO
+**Depends on**: T063
+
+**Files**:
+- `code/src/bids_studies/extraction/subject.py`
+- `code/src/bids_studies/extraction/tsv.py`
+
+**Task**:
+1. In `extract_subject_stats()`, when `include_imaging=True`:
+   - Extract task label from each BOLD filename: `re.search(r"_task-([a-zA-Z0-9]+)", filename)`.
+   - Collect as set → store as sorted comma-separated string in `bold_tasks` (or "n/a" if none).
+   - Sum 4th dimension of NIfTI shape across BOLD files → `bold_timepoints`.
+   - Build `{tr_rounded: count}` dict → serialize as JSON string in `bold_trs`.
+
+2. Add to result dict initialization:
+   ```python
+   "bold_tasks": "n/a",
+   "bold_timepoints": 0,
+   "bold_trs": "n/a",
+   ```
+
+3. In `tsv.py`:
+   - Add `"bold_tasks"`, `"bold_timepoints"`, `"bold_trs"` to `SUBJECTS_COLUMNS` (after `bold_voxels_mean`, before `datatypes`).
+   - Add same to `DATASETS_COLUMNS`.
+   - Update `read_subjects_tsv()` type conversion: `bold_timepoints` → int.
+
+**Acceptance**:
+- `extract_subject_stats()` returns bold_tasks, bold_timepoints, bold_trs when `include_imaging=True`.
+- `SUBJECTS_COLUMNS` contains all three new columns.
+- Unit test extracts task labels from mock BOLD filenames.
+
+---
+
+### T066: Add Aggregation for New Columns in aggregate_to_dataset()
+
+**Status**: ⬜ TODO
+**Depends on**: T065
+
+**Files**:
+- `code/src/bids_studies/extraction/dataset.py`
+
+**Task**:
+In `aggregate_to_dataset()`:
+1. `bold_tasks`: Set-union of all per-subject task sets → sorted comma-separated string.
+2. `bold_timepoints`: Sum across subjects.
+3. `bold_trs`: Dict-merge across subjects — parse JSON strings, sum counts for same TR keys, re-serialize as JSON string.
+
+**Acceptance**:
+- Given 2 subjects with `bold_tasks="rest,nback"` and `bold_tasks="rest,motor"`, aggregated result is `"motor,nback,rest"`.
+- Given 2 subjects with `bold_trs='{"1.0":3}'` and `bold_trs='{"1.0":2,"2.0":1}'`, aggregated result is `'{"1.0":5,"2.0":1}'`.
+
+---
+
+### T067: Add Aggregation for New Columns in aggregate_to_study()
+
+**Status**: ⬜ TODO
+**Depends on**: T066
+
+**Files**:
+- `code/src/bids_studies/extraction/study.py`
+
+**Task**:
+In `aggregate_to_study()`:
+- Same aggregation as dataset level (set-union for tasks, sum for timepoints, dict-merge for TRs).
+- Handle "n/a" values by skipping in aggregation.
+
+**Acceptance**:
+- Study-level aggregation produces correct bold_tasks/timepoints/trs from multiple datasets.
+- "n/a" subjects are skipped gracefully.
+
+---
+
+### T068: Remove Duplicate Extraction from summary_extractor.py
+
+**Status**: ⬜ TODO
+**Depends on**: T062, T067
+
+**Files**:
+- `code/src/openneuro_studies/metadata/summary_extractor.py`
+
+**Task**:
+1. Delete the following functions (~575 lines):
+   - `extract_directory_summary()` (Phase 2)
+   - `extract_file_counts()` (Phase 3)
+   - `extract_file_sizes()` (Phase 4)
+   - `extract_bold_imaging_metadata()` (Phase 5)
+   - `_extract_bold_tasks_and_timepoints()`
+   - `_extract_nifti_header_from_gzip_stream()`
+   - `_extract_task_from_filename()`
+   - `_aggregate_from_hierarchical_files()`
+
+2. Rewrite `extract_all_summaries()` to:
+   - Call `extract_raw_metadata()` (from bids_studies, via T064).
+   - Read `sourcedata.tsv` via `bids_studies.extraction.tsv.read_datasets_tsv()`.
+   - Aggregate via `bids_studies.extraction.study.aggregate_to_study()`.
+   - Raise `ExtractionError` if `sourcedata.tsv` is missing.
+   - No fallback to direct extraction.
+
+3. Remove `SparseDataset` import (no longer needed).
+4. Remove `numpy`, `json` imports if no longer used.
+
+**Acceptance**:
+- `summary_extractor.py` is ~200 lines (down from ~846).
+- `grep -r 'SparseDataset' code/src/openneuro_studies/metadata/summary_extractor.py` returns nothing.
+- `extract_all_summaries()` works for all existing studies.
+
+---
+
+### T069: Update Snakefile to Use Simplified Extraction
+
+**Status**: ⬜ TODO
+**Depends on**: T062, T068
+
+**Files**:
+- `code/workflow/Snakefile`
+
+**Task**:
+1. In rule `merge_into_canonical`: replace manual TSV writing with `write_tsv()` from bids_studies.
+2. In rule `merge_derivatives_tsv`: same replacement.
+3. Verify step 3e (`collect_study_metadata(stage="imaging")`) still works with the simplified `extract_all_summaries()`.
+
+**Acceptance**:
+- `make extract CORES=4` completes successfully.
+- `studies.tsv` has all expected columns including bold_tasks, bold_timepoints, bold_trs.
+- No manual tab-join code in Snakefile.
+
+---
+
+### T070: Add and Update Tests
+
+**Status**: ⬜ TODO
+**Depends on**: T062-T069
+
+**Files**:
+- `code/tests/unit/test_hierarchical_extraction.py`
+- `code/tests/unit/test_tsv_json_escaping.py`
+- `code/tests/unit/test_nifti_parser.py` (NEW)
+- `code/tests/unit/test_raw_metadata.py` (NEW)
+
+**Task**:
+1. `test_nifti_parser.py`: Unit tests for public `extract_nifti_header_from_gzip_stream()` with mock gzip data.
+2. `test_raw_metadata.py`: Unit tests for `extract_raw_metadata()` in bids_studies context.
+3. Update `test_hierarchical_extraction.py`:
+   - Add tests for per-subject bold_tasks extraction from filenames.
+   - Add tests for per-subject bold_timepoints and bold_trs extraction.
+   - Add tests for dataset-level and study-level aggregation of new columns.
+   - Add test for TSV round-trip with bold_trs JSON field.
+4. Update `test_tsv_json_escaping.py`: Test centralized `write_tsv()`/`read_tsv()` functions.
+
+**Acceptance**:
+- `pytest code/tests/unit/ -v` — all tests pass.
+- New tests cover per-subject extraction, aggregation, and TSV round-trip for bold_tasks/timepoints/trs.
+
+---
+
+### T071: Regenerate All TSV Files
+
+**Status**: ⬜ TODO
+**Depends on**: T062-T070
+
+**Task**:
+```bash
+make extract CORES=4 --forcerun
+```
+
+Force regeneration of all hierarchical TSV files and top-level studies.tsv/studies+derivatives.tsv with:
+- New columns (bold_tasks, bold_timepoints, bold_trs in sourcedata TSVs)
+- Consistent csv.DictWriter quoting throughout
+
+**Acceptance**:
+- `studies.tsv` bold_tasks column populated (not all "n/a").
+- `studies.tsv` bold_timepoints column populated.
+- `studies.tsv` bold_trs column populated with JSON dicts.
+- `sourcedata/sourcedata.tsv` in each study has the new columns.
+
+---
+
+### T072: Verification and Cleanup
+
+**Status**: ⬜ TODO
+**Depends on**: T071
+
+**Task**:
+1. Run full verification checks:
+   ```bash
+   # No manual TSV writing anywhere
+   grep -r '"\t".join\|_write_tsv' code/src/ code/workflow/
+   # Single NIfTI parser
+   grep -r 'extract_nifti_header' code/src/ | grep -v test | grep -v __pycache__
+   # No SparseDataset in summary_extractor
+   grep -r 'SparseDataset' code/src/openneuro_studies/metadata/summary_extractor.py
+   # No bids_studies importing from openneuro_studies
+   grep -r 'from openneuro_studies\|import openneuro_studies' code/src/bids_studies/
+   ```
+2. Run `ruff check code/src/` — no lint errors.
+3. Run `pytest code/tests/` — all tests pass.
+4. Compare `studies.tsv` column values with pre-consolidation version — no regressions.
+5. Update `EXTRACTION_VERSION` in `summary_extractor.py` to `"1.2.0"` (MINOR: new columns added).
+
+**Acceptance**:
+- All 4 grep checks return zero hits.
+- `ruff check` clean.
+- `pytest` all green.
+- `EXTRACTION_VERSION = "1.2.0"`.
+
+---
+
+### Phase 9 Dependency Graph
+
+```
+Phase 8 (Publishing) ✅
+  └─→ Phase 9 (Extraction Consolidation) ⬜
+        ├─→ T062 (TSV writer) [P]
+        ├─→ T063 (NIfTI parser) [P]
+        ├─→ T064 (raw metadata) [P]
+        ├─→ T065 (subject columns) ← T063
+        ├─→ T066 (dataset aggregation) ← T065
+        ├─→ T067 (study aggregation) ← T066
+        ├─→ T068 (remove dupes) ← T062, T067
+        ├─→ T069 (Snakefile) ← T062, T068
+        ├─→ T070 (tests) ← T062-T069
+        ├─→ T071 (regenerate) ← all
+        └─→ T072 (verify) ← T071
+```
