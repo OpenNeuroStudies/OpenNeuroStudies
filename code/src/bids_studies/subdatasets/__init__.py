@@ -7,6 +7,7 @@ including temporary installation/uninstallation with state preservation.
 import logging
 import time
 from pathlib import Path
+from collections.abc import Callable
 from typing import Iterator
 
 from datalad.distribution.dataset import Dataset
@@ -241,7 +242,8 @@ def extract_study_with_subdatasets(
     study_path: Path,
     stage: str = "basic",
     get_data: bool = False,
-    reckless_drop: bool = False
+    reckless_drop: bool = False,
+    metadata_extractor: "Callable[[Path, str], dict] | None" = None,
 ) -> dict:
     """Extract study metadata with automatic subdataset management.
 
@@ -257,6 +259,10 @@ def extract_study_with_subdatasets(
         stage: Extraction stage ("basic", "counts", "sizes", "imaging")
         get_data: If True, also get file content (not just git tree)
         reckless_drop: Skip safety checks when dropping subdatasets
+        metadata_extractor: Callable(study_path, stage) -> dict. If None,
+            imports collect_study_metadata from openneuro_studies (for
+            backward compatibility). New callers should provide this
+            explicitly to avoid coupling bids_studies to openneuro_studies.
 
     Returns:
         Dictionary with extracted metadata (all studies.tsv columns)
@@ -265,17 +271,28 @@ def extract_study_with_subdatasets(
         Exception: If subdataset installation/drop or extraction fails
 
     Example:
-        # Use from CLI or Snakemake
+        # Use from CLI or Snakemake (with explicit extractor)
+        from openneuro_studies.metadata.studies_tsv import collect_study_metadata
         from bids_studies.subdatasets import extract_study_with_subdatasets
 
         result = extract_study_with_subdatasets(
             Path('study-ds000001'),
-            stage='imaging'
+            stage='imaging',
+            metadata_extractor=collect_study_metadata,
         )
         # result contains: study_id, subjects_num, bold_num, etc.
     """
-    # Import here to avoid circular dependencies
-    from openneuro_studies.metadata.studies_tsv import collect_study_metadata
+    if metadata_extractor is None:
+        # Lazy import for backward compatibility only.
+        # New callers should pass metadata_extractor explicitly.
+        try:
+            from openneuro_studies.metadata.studies_tsv import collect_study_metadata
+        except ImportError as exc:
+            raise ImportError(
+                "metadata_extractor argument is required when openneuro_studies "
+                "is not installed. Pass a callable(study_path, stage) -> dict."
+            ) from exc
+        metadata_extractor = collect_study_metadata
 
     with TemporarySubdatasetInstall(study_path, get_data, reckless_drop) as (newly, existing):
         if newly:
@@ -284,7 +301,7 @@ def extract_study_with_subdatasets(
             logger.info(f"Using {len(existing)} already-installed subdatasets")
 
         # Extract metadata with subdatasets now available
-        result = collect_study_metadata(study_path, stage=stage)
+        result = metadata_extractor(study_path, stage)
         logger.info(f"Extracted metadata for {study_path.name}")
 
     # Subdatasets automatically dropped on context exit

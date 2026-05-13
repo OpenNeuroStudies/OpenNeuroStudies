@@ -8,15 +8,8 @@ import logging
 from pathlib import Path
 from typing import Any, Optional
 
+from bids_studies.exceptions import NetworkError
 from bids_studies.sparse import SparseDataset
-
-# Import NetworkError if available (bids_studies can be used standalone)
-try:
-    from openneuro_studies.lib.exceptions import NetworkError
-    NETWORK_ERROR_AVAILABLE = True
-except ImportError:
-    NetworkError = Exception  # type: ignore[misc, assignment]
-    NETWORK_ERROR_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -339,14 +332,8 @@ def extract_subjects_stats(
 
     # Classify and handle extraction errors
     if all_errors:
-        # Import error classification (optional dependency for standalone bids_studies)
-        try:
-            from openneuro_studies.lib.error_classification import aggregate_errors
-            operational_errors, expected_errors = aggregate_errors(all_errors)
-        except ImportError:
-            # Fallback: treat all errors as operational (strict)
-            operational_errors = all_errors
-            expected_errors = []
+        from bids_studies.error_classification import aggregate_errors
+        operational_errors, expected_errors = aggregate_errors(all_errors)
 
         # Log expected failures at INFO level (tolerated)
         if expected_errors:

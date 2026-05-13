@@ -20,18 +20,7 @@ from typing import Any, Optional, Union
 
 logger = logging.getLogger(__name__)
 
-# Import retry decorator (circular import safe - only used at runtime)
-try:
-    from openneuro_studies.lib.retry import retry_on_network_error
-    RETRY_AVAILABLE = True
-except ImportError:
-    # bids_studies can be used standalone without openneuro_studies
-    RETRY_AVAILABLE = False
-    def retry_on_network_error(*args, **kwargs):  # type: ignore[misc]
-        """No-op decorator when retry module not available."""
-        def decorator(func):  # type: ignore[return]
-            return func
-        return decorator
+from bids_studies.retry import retry_on_network_error
 
 # Try to import datalad-fuse, but don't require it
 try:

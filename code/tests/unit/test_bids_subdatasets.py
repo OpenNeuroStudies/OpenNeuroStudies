@@ -306,4 +306,4 @@ class TestExtractStudyWithSubdatasets:
 
             assert result['study_id'] == 'study-ds000001'
             assert result['subjects_num'] == 10
-            mock_extract.assert_called_once_with(study_path, stage='sizes')
+            mock_extract.assert_called_once_with(study_path, 'sizes')

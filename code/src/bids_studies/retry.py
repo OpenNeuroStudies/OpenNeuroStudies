@@ -1,0 +1,152 @@
+"""Retry logic with exponential backoff for network operations.
+
+This module lives in bids_studies (not openneuro_studies) to ensure the
+library can be used standalone. See FR-HE-071.
+"""
+
+import logging
+import time
+from collections.abc import Callable
+from functools import wraps
+from typing import TypeVar
+
+from bids_studies.exceptions import NetworkError
+
+logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+def retry_on_network_error(
+    max_attempts: int = 5,
+    max_wait_seconds: int = 60,
+    initial_delay: float = 1.0,
+    backoff_factor: float = 2.0,
+) -> Callable[[Callable[..., T]], Callable[..., T]]:
+    """Decorator to retry function on network errors with exponential backoff.
+
+    Retries network operations (HTTP requests, sparse file access) when they fail
+    due to transient network issues. Uses exponential backoff between attempts.
+
+    Args:
+        max_attempts: Maximum number of attempts (default: 5)
+        max_wait_seconds: Maximum total wait time across all retries (default: 60)
+        initial_delay: Initial delay in seconds before first retry (default: 1.0)
+        backoff_factor: Multiplier for delay between retries (default: 2.0)
+
+    Returns:
+        Decorated function that retries on network errors
+
+    Raises:
+        NetworkError: If all retry attempts fail
+    """
+
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        def wrapper(*args, **kwargs) -> T:  # type: ignore[return]
+            delay = initial_delay
+            total_wait = 0.0
+            last_error: Exception | None = None
+
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_error = e
+                    is_network_error = _is_retriable_network_error(e)
+
+                    if not is_network_error:
+                        # Not a network error - raise immediately
+                        raise
+
+                    if attempt == max_attempts:
+                        # Final attempt failed - raise NetworkError
+                        raise NetworkError(
+                            message=f"Network operation failed after {max_attempts} attempts",
+                            attempts=max_attempts,
+                            last_error=last_error,
+                        ) from last_error
+
+                    if total_wait >= max_wait_seconds:
+                        # Exceeded max wait time - raise NetworkError
+                        raise NetworkError(
+                            message=(
+                                f"Network operation exceeded max wait time "
+                                f"({max_wait_seconds}s)"
+                            ),
+                            attempts=attempt,
+                            last_error=last_error,
+                        ) from last_error
+
+                    # Log retry and wait
+                    logger.warning(
+                        f"Network error on attempt {attempt}/{max_attempts}: {e}. "
+                        f"Retrying in {delay:.1f}s..."
+                    )
+                    time.sleep(delay)
+                    total_wait += delay
+                    delay *= backoff_factor
+
+        return wrapper
+
+    return decorator
+
+
+def _is_retriable_network_error(error: Exception) -> bool:
+    """Check if error is a retriable network error.
+
+    Args:
+        error: Exception to check
+
+    Returns:
+        True if error is retriable (network-related), False otherwise
+    """
+    # Check error type name (avoid hard dependency on optional libraries)
+    error_type = type(error).__name__
+
+    # FileNotFoundError is an OSError subclass but is NOT a network error
+    if isinstance(error, FileNotFoundError):
+        return False
+
+    # OSError and subclasses (ConnectionError, TimeoutError, etc.)
+    if isinstance(error, (OSError, TimeoutError)):
+        return True
+
+    # aiohttp errors (check by name to avoid import)
+    if error_type in {
+        "ClientError",
+        "ClientConnectorError",
+        "ClientConnectionError",
+        "ClientOSError",
+        "ServerDisconnectedError",
+        "ClientResponseError",
+        "ClientPayloadError",
+        "ClientTimeout",
+    }:
+        return True
+
+    # requests errors (check by name)
+    if error_type in {
+        "ConnectionError",
+        "Timeout",
+        "ReadTimeout",
+        "ConnectTimeout",
+        "HTTPError",
+    }:
+        return True
+
+    # fsspec errors (check by name)
+    if error_type in {
+        "FSTimeoutError",
+        "HttpError",
+    }:
+        return True
+
+    # Check HTTP status codes for requests.HTTPError
+    if error_type == "HTTPError" and hasattr(error, "response"):
+        status_code = getattr(error.response, "status_code", None)
+        if status_code is not None:
+            if status_code >= 500 or status_code in {408, 429, 503, 504}:
+                return True
+
+    return False
