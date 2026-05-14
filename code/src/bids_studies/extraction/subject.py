@@ -4,7 +4,11 @@ Extracts file counts, sizes, and optionally imaging metrics for each
 subject (and session if multi-session) in a BIDS dataset.
 """
 
+import json
 import logging
+import re
+import zlib
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Optional
 
@@ -74,6 +78,9 @@ def extract_subject_stats(
         "bold_duration_mean": None,
         "bold_voxels_total": None,
         "bold_voxels_mean": None,
+        "bold_tasks": "n/a",
+        "bold_timepoints": 0,
+        "bold_trs": "n/a",
         "datatypes": "",  # Will be set at the end
     }
 
@@ -129,24 +136,24 @@ def extract_subject_stats(
     return result, errors
 
 
-def _extract_nifti_header_from_gzip_stream(f: Any) -> Optional[tuple[tuple[int, ...], float]]:
-    """Extract NIfTI header info from a gzipped HTTP stream.
+def extract_nifti_header_from_gzip_stream(f: Any) -> Optional[tuple[tuple[int, ...], float]]:
+    """Extract NIfTI header info from a gzipped stream using nibabel.
 
-    For gzipped NIfTI files over HTTP, we need to read enough data
-    to decompress the header (first 352 bytes). This function reads
-    ~1MB which is typically sufficient to decompress the header.
+    Reads 10KB of gzip data (sufficient for NIfTI headers), decompresses,
+    and parses with nibabel for reliable header extraction.
+
+    This is the single canonical NIfTI header parser for the project (FR-042k).
 
     Args:
-        f: File-like object (HTTP stream)
+        f: File-like object (HTTP stream, local file, etc.)
 
     Returns:
         Tuple of (shape, tr) or None if extraction fails
     """
-    import struct
-    import zlib
+    import nibabel as nib
 
-    # Read enough gzip data to decompress header (~1MB should suffice)
-    chunk_size = 1024 * 1024  # 1MB
+    # 10KB is sufficient for gzip-compressed NIfTI headers
+    chunk_size = 10 * 1024
     try:
         gzip_data = f.read(chunk_size)
     except Exception as e:
@@ -164,7 +171,7 @@ def _extract_nifti_header_from_gzip_stream(f: Any) -> Optional[tuple[tuple[int, 
 
     # Decompress using zlib (gzip is zlib with extra header)
     try:
-        decompressor = zlib.decompressobj(wbits=zlib.MAX_WBITS | 16)  # 16 for gzip
+        decompressor = zlib.decompressobj(wbits=zlib.MAX_WBITS | 16)
         decompressed = decompressor.decompress(gzip_data)
     except zlib.error as e:
         logger.debug(f"Decompression failed: {e}")
@@ -174,28 +181,19 @@ def _extract_nifti_header_from_gzip_stream(f: Any) -> Optional[tuple[tuple[int, 
         logger.debug(f"Not enough decompressed data: {len(decompressed)} bytes")
         return None
 
-    # Parse NIfTI header
-    # sizeof_hdr at offset 0 (int32)
-    sizeof_hdr = struct.unpack("<i", decompressed[:4])[0]
-    if sizeof_hdr != 348:
-        logger.debug(f"Invalid sizeof_hdr: {sizeof_hdr}")
+    # Parse NIfTI header using nibabel
+    try:
+        header = nib.Nifti1Header.from_fileobj(BytesIO(decompressed))
+        shape = header.get_data_shape()
+        zooms = header.get_zooms()
+
+        # TR is the 4th dimension of zooms (time axis)
+        tr = float(zooms[3]) if len(shape) > 3 else 0.0
+
+        return tuple(shape), tr
+    except Exception as e:
+        logger.debug(f"Failed to parse NIfTI header with nibabel: {e}")
         return None
-
-    # Dimensions at offset 40: dim[0..7] as int16
-    dims = struct.unpack("<8h", decompressed[40:56])
-    n_dims = dims[0]
-    if n_dims < 3 or n_dims > 7:
-        logger.debug(f"Invalid n_dims: {n_dims}")
-        return None
-
-    # Extract shape
-    shape = tuple(dims[1 : n_dims + 1])
-
-    # Pixel dimensions at offset 76: pixdim[0..7] as float32
-    pixdim = struct.unpack("<8f", decompressed[76:108])
-    tr = pixdim[4] if len(pixdim) > 4 else 0.0
-
-    return shape, tr
 
 
 def _extract_imaging_metrics(
@@ -220,11 +218,19 @@ def _extract_imaging_metrics(
 
     durations = []
     voxel_counts = []
+    tasks: set[str] = set()
+    total_timepoints = 0
+    tr_counts: dict[str, int] = {}
 
     for bold_file in bold_files:
+        # Extract task label from filename
+        match = re.search(r"_task-([a-zA-Z0-9]+)", bold_file)
+        if match:
+            tasks.add(match.group(1))
+
         try:
             with ds.open_file(bold_file) as f:
-                header_info = _extract_nifti_header_from_gzip_stream(f)
+                header_info = extract_nifti_header_from_gzip_stream(f)
                 if header_info is None:
                     logger.debug(f"Could not extract header from {bold_file}")
                     continue
@@ -234,6 +240,15 @@ def _extract_imaging_metrics(
                 # Calculate voxels (X * Y * Z)
                 voxels = int(np.prod(shape[:3]))
                 voxel_counts.append(voxels)
+
+                # Accumulate timepoints (4th dimension)
+                if len(shape) > 3:
+                    total_timepoints += shape[3]
+
+                # Track TR distribution
+                if tr and tr > 0:
+                    tr_key = str(round(tr, 3))
+                    tr_counts[tr_key] = tr_counts.get(tr_key, 0) + 1
 
                 # Calculate duration if TR available
                 if tr and tr > 0 and len(shape) > 3:
@@ -262,6 +277,13 @@ def _extract_imaging_metrics(
     if durations:
         result["bold_duration_total"] = sum(durations)
         result["bold_duration_mean"] = sum(durations) / len(durations)
+
+    # bold_tasks, bold_timepoints, bold_trs (FR-042l)
+    if tasks:
+        result["bold_tasks"] = ",".join(sorted(tasks))
+    result["bold_timepoints"] = total_timepoints
+    if tr_counts:
+        result["bold_trs"] = json.dumps(dict(sorted(tr_counts.items())))
 
 
 def extract_subjects_stats(

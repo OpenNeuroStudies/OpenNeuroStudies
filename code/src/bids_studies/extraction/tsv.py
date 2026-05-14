@@ -1,9 +1,12 @@
 """TSV file utilities for hierarchical statistics.
 
-All TSV writing uses manual tab-separated output (not csv.DictWriter) to avoid
-CSV escaping artifacts per FR-HE-080. Values are never quoted or escaped.
+Centralized TSV I/O for both bids_studies and openneuro_studies (FR-042j).
+Uses csv.DictWriter/csv.DictReader for proper handling of fields containing
+special characters (tabs, newlines, quotes). JSON fields like {"2.0":48}
+are quoted per RFC 4180 which any standard TSV/CSV reader handles correctly.
 """
 
+import csv
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +24,9 @@ SUBJECTS_COLUMNS = [
     "bold_duration_mean",
     "bold_voxels_total",
     "bold_voxels_mean",
+    "bold_tasks",
+    "bold_timepoints",
+    "bold_trs",
     "datatypes",
 ]
 
@@ -41,6 +47,9 @@ DATASETS_COLUMNS = [
     "bold_duration_mean",
     "bold_voxels_total",
     "bold_voxels_mean",
+    "bold_tasks",
+    "bold_timepoints",
+    "bold_trs",
     "datatypes",
 ]
 
@@ -78,15 +87,15 @@ def _na(value: Any) -> str:
     return str(value)
 
 
-def _write_tsv(
+def write_tsv(
     output_path: Path,
     columns: list[str],
     rows: list[dict[str, Any]],
 ) -> None:
-    """Write rows to a TSV file using manual tab-separated output.
+    """Write rows to a TSV file using csv.DictWriter (FR-042j).
 
-    Uses raw string formatting (not csv.DictWriter) to prevent CSV escaping
-    of values like JSON fields. See FR-HE-080.
+    Uses csv.DictWriter for proper RFC 4180 handling of fields containing
+    tabs, newlines, or double-quotes. JSON fields are quoted automatically.
 
     Args:
         output_path: Path to output TSV file
@@ -96,19 +105,17 @@ def _write_tsv(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_path, "w", newline="") as f:
-        # Write header
-        f.write("\t".join(columns) + "\n")
-        # Write rows
+        writer = csv.DictWriter(
+            f, fieldnames=columns, delimiter="\t", extrasaction="ignore",
+        )
+        writer.writeheader()
         for row in rows:
-            fields = [_na(row.get(col)) for col in columns]
-            f.write("\t".join(fields) + "\n")
+            clean = {col: _na(row.get(col)) for col in columns}
+            writer.writerow(clean)
 
 
-def _read_tsv(input_path: Path) -> list[dict[str, str]]:
-    """Read rows from a TSV file using manual parsing.
-
-    Uses raw string splitting (not csv.DictReader) for consistency with
-    the manual write approach. See FR-HE-080.
+def read_tsv(input_path: Path) -> list[dict[str, str]]:
+    """Read rows from a TSV file using csv.DictReader (FR-042j).
 
     Args:
         input_path: Path to input TSV file
@@ -118,22 +125,10 @@ def _read_tsv(input_path: Path) -> list[dict[str, str]]:
     """
     results = []
 
-    with open(input_path) as f:
-        header_line = f.readline().rstrip("\n")
-        if not header_line:
-            return results
-        columns = header_line.split("\t")
-
-        for line in f:
-            line = line.rstrip("\n")
-            if not line:
-                continue
-            values = line.split("\t")
-            # Pad with empty strings if fewer values than columns
-            while len(values) < len(columns):
-                values.append("")
-            row = dict(zip(columns, values))
-            results.append(row)
+    with open(input_path, newline="") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        for row in reader:
+            results.append(dict(row))
 
     return results
 
@@ -148,7 +143,7 @@ def write_subjects_tsv(
         output_path: Path to output TSV file
         subjects_stats: List of per-subject statistics
     """
-    _write_tsv(output_path, SUBJECTS_COLUMNS, subjects_stats)
+    write_tsv(output_path, SUBJECTS_COLUMNS, subjects_stats)
 
 
 def write_datasets_tsv(
@@ -161,7 +156,7 @@ def write_datasets_tsv(
         output_path: Path to output TSV file
         datasets_stats: List of per-dataset statistics
     """
-    _write_tsv(output_path, DATASETS_COLUMNS, datasets_stats)
+    write_tsv(output_path, DATASETS_COLUMNS, datasets_stats)
 
 
 def read_subjects_tsv(input_path: Path) -> list[dict[str, Any]]:
@@ -173,12 +168,13 @@ def read_subjects_tsv(input_path: Path) -> list[dict[str, Any]]:
     Returns:
         List of per-subject statistics dictionaries
     """
-    raw_rows = _read_tsv(input_path)
+    raw_rows = read_tsv(input_path)
     results: list[dict[str, Any]] = []
 
     for row in raw_rows:
         # Convert numeric fields
-        for key in ["bold_num", "t1w_num", "t2w_num", "bold_size", "t1w_size"]:
+        for key in ["bold_num", "t1w_num", "t2w_num", "bold_size", "t1w_size",
+                     "bold_timepoints"]:
             if row.get(key) and row[key] != "n/a":
                 row[key] = int(row[key])
         for key in [
@@ -203,7 +199,7 @@ def read_datasets_tsv(input_path: Path) -> list[dict[str, Any]]:
     Returns:
         List of per-dataset statistics dictionaries
     """
-    raw_rows = _read_tsv(input_path)
+    raw_rows = read_tsv(input_path)
     results: list[dict[str, Any]] = []
 
     for row in raw_rows:
@@ -219,6 +215,7 @@ def read_datasets_tsv(input_path: Path) -> list[dict[str, Any]]:
             "bold_size",
             "t1w_size",
             "bold_size_max",
+            "bold_timepoints",
         ]:
             if row.get(key) and row[key] != "n/a":
                 row[key] = int(row[key])
@@ -245,7 +242,7 @@ def write_derivative_subjects_tsv(
         output_path: Path to output TSV file
         subjects_stats: List of per-subject derivative statistics
     """
-    _write_tsv(output_path, DERIVATIVE_SUBJECTS_COLUMNS, subjects_stats)
+    write_tsv(output_path, DERIVATIVE_SUBJECTS_COLUMNS, subjects_stats)
 
 
 def write_derivative_datasets_tsv(
@@ -258,7 +255,7 @@ def write_derivative_datasets_tsv(
         output_path: Path to output TSV file
         datasets_stats: List of per-dataset derivative statistics
     """
-    _write_tsv(output_path, DERIVATIVE_DATASETS_COLUMNS, datasets_stats)
+    write_tsv(output_path, DERIVATIVE_DATASETS_COLUMNS, datasets_stats)
 
 
 def read_derivative_subjects_tsv(input_path: Path) -> list[dict[str, Any]]:
@@ -270,7 +267,7 @@ def read_derivative_subjects_tsv(input_path: Path) -> list[dict[str, Any]]:
     Returns:
         List of per-subject derivative statistics dictionaries
     """
-    raw_rows = _read_tsv(input_path)
+    raw_rows = read_tsv(input_path)
     results: list[dict[str, Any]] = []
 
     for row in raw_rows:
@@ -292,7 +289,7 @@ def read_derivative_datasets_tsv(input_path: Path) -> list[dict[str, Any]]:
     Returns:
         List of per-dataset derivative statistics dictionaries
     """
-    raw_rows = _read_tsv(input_path)
+    raw_rows = read_tsv(input_path)
     results: list[dict[str, Any]] = []
 
     for row in raw_rows:

@@ -4,6 +4,7 @@ Aggregates subject-level stats to dataset level using appropriate
 aggregation methods (sum, min, max, weighted mean).
 """
 
+import json
 from typing import Any
 
 
@@ -37,6 +38,9 @@ def aggregate_to_dataset(
             "bold_duration_mean": "n/a",
             "bold_voxels_total": "n/a",
             "bold_voxels_mean": "n/a",
+            "bold_tasks": "n/a",
+            "bold_timepoints": 0,
+            "bold_trs": "n/a",
             "datatypes": "n/a",
         }
 
@@ -76,8 +80,33 @@ def aggregate_to_dataset(
             total_voxels += s["bold_voxels_total"]
             voxels_count += s["bold_num"]
 
+    # Aggregate bold_tasks (set-union), bold_timepoints (sum), bold_trs (dict-merge)
+    all_tasks: set[str] = set()
+    total_timepoints = 0
+    merged_trs: dict[str, int] = {}
+
+    for s in subjects_stats:
+        bt = s.get("bold_tasks", "n/a")
+        if bt and bt != "n/a":
+            for t in bt.split(","):
+                if t:
+                    all_tasks.add(t)
+        bp = s.get("bold_timepoints", 0)
+        if isinstance(bp, int):
+            total_timepoints += bp
+        elif isinstance(bp, str) and bp != "n/a":
+            total_timepoints += int(bp)
+        btr = s.get("bold_trs", "n/a")
+        if btr and btr != "n/a":
+            try:
+                tr_dict = json.loads(btr) if isinstance(btr, str) else btr
+                for k, v in tr_dict.items():
+                    merged_trs[k] = merged_trs.get(k, 0) + int(v)
+            except (ValueError, TypeError, json.JSONDecodeError):
+                pass
+
     # Collect all datatypes
-    all_datatypes = set()
+    all_datatypes: set[str] = set()
     for s in subjects_stats:
         if s["datatypes"] and s["datatypes"] != "n/a":
             for dt in s["datatypes"].split(","):
@@ -99,6 +128,9 @@ def aggregate_to_dataset(
         "bold_duration_mean": (total_duration / duration_count if duration_count > 0 else "n/a"),
         "bold_voxels_total": total_voxels if voxels_count > 0 else "n/a",
         "bold_voxels_mean": (total_voxels / voxels_count if voxels_count > 0 else "n/a"),
+        "bold_tasks": ",".join(sorted(all_tasks)) if all_tasks else "n/a",
+        "bold_timepoints": total_timepoints,
+        "bold_trs": json.dumps(dict(sorted(merged_trs.items()))) if merged_trs else "n/a",
         "datatypes": ",".join(sorted(all_datatypes)) if all_datatypes else "n/a",
     }
 
