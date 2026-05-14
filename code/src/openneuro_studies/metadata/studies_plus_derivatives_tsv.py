@@ -19,7 +19,6 @@ Performance note (FR-042h):
 """
 
 import configparser
-import csv
 import json
 import logging
 from pathlib import Path
@@ -27,6 +26,7 @@ from typing import Any, Iterator
 
 from datalad.distribution.dataset import Dataset
 
+from bids_studies.extraction.tsv import read_tsv, write_tsv
 from openneuro_studies.metadata.derivative_extractor import (
     _extract_datalad_uuid,
     extract_derivative_metadata,
@@ -355,6 +355,69 @@ def collect_derivatives_for_study(study_path: Path) -> list[dict[str, Any]]:
     return derivatives
 
 
+def collect_derivative_cache_entries(
+    study_path: Path,
+    *,
+    raw_path: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Collect derivative metadata rows for a study (no subdataset management).
+
+    Iterates derivatives/ subdirectories, extracts metadata, parses names,
+    extracts UUIDs and URLs from .gitmodules. The caller is responsible for
+    ensuring derivative subdatasets are already initialized.
+
+    Args:
+        study_path: Path to study directory.
+        raw_path: Path to the raw sourcedata subdataset. If None,
+                  auto-detected from study_path/sourcedata/.
+
+    Returns:
+        List of derivative row dicts conforming to STUDIES_DERIVATIVES_COLUMNS.
+    """
+    derivatives_dir = study_path / "derivatives"
+    if not derivatives_dir.exists():
+        return []
+
+    study_id = study_path.name
+
+    # Auto-detect raw_path if not provided
+    if raw_path is None:
+        sourcedata_dir = study_path / "sourcedata"
+        if sourcedata_dir.exists():
+            for candidate in sourcedata_dir.iterdir():
+                if candidate.is_dir() and not candidate.name.startswith("."):
+                    raw_path = candidate
+                    break
+
+    # Parse .gitmodules for submodule URLs
+    gitmodules = _parse_gitmodules(study_path / ".gitmodules")
+    url_by_path: dict[str, str] = {}
+    for _name, cfg in gitmodules.items():
+        url_by_path[cfg.get("path", "")] = cfg.get("url", "")
+
+    entries: list[dict[str, Any]] = []
+    for derivative_path in derivatives_dir.iterdir():
+        if not derivative_path.is_dir() or derivative_path.name.startswith("."):
+            continue
+        if derivative_path.name == "bids-validator":
+            continue
+
+        try:
+            meta = extract_derivative_metadata(derivative_path, raw_path)
+            meta["study_id"] = study_id
+            meta["derivative_id"] = derivative_path.name
+            tool_name, tool_version = _parse_derivative_name(derivative_path.name)
+            meta["tool_name"] = tool_name
+            meta["tool_version"] = tool_version
+            meta.setdefault("datalad_uuid", _extract_datalad_uuid(derivative_path))
+            meta["url"] = url_by_path.get(f"derivatives/{derivative_path.name}", "")
+            entries.append(meta)
+        except Exception as e:
+            logger.warning(f"Failed to collect derivative metadata for {derivative_path.name}: {e}")
+
+    return entries
+
+
 def _load_existing_derivatives(output_path: Path) -> dict[tuple[str, str], dict[str, Any]]:
     """Load existing studies+derivatives.tsv entries indexed by (study_id, derivative_id).
 
@@ -366,12 +429,10 @@ def _load_existing_derivatives(output_path: Path) -> dict[tuple[str, str], dict[
     """
     existing: dict[tuple[str, str], dict[str, Any]] = {}
     if output_path.exists():
-        with open(output_path, newline="") as f:
-            reader = csv.DictReader(f, delimiter="\t")
-            for row in reader:
-                key = (row.get("study_id", ""), row.get("derivative_id", ""))
-                if key[0] and key[1]:
-                    existing[key] = dict(row)
+        for row in read_tsv(output_path):
+            key = (row.get("study_id", ""), row.get("derivative_id", ""))
+            if key[0] and key[1]:
+                existing[key] = row
     return existing
 
 
@@ -425,12 +486,10 @@ def generate_studies_derivatives_tsv(
             # Try reading from pre-computed cache (fast path)
             cache_path = cache_dir / f"{study_id}.derivatives.tsv"
             if cache_path.exists() and cache_path.stat().st_size > 0:
-                with open(cache_path, newline="") as f:
-                    reader = csv.DictReader(f, delimiter="\t")
-                    for row in reader:
-                        key = (row.get("study_id", ""), row.get("derivative_id", ""))
-                        if key[0] and key[1]:
-                            existing[key] = dict(row)
+                for row in read_tsv(cache_path):
+                    key = (row.get("study_id", ""), row.get("derivative_id", ""))
+                    if key[0] and key[1]:
+                        existing[key] = row
                 cache_hits += 1
             else:
                 # Fallback: extract directly (slow path)
@@ -451,20 +510,7 @@ def generate_studies_derivatives_tsv(
     # Sort by study_id, then derivative_id
     rows = [existing[k] for k in sorted(existing.keys())]
 
-    # Use csv.DictWriter for proper TSV escaping (quotes fields containing tabs,
-    # newlines, or double-quotes). JSON fields like {"preproc":180} are quoted as
-    # "{""preproc"":180}" which any standard TSV/CSV reader handles correctly.
-    with open(output_path, "w", newline="") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=STUDIES_DERIVATIVES_COLUMNS, delimiter="\t",
-            extrasaction="ignore",
-        )
-        writer.writeheader()
-
-        for row in rows:
-            # Convert values to strings, replacing None with empty string
-            clean = {col: str(row.get(col, "")) if row.get(col) is not None else "" for col in STUDIES_DERIVATIVES_COLUMNS}
-            writer.writerow(clean)
+    write_tsv(output_path, STUDIES_DERIVATIVES_COLUMNS, rows)
 
     preserved_count = len([k for k in existing if k[0] not in updated_study_ids])
     logger.info(

@@ -13,6 +13,7 @@ See: https://github.com/bids-standard/bids-specification/issues/2273
 
 from openneuro_studies.metadata.dataset_description import generate_dataset_description
 from openneuro_studies.metadata.studies_plus_derivatives_tsv import (
+    collect_derivative_cache_entries,
     collect_derivatives_for_study,
     generate_studies_derivatives_json,
     generate_studies_derivatives_tsv,
@@ -21,13 +22,10 @@ from openneuro_studies.metadata.studies_tsv import (
     collect_study_metadata,
     generate_studies_json,
     generate_studies_tsv,
+    merge_extracts_into_studies_tsv,
 )
 from openneuro_studies.metadata.summary_extractor import (
     extract_all_summaries,
-    extract_bold_imaging_metadata,
-    extract_directory_summary,
-    extract_file_counts,
-    extract_file_sizes,
     extract_raw_metadata,
 )
 
@@ -38,11 +36,9 @@ __all__ = [
     "generate_studies_derivatives_tsv",
     "generate_studies_derivatives_json",
     "collect_study_metadata",
+    "collect_derivative_cache_entries",
     "collect_derivatives_for_study",
+    "merge_extracts_into_studies_tsv",
     "extract_all_summaries",
     "extract_raw_metadata",
-    "extract_directory_summary",
-    "extract_file_counts",
-    "extract_file_sizes",
-    "extract_bold_imaging_metadata",
 ]

@@ -6,11 +6,12 @@ Implements FR-009 and FR-011:
 """
 
 import configparser
-import csv
 import json
 import logging
 from pathlib import Path
 from typing import Any
+
+from bids_studies.extraction.tsv import read_tsv, write_tsv
 
 from openneuro_studies.metadata.summary_extractor import (
     extract_all_summaries,
@@ -283,20 +284,58 @@ def _load_existing_studies(output_path: Path) -> dict[str, dict[str, Any]]:
     """
     existing: dict[str, dict[str, Any]] = {}
     if output_path.exists():
-        with open(output_path, newline="") as f:
-            reader = csv.DictReader(f, delimiter="\t")
-            for row in reader:
-                study_id = row.get("study_id", "")
-                if study_id:
-                    row_data = dict(row)
-
-                    # Column name migrations for backward compatibility
-                    if "hed_version" in row_data:
-                        # Rename hed_version → raw_hed_version
-                        row_data["raw_hed_version"] = row_data.pop("hed_version")
-
-                    existing[study_id] = row_data
+        for row in read_tsv(output_path):
+            study_id = row.get("study_id", "")
+            if study_id:
+                # Column name migrations for backward compatibility
+                if "hed_version" in row:
+                    row["raw_hed_version"] = row.pop("hed_version")
+                existing[study_id] = row
     return existing
+
+
+def merge_extracts_into_studies_tsv(
+    canonical_path: Path,
+    extracted_jsons: list[Path],
+    *,
+    preserved_cols: set[str] | None = None,
+) -> int:
+    """Merge per-study extracted JSON files into the canonical studies.tsv.
+
+    Reads the existing studies.tsv, overlays data from each JSON extract,
+    preserves specified columns (e.g., bids_valid), and writes the merged
+    result back.
+
+    Args:
+        canonical_path: Path to studies.tsv (read + write).
+        extracted_jsons: Paths to per-study extracted JSON files.
+        preserved_cols: Column names to preserve from existing data
+                        (default: {"bids_valid"}).
+
+    Returns:
+        Number of study rows written.
+    """
+    if preserved_cols is None:
+        preserved_cols = {"bids_valid"}
+
+    # Load existing studies.tsv to preserve preserved_cols
+    existing = _load_existing_studies(canonical_path)
+
+    # Overlay extracted data, restoring preserved columns
+    for json_file in extracted_jsons:
+        with open(json_file) as f:
+            data = json.load(f)
+        sid = data["study_id"]
+        if sid in existing:
+            for col in preserved_cols:
+                data.setdefault(col, existing[sid].get(col, "n/a"))
+        existing[sid] = data
+
+    # Write canonical file in defined column order
+    rows = [existing[sid] for sid in sorted(existing)]
+    write_tsv(canonical_path, STUDIES_COLUMNS, rows)
+
+    return len(rows)
 
 
 def generate_studies_tsv(
@@ -346,20 +385,7 @@ def generate_studies_tsv(
     rows = [existing[sid] for sid in sorted(existing.keys())]
     logger.info(f"Writing {len(rows)} total studies ({len(updated_ids)} updated, {len(rows) - len(updated_ids)} preserved)")
 
-    # Use csv.DictWriter for proper TSV escaping (quotes fields containing tabs,
-    # newlines, or double-quotes). JSON fields like {"2.0":48} are quoted as
-    # "{""2.0"":48}" which any standard TSV/CSV reader handles correctly.
-    with open(output_path, "w", newline="") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=STUDIES_COLUMNS, delimiter="\t",
-            extrasaction="ignore",
-        )
-        writer.writeheader()
-
-        for row in rows:
-            # Convert values to strings, replacing None with empty string
-            clean = {col: str(row.get(col, "")) if row.get(col) is not None else "" for col in STUDIES_COLUMNS}
-            writer.writerow(clean)
+    write_tsv(output_path, STUDIES_COLUMNS, rows)
 
     logger.info(
         f"Generated {output_path} with {len(rows)} studies "
