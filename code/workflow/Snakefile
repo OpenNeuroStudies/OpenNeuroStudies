@@ -225,9 +225,10 @@ rule extract_study:
         # 3c. Cache derivative metadata for studies+derivatives.tsv (FR-042h)
         #     Writes per-study .derivatives.tsv so merge_derivatives_tsv can
         #     produce the canonical file via fast file-merge (no re-cloning).
+        import configparser as _cp
         import csv as _csv
-        from openneuro_studies.metadata.studies_plus_derivatives_tsv import STUDIES_DERIVATIVES_COLUMNS
-        from openneuro_studies.metadata.derivative_extractor import extract_derivative_metadata
+        from openneuro_studies.metadata.derivative_extractor import _extract_datalad_uuid, extract_derivative_metadata
+        from openneuro_studies.metadata.studies_plus_derivatives_tsv import STUDIES_DERIVATIVES_COLUMNS, _parse_derivative_name
 
         derivatives_cache = []
         if derivatives_dir.exists():
@@ -251,15 +252,12 @@ rule extract_study:
                         meta["study_id"] = wildcards.study
                         meta["derivative_id"] = derivative_path.name
                         # Parse tool name/version from directory name
-                        from openneuro_studies.metadata.studies_plus_derivatives_tsv import _parse_derivative_name
                         tool_name, tool_version = _parse_derivative_name(derivative_path.name)
                         meta["tool_name"] = tool_name
                         meta["tool_version"] = tool_version
                         # Extract DataLad UUID
-                        from openneuro_studies.metadata.derivative_extractor import _extract_datalad_uuid
                         meta.setdefault("datalad_uuid", _extract_datalad_uuid(derivative_path))
                         # Extract URL from .gitmodules
-                        import configparser as _cp
                         gitmodules_path = study_path / ".gitmodules"
                         url = ""
                         if gitmodules_path.exists():

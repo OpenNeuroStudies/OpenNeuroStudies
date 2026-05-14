@@ -26,6 +26,12 @@
   "file_count": {
     "Description": "Number of files in the derivative dataset"
   },
+  "subjects_num": {
+    "Description": "Number of subjects (sub-* directories) in the derivative dataset, or 'n/a' if none found"
+  },
+  "sessions_num": {
+    "Description": "Number of sessions (ses-* directories) across all subjects in the derivative dataset, or 'n/a' if single-session"
+  },
   "processed_raw_version": {
     "Description": "Version/commit of the raw dataset that was processed (from dataset_description.json SourceDatasets)"
   },

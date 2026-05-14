@@ -15,6 +15,11 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Optional
 
+from bids_studies.extraction.derivative import (
+    aggregate_derivative_to_dataset,
+    extract_derivative_subjects_stats,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -994,6 +999,19 @@ def extract_derivative_metadata(
 
     # Basic stats
     result.update(extract_derivative_stats(derivative_path))
+
+    # Subject and session counts via generic BIDS scanning (bids_studies)
+    try:
+        subj_stats = extract_derivative_subjects_stats(
+            derivative_path, source_id="", derivative_id=""
+        )
+        ds_stats = aggregate_derivative_to_dataset(subj_stats, "", "")
+        result["subjects_num"] = ds_stats.get("subjects_num", "n/a")
+        result["sessions_num"] = ds_stats.get("sessions_num", "n/a")
+    except Exception as e:
+        logger.debug(f"Could not extract subjects/sessions for {derivative_path}: {e}")
+        result["subjects_num"] = "n/a"
+        result["sessions_num"] = "n/a"
 
     # Version tracking
     result.update(extract_version_tracking(derivative_path, raw_path))

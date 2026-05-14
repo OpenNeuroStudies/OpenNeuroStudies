@@ -48,6 +48,8 @@ STUDIES_DERIVATIVES_COLUMNS = [
     "size_total",
     "size_annexed",
     "file_count",
+    "subjects_num",
+    "sessions_num",
     "processed_raw_version",
     "current_raw_version",
     "uptodate",
@@ -77,6 +79,12 @@ STUDIES_DERIVATIVES_JSON = {
     "size_total": {"Description": "Total size of the derivative dataset in bytes"},
     "size_annexed": {"Description": "Size of annexed (large) files in bytes"},
     "file_count": {"Description": "Number of files in the derivative dataset"},
+    "subjects_num": {
+        "Description": "Number of subjects (sub-* directories) in the derivative dataset, or 'n/a' if none found"
+    },
+    "sessions_num": {
+        "Description": "Number of sessions (ses-* directories) across all subjects in the derivative dataset, or 'n/a' if single-session"
+    },
     "processed_raw_version": {
         "Description": "Version/commit of the raw dataset that was processed (from dataset_description.json SourceDatasets)"
     },
@@ -326,6 +334,8 @@ def collect_derivatives_for_study(study_path: Path) -> list[dict[str, Any]]:
                 "size_total": "n/a",
                 "size_annexed": "n/a",
                 "file_count": "n/a",
+                "subjects_num": "n/a",
+                "sessions_num": "n/a",
                 "processed_raw_version": "n/a",
                 "current_raw_version": "n/a",
                 "uptodate": "n/a",

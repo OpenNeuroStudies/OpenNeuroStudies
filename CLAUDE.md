@@ -501,7 +501,7 @@ If documentation is temporary and should not be committed:
 - **Type Hints**: Use type hints for all function signatures
 - **Docstrings**: Google-style docstrings for all public functions/classes
 - **Line Length**: 100 characters (ruff default)
-- **Imports**: Organize with isort (part of ruff)
+- **Imports**: Organize with isort (part of ruff). All imports MUST be at the top of the file (or top of a Snakemake rule block). NEVER place `import` statements inside `try`/`except` blocks or inside loops — this masks import errors and makes dependencies invisible. If an import fails, it should fail loudly at load time.
 
 ### DataLad API Usage
 ```python
