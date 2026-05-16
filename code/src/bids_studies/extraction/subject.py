@@ -4,7 +4,6 @@ Extracts file counts, sizes, and optionally imaging metrics for each
 subject (and session if multi-session) in a BIDS dataset.
 """
 
-import json
 import logging
 import re
 import zlib
@@ -13,6 +12,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from bids_studies.exceptions import NetworkError
+from bids_studies.extraction.tsv import compact_json
 from bids_studies.sparse import SparseDataset
 
 logger = logging.getLogger(__name__)
@@ -283,7 +283,7 @@ def _extract_imaging_metrics(
         result["bold_tasks"] = ",".join(sorted(tasks))
     result["bold_timepoints"] = total_timepoints
     if tr_counts:
-        result["bold_trs"] = json.dumps(dict(sorted(tr_counts.items())))
+        result["bold_trs"] = compact_json(tr_counts)
 
 
 def extract_subjects_stats(

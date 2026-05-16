@@ -1,12 +1,14 @@
 """TSV file utilities for hierarchical statistics.
 
 Centralized TSV I/O for both bids_studies and openneuro_studies (FR-042j).
-Uses csv.DictWriter/csv.DictReader for proper handling of fields containing
-special characters (tabs, newlines, quotes). JSON fields like {"2.0":48}
-are quoted per RFC 4180 which any standard TSV/CSV reader handles correctly.
+Write uses manual tab-join with sanitization to keep JSON fields unquoted
+(e.g., {"2.0":48} not "{""2.0"": 48}"). Read uses csv.DictReader which
+handles both quoted and unquoted TSV fields correctly.
 """
 
 import csv
+import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -80,6 +82,17 @@ DERIVATIVE_DATASETS_COLUMNS = [
 ]
 
 
+def compact_json(d: Mapping) -> str:
+    """Serialize a dict to compact JSON for TSV storage.
+
+    Sorts keys for deterministic output and uses compact separators
+    (no spaces) to keep TSV fields readable without quoting.
+
+    Example: {2.0: 48, 0.75: 413} → '{"0.75":413,"2.0":48}'
+    """
+    return json.dumps(dict(sorted(d.items())), separators=(",", ":"))
+
+
 def _na(value: Any) -> str:
     """Convert value to string, using 'n/a' for None."""
     if value is None:
@@ -87,15 +100,27 @@ def _na(value: Any) -> str:
     return str(value)
 
 
+def _sanitize_tsv(value: str) -> str:
+    """Sanitize a value for TSV output.
+
+    Replaces characters that would break TSV parsing:
+    - tab → space (field delimiter)
+    - newline → space (row delimiter)
+    - carriage return → removed
+    """
+    return value.replace("\t", " ").replace("\n", " ").replace("\r", "")
+
+
 def write_tsv(
     output_path: Path,
     columns: list[str],
     rows: list[dict[str, Any]],
 ) -> None:
-    """Write rows to a TSV file using csv.DictWriter (FR-042j).
+    """Write rows to a TSV file (FR-042j).
 
-    Uses csv.DictWriter for proper RFC 4180 handling of fields containing
-    tabs, newlines, or double-quotes. JSON fields are quoted automatically.
+    Uses manual tab-join so JSON fields remain unquoted (e.g., {"2.0":48}).
+    Values are sanitized to replace tab/newline characters that would break
+    TSV parsing.
 
     Args:
         output_path: Path to output TSV file
@@ -104,14 +129,11 @@ def write_tsv(
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, "w", newline="") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=columns, delimiter="\t", extrasaction="ignore",
-        )
-        writer.writeheader()
+    with open(output_path, "w") as f:
+        f.write("\t".join(columns) + "\n")
         for row in rows:
-            clean = {col: _na(row.get(col)) for col in columns}
-            writer.writerow(clean)
+            values = [_sanitize_tsv(_na(row.get(col))) for col in columns]
+            f.write("\t".join(values) + "\n")
 
 
 def read_tsv(input_path: Path) -> list[dict[str, str]]:

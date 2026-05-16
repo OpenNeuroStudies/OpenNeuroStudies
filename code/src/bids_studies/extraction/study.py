@@ -17,6 +17,7 @@ from bids_studies.extraction.derivative import (
 )
 from bids_studies.extraction.subject import extract_subjects_stats
 from bids_studies.extraction.tsv import (
+    compact_json,
     write_datasets_tsv,
     write_derivative_datasets_tsv,
     write_derivative_subjects_tsv,
@@ -125,7 +126,7 @@ def aggregate_to_study(
         "bold_voxels_mean": (total_voxels / voxels_weights if voxels_weights > 0 else "n/a"),
         "bold_tasks": ",".join(sorted(all_tasks)) if all_tasks else "n/a",
         "bold_timepoints": total_timepoints,
-        "bold_trs": json.dumps(dict(sorted(merged_trs.items()))) if merged_trs else "n/a",
+        "bold_trs": compact_json(merged_trs) if merged_trs else "n/a",
         "datatypes": ",".join(sorted(all_datatypes)) if all_datatypes else "n/a",
     }
 
