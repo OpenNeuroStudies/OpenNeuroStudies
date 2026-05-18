@@ -3,7 +3,7 @@
 # Prerequisites: openneuro-studies and snakemake must be in PATH
 # (activate venv before running make, or install globally)
 
-.PHONY: help discover organize provision provision-force extract metadata full-refresh refresh refresh-existing studies-init clean full-clean analyze-state test-expectations errors-quality errors-legacy errors-report unlock extract-one derivatives-tsv
+.PHONY: help discover organize provision provision-force extract metadata full-refresh refresh refresh-existing refresh-publish publish studies-init clean full-clean analyze-state test-expectations errors-quality errors-legacy errors-report unlock extract-one derivatives-tsv
 
 # Default number of cores for parallel operations
 CORES ?= 8
@@ -15,6 +15,7 @@ help:
 	@echo "  make studies-init    - Initialize study-* subdatasets (required after clone)"
 	@echo "  make refresh         - Refresh existing studies only (no discovery)"
 	@echo "  make refresh-existing - Re-discover existing studies (with derivatives)"
+	@echo "  make refresh-publish  - Refresh existing + publish to GitHub"
 	@echo ""
 	@echo "Discovery Workflow:"
 	@echo "  make discover        - Discover datasets from GitHub"
@@ -35,6 +36,7 @@ help:
 	@echo "  make errors-report   - Generate comprehensive error report"
 	@echo ""
 	@echo "Utilities:"
+	@echo "  make publish                    - Publish studies to GitHub"
 	@echo "  make extract-one STUDY=<name>  - Extract single study"
 	@echo "  make test-expectations          - Validate metadata for known datasets"
 	@echo "  make clean                      - Remove Snakemake cache and lock"
@@ -85,6 +87,16 @@ refresh-existing:
 	openneuro-studies organize study-*
 	$(MAKE) extract metadata
 	@echo "✓ Refresh of existing studies complete"
+
+# Refresh existing studies and publish changes to GitHub
+refresh-publish:
+	$(MAKE) refresh-existing
+	$(MAKE) publish
+	@echo "✓ Refresh and publish complete"
+
+# Publish study repositories to GitHub
+publish:
+	openneuro-studies publish
 
 # Discovery workflow
 discover:
